@@ -1,0 +1,45 @@
+{
+  "name": "feature-spec-md",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Markdown feature specs with rule/scenario IDs, validation, coverage checks, and generated reports.",
+  "type": "module",
+  "bin": {
+    "feature-spec-md": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SPEC_FORMAT.md",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/cli.ts",
+    "check:example": "tsx src/cli.ts check --specs examples/**/*.feature.md --tests tests/**/*.test.ts --require-scenario-coverage=false",
+    "report:example": "tsx src/cli.ts report --specs examples/**/*.feature.md --tests tests/**/*.test.ts --out test-results/feature-spec-report/index.html",
+    "test": "tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "npm run typecheck && npm test && npm run build && npm run check:example"
+  },
+  "keywords": [
+    "markdown",
+    "bdd",
+    "gherkin",
+    "playwright",
+    "specification",
+    "testing"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.3.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
