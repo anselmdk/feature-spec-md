@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
     "dev": "tsx src/cli.ts",
     "check:example": "tsx src/cli.ts check --specs examples/**/*.feature.md --tests tests/**/*.test.ts --require-scenario-coverage=false",
     "report:example": "tsx src/cli.ts report --specs examples/**/*.feature.md --tests tests/**/*.test.ts --out test-results/feature-spec-report/index.html",
