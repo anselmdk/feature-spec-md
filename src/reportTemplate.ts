@@ -1,6 +1,7 @@
 import { html } from "./html.js";
 import { screenshotKey } from "./screenshots.js";
 import type {
+  CoverageItem,
   CoverageSummary,
   FeatureSpec,
   FeatureStep,
@@ -87,10 +88,12 @@ function renderSpec(
   <p>${html(spec.purpose)}</p>
   <h3>Rules</h3>
   <ul>${spec.rules
-    .map(
-      (rule) =>
-        `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${coverageBadge(ruleCoverage.find((item) => item.id === rule.id)?.covered)}</li>`,
-    )
+    .map((rule) => {
+      const item = ruleCoverage.find(
+        (coverageItem) => coverageItem.id === rule.id,
+      );
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${coverageBadge(item?.covered, ruleScenarioShortIds(item, scenarioCoverage))}</li>`;
+    })
     .join("")}</ul>
   <h3>Scenarios</h3>
   ${spec.scenarios
@@ -135,12 +138,37 @@ function renderScreenshots(screenshots: SpecScreenshot[]) {
     .join("")}</div>`;
 }
 
-function coverageBadge(covered?: boolean) {
+function coverageBadge(covered?: boolean, suffixes: string[] = []) {
   return covered === undefined
     ? ""
     : covered
-      ? `<span class="badge ok">covered</span>`
+      ? `<span class="badge ok">covered${suffixes.length ? ` ${suffixes.map(html).join(" ")}` : ""}</span>`
       : `<span class="badge missing">missing coverage</span>`;
+}
+
+function ruleScenarioShortIds(
+  ruleCoverage: CoverageItem | undefined,
+  scenarioCoverage: CoverageItem[],
+) {
+  if (!ruleCoverage?.covered) return [];
+
+  const scenarioIds = new Set<string>();
+  for (const ruleReference of ruleCoverage.references) {
+    for (const scenario of scenarioCoverage) {
+      const coversRule = scenario.references.some(
+        (scenarioReference) =>
+          scenarioReference.filePath === ruleReference.filePath &&
+          scenarioReference.line === ruleReference.line,
+      );
+      if (coversRule) scenarioIds.add(shortScenarioId(scenario.id));
+    }
+  }
+
+  return Array.from(scenarioIds).sort();
+}
+
+function shortScenarioId(id: string) {
+  return id.match(/-(S\d{3})$/)?.[1] ?? id;
 }
 
 function groupScreenshotsByLine(screenshots: SpecScreenshot[]) {

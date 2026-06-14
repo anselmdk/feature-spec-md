@@ -70,6 +70,20 @@ describe("feature-spec-md", () => {
     );
   });
 
+  it("renders scenario short IDs on covered rule badges", () => {
+    const spec = parseFeatureSpec(specSource, {
+      filePath: "account.feature.md",
+    });
+    const refs = parseTestReferences(
+      'test("ACCOUNT-S001 ACCOUNT-R001", () => {})',
+      "account.spec.ts",
+    );
+    const coverage = buildCoverageSummary([spec], refs);
+    const html = renderHtmlReport([spec], { coverage });
+
+    assert.match(html, /covered S001/);
+  });
+
   it("renders spec line screenshots in the HTML report", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
     const cwd = process.cwd();
