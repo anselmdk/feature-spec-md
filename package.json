@@ -39,7 +39,7 @@
     "report:example": "tsx src/cli.ts report --specs examples/**/*.feature.md --tests tests/**/*.test.ts --out test-results/feature-spec-report/index.html",
     "test": "npm run test:unit && npm run test:playwright",
     "test:unit": "tsx --test tests/**/*.test.ts",
-    "test:playwright": "playwright test",
+    "test:playwright": "playwright install chromium && playwright test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "verify": "npm run typecheck && npm test && npm run build && npm run check:example"
   },
