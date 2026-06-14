@@ -30,7 +30,7 @@ export type FeatureScenario = {
   id: string;
   title: string;
   line: number;
-  steps: Array<{ keyword: StepKeyword; text: string; line: number }>;
+  steps: FeatureStep[];
 };
 
 export type RuleKeyword =
@@ -41,6 +41,12 @@ export type RuleKeyword =
   | "MAY"
   | "OPTIONAL";
 export type StepKeyword = "Given" | "When" | "Then" | "And" | "But";
+
+export type FeatureStep = {
+  keyword: StepKeyword;
+  text: string;
+  line: number;
+};
 
 export type ValidationIssue = {
   code: string;
@@ -72,6 +78,14 @@ export type CoverageSummary = {
   ruleCoverage: CoverageItem[];
   orphanScenarioReferences: TestReference[];
   orphanRuleReferences: TestReference[];
+};
+
+export type SpecScreenshot = {
+  specPath: string;
+  line: number;
+  path: string;
+  title?: string;
+  testPath?: string;
 };
 
 const scenarioIdPattern = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3}\b/g;
@@ -276,6 +290,24 @@ export async function collectTestReferences(patterns: string[]) {
   return refs;
 }
 
+export async function collectSpecScreenshots(patterns: string[]) {
+  const screenshots: SpecScreenshot[] = [];
+  for (const file of await expandArtifactPatterns(patterns)) {
+    const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
+    const entries = Array.isArray(parsed)
+      ? parsed
+      : isRecord(parsed) && Array.isArray(parsed.screenshots)
+        ? parsed.screenshots
+        : [];
+
+    for (const entry of entries) {
+      const screenshot = normalizeScreenshot(entry);
+      if (screenshot) screenshots.push(screenshot);
+    }
+  }
+  return screenshots;
+}
+
 export function buildCoverageSummary(
   specs: FeatureSpec[],
   references: TestReference[],
@@ -416,6 +448,7 @@ export function renderHtmlReport(
   specs: FeatureSpec[],
   options: {
     coverage?: CoverageSummary;
+    screenshots?: SpecScreenshot[];
     validationIssues?: ValidationIssue[];
     title?: string;
     generatedAt?: string;
@@ -424,7 +457,7 @@ export function renderHtmlReport(
   const title = options.title ?? "Feature Spec Report";
   const issues = options.validationIssues ?? [];
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(title)}</title><style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:40px 24px}.panel{border:1px solid #ddd;border-radius:16px;padding:20px;margin:18px 0}.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.badge{border:1px solid #ddd;border-radius:999px;padding:2px 8px;font-size:12px}</style></head><body><h1>${html(title)}</h1><p>Generated ${html(options.generatedAt ?? new Date().toISOString())}.</p>${renderIssues(issues)}${specs.map((spec) => renderSpec(spec, options.coverage)).join("")}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(title)}</title><style>body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}.step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}.screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}.screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}</style></head><body><h1>${html(title)}</h1><p>Generated ${html(options.generatedAt ?? new Date().toISOString())}.</p>${renderIssues(issues)}${specs.map((spec) => renderSpec(spec, options.coverage, options.screenshots ?? [])).join("")}</body></html>`;
 }
 
 export async function writeTextFile(filePath: string, content: string) {
@@ -437,6 +470,18 @@ export async function expandFilePatterns(patterns: string[]) {
   for (const pattern of patterns) {
     for await (const file of glob(pattern, {
       exclude: ["node_modules/**", ".git/**", "dist/**", "test-results/**"],
+    })) {
+      files.add(file);
+    }
+  }
+  return Array.from(files).sort();
+}
+
+async function expandArtifactPatterns(patterns: string[]) {
+  const files = new Set<string>();
+  for (const pattern of patterns) {
+    for await (const file of glob(pattern, {
+      exclude: ["node_modules/**", ".git/**", "dist/**"],
     })) {
       files.add(file);
     }
@@ -630,8 +675,28 @@ function renderIssues(issues: ValidationIssue[]) {
   return `<section class="panel"><h2>Validation</h2><ul>${issues.map((i) => `<li class="${i.severity}"><code>${html(`${i.filePath ?? ""}${i.line ? `:${i.line}` : ""}`)}</code> ${html(i.message)}</li>`).join("")}</ul></section>`;
 }
 
-function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary) {
-  return `<section class="panel"><p><span class="badge">${html(spec.frontmatter.status ?? "draft")}</span></p><h2>${html(spec.frontmatter.id)} ${html(spec.title)}</h2><p>${html(spec.purpose)}</p><h3>Rules</h3><ul>${spec.rules.map((r) => `<li><code>${html(r.id)}</code>: ${html(r.text)} ${coverageBadge(coverage?.ruleCoverage.find((i) => i.id === r.id)?.covered)}</li>`).join("")}</ul><h3>Scenarios</h3>${spec.scenarios.map((s) => `<article class="panel"><h4><code>${html(s.id)}</code>: ${html(s.title)} ${coverageBadge(coverage?.scenarioCoverage.find((i) => i.id === s.id)?.covered)}</h4>${s.steps.map((step) => `<p><strong>${html(step.keyword)}</strong> ${html(step.text)}</p>`).join("")}</article>`).join("")}</section>`;
+function renderSpec(
+  spec: FeatureSpec,
+  coverage?: CoverageSummary,
+  screenshots: SpecScreenshot[] = [],
+) {
+  const screenshotsByLine = groupScreenshotsByLine(screenshots);
+  return `<section class="panel"><p><span class="badge">${html(spec.frontmatter.status ?? "draft")}</span></p><h2>${html(spec.frontmatter.id)} ${html(spec.title)}</h2><p>${html(spec.purpose)}</p><h3>Rules</h3><ul>${spec.rules.map((r) => `<li><code>${html(r.id)}</code>: ${html(r.text)} ${coverageBadge(coverage?.ruleCoverage.find((i) => i.id === r.id)?.covered)}</li>`).join("")}</ul><h3>Scenarios</h3>${spec.scenarios.map((s) => `<article class="panel"><h4><code>${html(s.id)}</code>: ${html(s.title)} ${coverageBadge(coverage?.scenarioCoverage.find((i) => i.id === s.id)?.covered)}</h4>${s.steps.map((step) => renderStep(spec, step, screenshotsByLine)).join("")}</article>`).join("")}</section>`;
+}
+
+function renderStep(
+  spec: FeatureSpec,
+  step: FeatureStep,
+  screenshotsByLine: Map<string, SpecScreenshot[]>,
+) {
+  const screenshots =
+    screenshotsByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
+  return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} <span class="badge">line ${step.line}</span> ${screenshots.length ? `<span class="badge ok">${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}</span>` : `<span class="badge missing">missing screenshot</span>`}</p>${renderScreenshots(screenshots)}</div>`;
+}
+
+function renderScreenshots(screenshots: SpecScreenshot[]) {
+  if (!screenshots.length) return "";
+  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path)}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
 }
 
 function coverageBadge(covered?: boolean) {
@@ -649,4 +714,46 @@ function html(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function groupScreenshotsByLine(screenshots: SpecScreenshot[]) {
+  const grouped = new Map<string, SpecScreenshot[]>();
+  for (const screenshot of screenshots) {
+    const key = screenshotKey(screenshot.specPath, screenshot.line);
+    grouped.set(key, [...(grouped.get(key) ?? []), screenshot]);
+  }
+  return grouped;
+}
+
+function screenshotKey(filePath: string, line: number) {
+  return `${normalizeFilePath(filePath)}:${line}`;
+}
+
+function normalizeFilePath(filePath: string) {
+  return filePath.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function normalizeScreenshot(value: unknown): SpecScreenshot | null {
+  if (!isRecord(value)) return null;
+  const specPath = value.specPath;
+  const line = value.line;
+  const imagePath = value.path ?? value.imagePath;
+  if (
+    typeof specPath !== "string" ||
+    typeof line !== "number" ||
+    typeof imagePath !== "string"
+  ) {
+    return null;
+  }
+  return {
+    specPath: normalizeFilePath(specPath),
+    line,
+    path: imagePath,
+    title: typeof value.title === "string" ? value.title : undefined,
+    testPath: typeof value.testPath === "string" ? value.testPath : undefined,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

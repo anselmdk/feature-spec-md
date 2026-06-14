@@ -103,3 +103,8 @@ Generated tooling can then answer:
 - Which rules have executable coverage?
 - Which tests reference deleted or unknown spec IDs?
 - Which visible flows have screenshots, traces, or other evidence?
+
+For Playwright tests, capture one screenshot for each scenario step line in the
+spec. Report manifests associate each screenshot with the exact spec file and
+line number, so the HTML report can display the evidence beside the
+Given / When / Then / And line it proves.

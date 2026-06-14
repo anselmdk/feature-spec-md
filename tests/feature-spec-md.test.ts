@@ -6,8 +6,10 @@ import { describe, it } from "node:test";
 import {
   buildCoverageSummary,
   checkFeatureSpecs,
+  collectSpecScreenshots,
   parseFeatureSpec,
   parseTestReferences,
+  renderHtmlReport,
   validateCoverage,
   validateFeatureSpec,
 } from "../src/index.js";
@@ -66,6 +68,44 @@ describe("feature-spec-md", () => {
       validateCoverage(coverage, { requireRuleCoverage: true }),
       [],
     );
+  });
+
+  it("renders spec line screenshots in the HTML report", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
+    const cwd = process.cwd();
+    try {
+      const spec = parseFeatureSpec(specSource, {
+        filePath: "account.feature.md",
+      });
+      const step = spec.scenarios[0]?.steps[0];
+      assert.ok(step);
+      await mkdir(path.join(root, "test-results"), { recursive: true });
+      await writeFile(
+        path.join(root, "test-results", "screenshots.json"),
+        JSON.stringify({
+          screenshots: [
+            {
+              specPath: "account.feature.md",
+              line: step.line,
+              path: "screenshots/account-s001-line-22.png",
+              title: "Given a returning person is on the access page",
+            },
+          ],
+        }),
+        "utf8",
+      );
+      process.chdir(root);
+      const screenshots = await collectSpecScreenshots([
+        "test-results/screenshots.json",
+      ]);
+      const html = renderHtmlReport([spec], { screenshots });
+
+      assert.match(html, /screenshots\/account-s001-line-22\.png/);
+      assert.match(html, /missing screenshot/);
+    } finally {
+      process.chdir(cwd);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("checks specs and tests from file globs", async () => {

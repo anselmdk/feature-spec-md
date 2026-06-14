@@ -31,6 +31,24 @@ See `SPEC_FORMAT.md` and `examples/account-access.feature.md`.
 npm install
 npm run dev -- check --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts" --require-scenario-coverage=false
 npm run dev -- report --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts"
+npm run dev -- report --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts" --screenshots "test-results/spec-report/screenshots-*.json"
+```
+
+Playwright screenshot evidence can be shown in the report by passing one or
+more screenshot manifest JSON files. Each screenshot should point at the spec
+file and line it proves:
+
+```json
+{
+  "screenshots": [
+    {
+      "specPath": "specs/account-access.feature.md",
+      "line": 24,
+      "path": "screenshots/account-s001-line-24.png",
+      "title": "ACCOUNT-S001:24 Given a registered person is on the sign-in page"
+    }
+  ]
+}
 ```
 
 ## Library API

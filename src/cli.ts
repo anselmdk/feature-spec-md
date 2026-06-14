@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   checkFeatureSpecs,
+  collectSpecScreenshots,
   renderHtmlReport,
   writeTextFile,
   type ValidationIssue,
@@ -65,10 +66,14 @@ async function runReport(options: CliOptions) {
   });
 
   const out = options.out ?? "test-results/feature-spec-report/index.html";
+  const screenshots = options.screenshots
+    ? await collectSpecScreenshots(optionList(options.screenshots, ""))
+    : [];
   await writeTextFile(
     out,
     renderHtmlReport(result.specs, {
       coverage: result.coverage,
+      screenshots,
       validationIssues: [...result.validationIssues, ...result.coverageIssues],
     }),
   );
@@ -130,11 +135,12 @@ function printHelp() {
 Usage:
   feature-spec-md init [--dir specs]
   feature-spec-md check [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"]
-  feature-spec-md report [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md report [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
+  --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
 `);
 }
