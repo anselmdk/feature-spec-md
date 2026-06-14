@@ -13,6 +13,10 @@ import {
   validateCoverage,
   validateFeatureSpec,
 } from "../src/index.js";
+import {
+  createPlaywrightSpecEvidence,
+  loadSpecSteps,
+} from "../src/playwright.js";
 
 const specSource = `---
 id: ACCOUNT
@@ -147,6 +151,69 @@ describe("feature-spec-md", () => {
       assert.equal(result.ok, true);
     } finally {
       process.chdir(cwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("loads spec steps and writes Playwright screenshot evidence", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
+    try {
+      await mkdir(path.join(root, "specs"), { recursive: true });
+      await writeFile(
+        path.join(root, "specs", "account.feature.md"),
+        specSource,
+        "utf8",
+      );
+
+      const steps = await loadSpecSteps(["specs/**/*.feature.md"], root);
+      const spec = parseFeatureSpec(specSource, {
+        filePath: "specs/account.feature.md",
+      });
+      const firstStepLine = spec.scenarios[0]?.steps[0]?.line;
+      assert.equal(steps[0]?.scenarioId, "ACCOUNT-S001");
+      assert.equal(steps[0]?.line, firstStepLine);
+
+      const calls: string[] = [];
+      const helper = createPlaywrightSpecEvidence(
+        {
+          async step(_title, body) {
+            return body();
+          },
+        },
+        { specs: ["specs/**/*.feature.md"], cwd: root },
+      );
+
+      await helper.specStep(
+        {
+          async screenshot(options) {
+            calls.push(options.path);
+            await writeFile(options.path, "fake image", "utf8");
+          },
+        },
+        {
+          async attach(name) {
+            calls.push(name);
+          },
+          file: "tests/account.spec.ts",
+          workerIndex: 0,
+        },
+        "ACCOUNT-S001",
+        "Given a returning person is on the access page",
+        async () => {
+          calls.push("body");
+        },
+      );
+
+      assert.equal(calls.includes("body"), true);
+      const screenshots = await collectSpecScreenshots([
+        path.join(root, "test-results/spec-report/screenshots-0.json"),
+      ]);
+      assert.equal(screenshots[0]?.line, firstStepLine);
+      assert.equal(
+        screenshots[0]?.path,
+        `screenshots/ACCOUNT-S001-line-${firstStepLine}-a-returning-person-is-on-the-access-page.png`,
+      );
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
