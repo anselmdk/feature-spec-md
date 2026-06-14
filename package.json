@@ -27,6 +27,7 @@
     "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "dev": "tsx src/cli.ts",
+    "format": "prettier --write .",
     "check:example": "tsx src/cli.ts check --specs examples/**/*.feature.md --tests tests/**/*.test.ts --require-scenario-coverage=false",
     "report:example": "tsx src/cli.ts report --specs examples/**/*.feature.md --tests tests/**/*.test.ts --out test-results/feature-spec-report/index.html",
     "test": "tsx --test tests/**/*.test.ts",
@@ -44,6 +45,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.3.2",
+    "prettier": "^3.8.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

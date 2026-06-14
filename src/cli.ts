@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { checkFeatureSpecs, renderHtmlReport, writeTextFile, type ValidationIssue } from "./index.js";
+import {
+  checkFeatureSpecs,
+  renderHtmlReport,
+  writeTextFile,
+  type ValidationIssue,
+} from "./index.js";
 
 const defaultSpecPattern = "specs/**/*.feature.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
@@ -20,13 +25,16 @@ async function main() {
   if (command === "init") return runInit(options);
 
   printHelp();
-  process.exit(command === "help" || command === "--help" || command === "-h" ? 0 : 1);
+  process.exit(
+    command === "help" || command === "--help" || command === "-h" ? 0 : 1,
+  );
 }
 
 async function runCheck(options: CliOptions) {
   const result = await checkFeatureSpecs({
     specs: optionList(options.specs, defaultSpecPattern),
-    tests: options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    tests:
+      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: options["require-scenario-coverage"] !== "false",
   });
@@ -34,24 +42,36 @@ async function runCheck(options: CliOptions) {
   printIssues([...result.validationIssues, ...result.coverageIssues]);
   if (!result.ok) process.exit(1);
 
-  const scenarioCount = result.specs.reduce((sum, spec) => sum + spec.scenarios.length, 0);
-  const ruleCount = result.specs.reduce((sum, spec) => sum + spec.rules.length, 0);
-  console.log(`Feature spec check passed: ${result.specs.length} spec(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`);
+  const scenarioCount = result.specs.reduce(
+    (sum, spec) => sum + spec.scenarios.length,
+    0,
+  );
+  const ruleCount = result.specs.reduce(
+    (sum, spec) => sum + spec.rules.length,
+    0,
+  );
+  console.log(
+    `Feature spec check passed: ${result.specs.length} spec(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`,
+  );
 }
 
 async function runReport(options: CliOptions) {
   const result = await checkFeatureSpecs({
     specs: optionList(options.specs, defaultSpecPattern),
-    tests: options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    tests:
+      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: false,
   });
 
   const out = options.out ?? "test-results/feature-spec-report/index.html";
-  await writeTextFile(out, renderHtmlReport(result.specs, {
-    coverage: result.coverage,
-    validationIssues: [...result.validationIssues, ...result.coverageIssues],
-  }));
+  await writeTextFile(
+    out,
+    renderHtmlReport(result.specs, {
+      coverage: result.coverage,
+      validationIssues: [...result.validationIssues, ...result.coverageIssues],
+    }),
+  );
   console.log(`Feature spec report written to ${out}`);
 }
 
@@ -87,13 +107,20 @@ function parseArgs(args: string[]): CliOptions {
 }
 
 function optionList(value: string | undefined, fallback: string) {
-  return (value ?? fallback).split(",").map((item) => item.trim()).filter(Boolean);
+  return (value ?? fallback)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function printIssues(issues: ValidationIssue[]) {
   for (const issue of issues) {
-    const location = issue.filePath ? `${issue.filePath}${issue.line ? `:${issue.line}` : ""}` : "";
-    console.error(`${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`);
+    const location = issue.filePath
+      ? `${issue.filePath}${issue.line ? `:${issue.line}` : ""}`
+      : "";
+    console.error(
+      `${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`,
+    );
   }
 }
 
