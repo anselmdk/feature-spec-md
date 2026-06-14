@@ -1,6 +1,6 @@
 {
   "name": "@anselmdk/feature-spec-md",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Markdown feature specs with rule/scenario IDs, validation, coverage checks, and generated reports.",
   "type": "module",
   "bin": {
