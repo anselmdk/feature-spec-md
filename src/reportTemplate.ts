@@ -5,12 +5,14 @@ import type {
   CoverageSummary,
   FeatureSpec,
   FeatureStep,
+  ModelSpec,
   SpecScreenshot,
   ValidationIssue,
 } from "./types.js";
 
 export type ReportOptions = {
   coverage?: CoverageSummary;
+  models?: ModelSpec[];
   screenshots?: SpecScreenshot[];
   validationIssues?: ValidationIssue[];
   title?: string;
@@ -53,6 +55,7 @@ export function renderHtmlReport(
     <h1>${html(title)}</h1>
     <p>Generated ${html(options.generatedAt ?? new Date().toISOString())}.</p>
     ${renderIssues(issues)}
+    ${renderModels(options.models ?? [], options.coverage)}
     ${specs.map((spec) => renderSpec(spec, options.coverage, screenshots)).join("\n")}
   </body>
 </html>`;
@@ -69,6 +72,40 @@ function renderIssues(issues: ValidationIssue[]) {
         `<li class="${issue.severity}"><code>${html(`${issue.filePath ?? ""}${issue.line ? `:${issue.line}` : ""}`)}</code> ${html(issue.message)}</li>`,
     )
     .join("")}</ul></section>`;
+}
+
+function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
+  if (!models.length) return "";
+  const modelCoverage = coverage?.modelCoverage ?? [];
+
+  return `<section class="panel">
+  <h2>Models</h2>
+  ${models
+    .map(
+      (model) => `<section>
+    <div class="feature-header">
+      <h3>${html(model.frontmatter.id)} ${html(model.title)}</h3>
+      <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
+    </div>
+    <p>${html(model.purpose)}</p>
+    <h4>Model</h4>
+    <ul>${model.modelItems
+      .map((item) => {
+        const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+        return `<li><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}</li>`;
+      })
+      .join("")}</ul>
+    ${
+      model.rules.length
+        ? `<h4>Rules</h4><ul>${model.rules
+            .map((rule) => `<li><code>${html(rule.id)}</code>: ${html(rule.text)}</li>`)
+            .join("")}</ul>`
+        : ""
+    }
+  </section>`,
+    )
+    .join("\n")}
+</section>`;
 }
 
 function renderSpec(
