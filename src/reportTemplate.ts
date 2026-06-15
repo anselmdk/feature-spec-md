@@ -3,16 +3,20 @@ import { screenshotKey } from "./screenshots.js";
 import type {
   CoverageItem,
   CoverageSummary,
+  DesignSpec,
   FeatureSpec,
   FeatureStep,
   ModelSpec,
   SpecScreenshot,
+  StackSpec,
   ValidationIssue,
 } from "./types.js";
 
 export type ReportOptions = {
   coverage?: CoverageSummary;
   models?: ModelSpec[];
+  stacks?: StackSpec[];
+  designs?: DesignSpec[];
   screenshots?: SpecScreenshot[];
   validationIssues?: ValidationIssue[];
   title?: string;
