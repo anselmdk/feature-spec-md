@@ -56,6 +56,7 @@ async function runReport(options: CliOptions) {
   await writeTextFile(
     out,
     renderHtmlReport(result.features, {
+      models: result.models,
       coverage: result.coverage,
       screenshots,
       validationIssues: [...result.validationIssues, ...result.coverageIssues],
