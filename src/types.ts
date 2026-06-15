@@ -6,11 +6,17 @@ export type SpecFrontmatter = {
   owner?: string;
 };
 
-/** Frontmatter fields supported by `*.feature.md` files. */
-export type FeatureFrontmatter = SpecFrontmatter & {
+/** Frontmatter fields supported by documents that may reference models. */
+export type ModelReferenceFrontmatter = SpecFrontmatter & {
   model?: string;
   models?: string[] | string;
 };
+
+/** Frontmatter fields supported by `*.feature.md` files. */
+export type FeatureFrontmatter = ModelReferenceFrontmatter;
+
+/** Frontmatter fields supported by `*.design.md` files. */
+export type DesignFrontmatter = ModelReferenceFrontmatter;
 
 /** Parsed contents of one `*.model.md` file. */
 export type ModelSpec = {
@@ -36,8 +42,39 @@ export type FeatureSpec = {
   source: string;
 };
 
+/** Parsed contents of one `*.stack.md` file. */
+export type StackSpec = {
+  kind: "stack";
+  filePath: string;
+  frontmatter: SpecFrontmatter;
+  title: string;
+  purpose: string;
+  stack: string;
+  context: string;
+  rationale: string;
+  consequences: string;
+  rules: FeatureRule[];
+  source: string;
+};
+
+/** Parsed contents of one `*.design.md` file. */
+export type DesignSpec = {
+  kind: "design";
+  filePath: string;
+  frontmatter: DesignFrontmatter;
+  title: string;
+  purpose: string;
+  design: string;
+  principles: string;
+  layout: string;
+  interaction: string;
+  visualStyle: string;
+  rules: FeatureRule[];
+  source: string;
+};
+
 /** Any parsed spec document. */
-export type SpecDocument = ModelSpec | FeatureSpec;
+export type SpecDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
 
 /** A model concept declared in the `## Model` section. */
 export type ModelItem = {
