@@ -1,26 +1,37 @@
 # feature-spec-md
 
-Markdown feature specs with stable rule and scenario IDs, validation, coverage checks, and generated reports.
+Markdown feature specs with stable model, rule, and scenario IDs, validation, coverage checks, and generated reports.
 
 The goal is simple:
 
 ```txt
-human-readable feature spec
+human-readable model + feature specs
 → exact executable tests
 → generated coverage report
 ```
 
-The handwritten spec stays clean. It contains purpose, rules, and scenarios. Test mapping is derived from stable IDs instead of being written manually in the spec.
+The handwritten specs stay clean. Shared domain language lives in `*.model.md` files. User-facing capabilities live in `*.feature.md` files with rules and scenarios. Test mapping is derived from stable IDs instead of being written manually in the spec.
 
 ## Format
 
-Feature specs are ordinary Markdown files named `*.feature.md`.
+Feature Spec Markdown uses ordinary Markdown files:
 
-They use:
+```txt
+*.model.md
+*.feature.md
+```
+
+Model files use:
 
 - frontmatter for metadata
-- `## Purpose` for intent
-- `## Rules` for general business rules
+- `## Model` for shared domain vocabulary
+- optional `## Rules` for global invariants
+
+Feature files use:
+
+- frontmatter for metadata
+- optional `model` or `models` references
+- `## Rules` for durable product truths
 - `## Scenarios` for Given / When / Then examples
 
 See `SPEC_FORMAT.md` and `examples/account-access.feature.md`.
