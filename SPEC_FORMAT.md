@@ -54,6 +54,24 @@ Optional fields:
 - `model`: a single referenced model id
 - `models`: comma-separated referenced model ids
 
+## Purpose
+
+Every model and feature file MUST include a short `## Purpose` section.
+
+Purpose explains the document boundary and intent.
+
+Purpose SHOULD be one or two short paragraphs.
+
+Purpose SHOULD NOT contain rules, scenarios, implementation details, or roadmap notes.
+
+Example:
+
+```md
+## Purpose
+
+Users can create, edit, and delete cards on the board.
+```
+
 ## Model files
 
 Model files use the `.model.md` suffix.
@@ -66,6 +84,8 @@ A model file describes the domain, not the implementation. It SHOULD NOT define 
 
 ```md
 # Kanban model
+
+## Purpose
 
 ## Model
 ```
@@ -88,6 +108,10 @@ status: draft
 ---
 
 # Kanban model
+
+## Purpose
+
+Define the shared concepts for a single-user Kanban board.
 
 ## Model
 
@@ -116,12 +140,12 @@ A feature file defines rules and scenarios for one user capability. It may refer
 ```md
 # Card authoring
 
+## Purpose
+
 ## Rules
 
 ## Scenarios
 ```
-
-`## Purpose` is no longer required. The feature title, referenced model, rules, and scenarios should provide the necessary context.
 
 ### Feature example
 
@@ -134,6 +158,10 @@ model: KANBAN
 ---
 
 # Card authoring
+
+## Purpose
+
+Users can create, edit, and delete cards on the board.
 
 ## Rules
 
@@ -246,10 +274,11 @@ Avoid splitting feature files by technical layer.
 
 Spec files do not contain test mappings.
 
-Tests reference rule and scenario IDs in test titles, tags, annotations, comments, or metadata.
+Tests reference model item, rule, and scenario IDs in test titles, tags, annotations, comments, or metadata.
 
 Generated tooling can then answer:
 
+- Which model items are referenced?
 - Which scenarios have tests?
 - Which rules have executable coverage?
 - Which tests reference deleted or unknown spec IDs?
