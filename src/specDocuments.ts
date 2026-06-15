@@ -1,15 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { expandFilePatterns } from "./filePatterns.js";
-import {
-  buildCoverageSummary,
-  parseFeatureSpec,
-  parseTestReferences,
-  validateCoverage,
-  validateFeatureSpec,
-} from "./index.js";
+import { buildCoverageSummary, parseFeatureSpec, parseTestReferences, validateCoverage, validateFeatureSpec } from "./index.js";
 import type { FeatureSpec, ModelItem, ModelSpec, SpecDocument, SpecFrontmatter, TestReference, ValidationIssue } from "./types.js";
 
 const modelIdPattern = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-M\d{3}\b/g;
+type DocumentIdEntry = { id: string; filePath: string; line?: number };
 
 export function parseSpecDocument(source: string, options: { filePath?: string; kind?: "model" | "feature" } = {}): SpecDocument {
   const filePath = options.filePath ?? "<inline>";
@@ -153,6 +148,6 @@ function issue(spec: SpecDocument, code: string, severity: ValidationIssue["seve
 function referencedModelIds(spec: FeatureSpec) { const models = typeof spec.frontmatter.models === "string" ? spec.frontmatter.models.split(",") : spec.frontmatter.models ?? []; return [spec.frontmatter.model, ...models].map((model) => model?.trim()).filter((model): model is string => Boolean(model)); }
 function isModelSpec(doc: SpecDocument): doc is ModelSpec { return doc.kind === "model"; }
 function isFeatureSpec(doc: SpecDocument): doc is FeatureSpec { return doc.kind !== "model"; }
-function documentIds(doc: SpecDocument) { return [{ id: doc.frontmatter.id, filePath: doc.filePath }, ...doc.rules.map((rule) => ({ id: rule.id, filePath: doc.filePath, line: rule.line })), ...(doc.kind === "model" ? doc.modelItems.map((item) => ({ id: item.id, filePath: doc.filePath, line: item.line })) : doc.scenarios.map((scenario) => ({ id: scenario.id, filePath: doc.filePath, line: scenario.line })))]; }
+function documentIds(doc: SpecDocument): DocumentIdEntry[] { return [{ id: doc.frontmatter.id, filePath: doc.filePath }, ...doc.rules.map((rule) => ({ id: rule.id, filePath: doc.filePath, line: rule.line })), ...(doc.kind === "model" ? doc.modelItems.map((item) => ({ id: item.id, filePath: doc.filePath, line: item.line })) : doc.scenarios.map((scenario) => ({ id: scenario.id, filePath: doc.filePath, line: scenario.line })))]; }
 function lineForOffset(lines: string[], offset: number) { let consumed = 0; for (const [index, line] of lines.entries()) { consumed += line.length + 1; if (consumed > offset) return index + 1; } return lines.length; }
 function dedupe(refs: TestReference[]) { const seen = new Set<string>(); return refs.filter((ref) => { const key = `${ref.kind}:${ref.id}:${ref.filePath}:${ref.line}:${ref.source}`; if (seen.has(key)) return false; seen.add(key); return true; }); }
