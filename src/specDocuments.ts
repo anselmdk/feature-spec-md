@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { expandFilePatterns } from "./filePatterns.js";
-import { buildCoverageSummary, parseFeatureSpec, validateFeatureSpec } from "./index.js";
+import {
+  buildCoverageSummary,
+  parseFeatureSpec,
+  parseTestReferences,
+  validateCoverage,
+  validateFeatureSpec,
+} from "./index.js";
 import type { FeatureSpec, ModelItem, ModelSpec, SpecDocument, SpecFrontmatter, TestReference, ValidationIssue } from "./types.js";
 
 const modelIdPattern = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-M\d{3}\b/g;
@@ -25,7 +31,14 @@ export async function loadSpecDocuments(patterns: string[]) {
 
 export function parseSpecTestReferences(source: string, filePath = "<inline>"): TestReference[] {
   const lines = source.split(/\r?\n/);
-  return Array.from(source.matchAll(modelIdPattern)).map((match) => ({ id: match[0], filePath, line: lineForOffset(lines, match.index ?? 0), kind: "model" as const, source: "free-text" as const }));
+  const modelRefs = Array.from(source.matchAll(modelIdPattern)).map((match) => ({
+    id: match[0],
+    filePath,
+    line: lineForOffset(lines, match.index ?? 0),
+    kind: "model" as const,
+    source: "free-text" as const,
+  }));
+  return dedupe([...parseTestReferences(source, filePath), ...modelRefs]);
 }
 
 export async function collectSpecTestReferences(patterns: string[]) {
@@ -68,19 +81,22 @@ export function buildSpecCoverageSummary(documents: SpecDocument[], references: 
   return { ...baseCoverage, modelCoverage: modelItems.map(({ doc, modelItem }) => ({ id: modelItem.id, title: modelItem.title, filePath: doc.filePath, line: modelItem.line, references: modelRefs.filter((ref) => ref.id === modelItem.id), covered: modelRefs.some((ref) => ref.id === modelItem.id) })), orphanModelReferences: modelRefs.filter((ref) => !modelItems.some(({ modelItem }) => modelItem.id === ref.id)) };
 }
 
-export async function checkSpecDocuments(options: { specs: string[]; tests?: string[]; requireModelCoverage?: boolean }) {
+export async function checkSpecDocuments(options: { specs: string[]; tests?: string[]; requireModelCoverage?: boolean; requireRuleCoverage?: boolean; requireScenarioCoverage?: boolean }) {
   const documents = await loadSpecDocuments(options.specs);
-  const modelReferences = options.tests?.length ? await collectSpecTestReferences(options.tests) : [];
-  const coverage = options.tests?.length ? buildSpecCoverageSummary(documents, modelReferences) : undefined;
+  const references = options.tests?.length ? await collectSpecTestReferences(options.tests) : [];
+  const coverage = options.tests?.length ? buildSpecCoverageSummary(documents, references) : undefined;
   const validationIssues = [...documents.flatMap(validateSpecDocument), ...validateSpecGraph(documents)];
-  const coverageIssues: ValidationIssue[] = [];
-  if (coverage) {
-    if (options.requireModelCoverage) for (const item of coverage.modelCoverage?.filter((item) => !item.covered) ?? []) coverageIssues.push({ code: "missing-model-coverage", severity: "error", message: `Model item "${item.id}" has no matching test reference.`, filePath: item.filePath, line: item.line });
-    for (const ref of coverage.orphanModelReferences ?? []) coverageIssues.push({ code: "orphan-model-reference", severity: "error", message: `Test references unknown model item "${ref.id}".`, filePath: ref.filePath, line: ref.line });
-  }
+  const coverageIssues: ValidationIssue[] = coverage ? [...validateCoverage(coverage, options), ...validateModelCoverage(coverage, options.requireModelCoverage)] : [];
   const models = documents.filter(isModelSpec);
   const features = documents.filter(isFeatureSpec);
   return { documents, models, features, specs: features, validationIssues, coverage, coverageIssues, ok: ![...validationIssues, ...coverageIssues].some((issue) => issue.severity === "error") };
+}
+
+function validateModelCoverage(coverage: ReturnType<typeof buildSpecCoverageSummary>, required = false) {
+  const issues: ValidationIssue[] = [];
+  if (required) for (const item of coverage.modelCoverage?.filter((item) => !item.covered) ?? []) issues.push({ code: "missing-model-coverage", severity: "error", message: `Model item "${item.id}" has no matching test reference.`, filePath: item.filePath, line: item.line });
+  for (const ref of coverage.orphanModelReferences ?? []) issues.push({ code: "orphan-model-reference", severity: "error", message: `Test references unknown model item "${ref.id}".`, filePath: ref.filePath, line: ref.line });
+  return issues;
 }
 
 function parseBase(source: string) {
@@ -139,3 +155,4 @@ function isModelSpec(doc: SpecDocument): doc is ModelSpec { return doc.kind === 
 function isFeatureSpec(doc: SpecDocument): doc is FeatureSpec { return doc.kind !== "model"; }
 function documentIds(doc: SpecDocument) { return [{ id: doc.frontmatter.id, filePath: doc.filePath }, ...doc.rules.map((rule) => ({ id: rule.id, filePath: doc.filePath, line: rule.line })), ...(doc.kind === "model" ? doc.modelItems.map((item) => ({ id: item.id, filePath: doc.filePath, line: item.line })) : doc.scenarios.map((scenario) => ({ id: scenario.id, filePath: doc.filePath, line: scenario.line })))]; }
 function lineForOffset(lines: string[], offset: number) { let consumed = 0; for (const [index, line] of lines.entries()) { consumed += line.length + 1; if (consumed > offset) return index + 1; } return lines.length; }
+function dedupe(refs: TestReference[]) { const seen = new Set<string>(); return refs.filter((ref) => { const key = `${ref.kind}:${ref.id}:${ref.filePath}:${ref.line}:${ref.source}`; if (seen.has(key)) return false; seen.add(key); return true; }); }
