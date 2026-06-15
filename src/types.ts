@@ -26,7 +26,7 @@ export type ModelSpec = {
 
 /** Parsed contents of one `*.feature.md` file. */
 export type FeatureSpec = {
-  kind: "feature";
+  kind?: "feature";
   filePath: string;
   frontmatter: FeatureFrontmatter;
   title: string;
@@ -111,10 +111,10 @@ export type CoverageItem = {
 
 /** Complete test coverage mapping for a set of spec documents. */
 export type CoverageSummary = {
-  modelCoverage: CoverageItem[];
+  modelCoverage?: CoverageItem[];
   ruleCoverage: CoverageItem[];
   scenarioCoverage: CoverageItem[];
-  orphanModelReferences: TestReference[];
+  orphanModelReferences?: TestReference[];
   orphanRuleReferences: TestReference[];
   orphanScenarioReferences: TestReference[];
 };
