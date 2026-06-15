@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  checkFeatureSpecs,
-  collectSpecScreenshots,
-  renderHtmlReport,
-  writeTextFile,
-  type ValidationIssue,
-} from "./index.js";
+import { collectSpecScreenshots, renderHtmlReport, writeTextFile, type ValidationIssue } from "./index.js";
+import { checkSpecDocuments } from "./specDocuments.js";
 
-const defaultSpecPattern = "specs/**/*.feature.md";
+const defaultSpecPattern = "specs/**/*.model.md,specs/**/*.feature.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
 
 main().catch((error) => {
@@ -26,16 +21,14 @@ async function main() {
   if (command === "init") return runInit(options);
 
   printHelp();
-  process.exit(
-    command === "help" || command === "--help" || command === "-h" ? 0 : 1,
-  );
+  process.exit(command === "help" || command === "--help" || command === "-h" ? 0 : 1);
 }
 
 async function runCheck(options: CliOptions) {
-  const result = await checkFeatureSpecs({
+  const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
-    tests:
-      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    tests: options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: options["require-scenario-coverage"] !== "false",
   });
@@ -43,35 +36,26 @@ async function runCheck(options: CliOptions) {
   printIssues([...result.validationIssues, ...result.coverageIssues]);
   if (!result.ok) process.exit(1);
 
-  const scenarioCount = result.specs.reduce(
-    (sum, spec) => sum + spec.scenarios.length,
-    0,
-  );
-  const ruleCount = result.specs.reduce(
-    (sum, spec) => sum + spec.rules.length,
-    0,
-  );
-  console.log(
-    `Feature spec check passed: ${result.specs.length} spec(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`,
-  );
+  const modelItemCount = result.models.reduce((sum, spec) => sum + spec.modelItems.length, 0);
+  const ruleCount = result.documents.reduce((sum, spec) => sum + spec.rules.length, 0);
+  const scenarioCount = result.features.reduce((sum, spec) => sum + spec.scenarios.length, 0);
+  console.log(`Spec check passed: ${result.models.length} model(s), ${result.features.length} feature(s), ${modelItemCount} model item(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`);
 }
 
 async function runReport(options: CliOptions) {
-  const result = await checkFeatureSpecs({
+  const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
-    tests:
-      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    tests: options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: false,
   });
 
   const out = options.out ?? "test-results/feature-spec-report/index.html";
-  const screenshots = options.screenshots
-    ? await collectSpecScreenshots(optionList(options.screenshots, ""))
-    : [];
+  const screenshots = options.screenshots ? await collectSpecScreenshots(optionList(options.screenshots, "")) : [];
   await writeTextFile(
     out,
-    renderHtmlReport(result.specs, {
+    renderHtmlReport(result.features, {
       coverage: result.coverage,
       screenshots,
       validationIssues: [...result.validationIssues, ...result.coverageIssues],
@@ -82,9 +66,10 @@ async function runReport(options: CliOptions) {
 
 async function runInit(options: CliOptions) {
   const dir = options.dir ?? "specs";
-  const target = path.join(dir, "account-access.feature.md");
+  const kind = options.kind ?? "feature";
+  const target = path.join(dir, kind === "model" ? "example.model.md" : "account-access.feature.md");
   await mkdir(dir, { recursive: true });
-  await writeFile(target, exampleSpec, "utf8");
+  await writeFile(target, kind === "model" ? exampleModel : exampleFeature, "utf8");
   console.log(`Created ${target}`);
 }
 
@@ -112,20 +97,13 @@ function parseArgs(args: string[]): CliOptions {
 }
 
 function optionList(value: string | undefined, fallback: string) {
-  return (value ?? fallback)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return (value ?? fallback).split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function printIssues(issues: ValidationIssue[]) {
   for (const issue of issues) {
-    const location = issue.filePath
-      ? `${issue.filePath}${issue.line ? `:${issue.line}` : ""}`
-      : "";
-    console.error(
-      `${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`,
-    );
+    const location = issue.filePath ? `${issue.filePath}${issue.line ? `:${issue.line}` : ""}` : "";
+    console.error(`${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`);
   }
 }
 
@@ -133,11 +111,12 @@ function printHelp() {
   console.log(`feature-spec-md
 
 Usage:
-  feature-spec-md init [--dir specs]
-  feature-spec-md check [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"]
-  feature-spec-md report [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md init [--kind feature|model] [--dir specs]
+  feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"]
+  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
+  --require-model-coverage      Fail when model items have no matching test references.
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
@@ -145,10 +124,30 @@ Options:
 `);
 }
 
-const exampleSpec = `---
+const exampleModel = `---
 id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define the shared account concepts used by account access features.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account represents one registered person.
+`;
+
+const exampleFeature = `---
+id: ACCOUNT-ACCESS
 title: Account access
 status: draft
+model: ACCOUNT
 ---
 
 # Account access
@@ -159,23 +158,14 @@ People can access their own account after proving their identity.
 
 ## Rules
 
-- ACCOUNT-R001: A person MUST prove control of a registered email address before accessing an account.
-- ACCOUNT-R002: The system MUST NOT reveal whether an unknown email address belongs to an account.
-- ACCOUNT-R003: A signed-in person SHOULD be returned to the page they originally requested.
+- ACCOUNT-ACCESS-R001: A person MUST prove control of a registered email address before accessing an account.
+- ACCOUNT-ACCESS-R002: The system MUST NOT reveal whether an unknown email address belongs to an account.
 
 ## Scenarios
 
-### ACCOUNT-S001: Registered person signs in
+### ACCOUNT-ACCESS-S001: Registered person signs in
 
-Given a registered person is on the sign-in page  
-When they request and open a valid sign-in link  
-Then they are signed in  
-And they are returned to the page they originally requested
-
-### ACCOUNT-S002: Unknown email receives a neutral response
-
-Given a person enters an email address that is not registered  
-When they request a sign-in link  
-Then the response says to check their email  
-And the response does not reveal whether the email address is registered
+Given a registered person is on the sign-in page
+When they request and open a valid sign-in link
+Then they are signed in
 `;
