@@ -9,7 +9,7 @@ export type SpecFrontmatter = {
 /** Frontmatter fields supported by `*.feature.md` files. */
 export type FeatureFrontmatter = SpecFrontmatter & {
   model?: string;
-  models?: string[];
+  models?: string[] | string;
 };
 
 /** Parsed contents of one `*.model.md` file. */
