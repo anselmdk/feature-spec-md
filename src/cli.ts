@@ -4,7 +4,7 @@ import path from "node:path";
 import { collectSpecScreenshots, renderHtmlReport, writeTextFile, type ValidationIssue } from "./index.js";
 import { checkSpecDocuments } from "./specDocuments.js";
 
-const defaultSpecPattern = "specs/**/*.model.md,specs/**/*.feature.md";
+const defaultSpecPattern = "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
 
 main().catch((error) => {
@@ -39,7 +39,7 @@ async function runCheck(options: CliOptions) {
   const modelItemCount = result.models.reduce((sum, spec) => sum + spec.modelItems.length, 0);
   const ruleCount = result.documents.reduce((sum, spec) => sum + spec.rules.length, 0);
   const scenarioCount = result.features.reduce((sum, spec) => sum + spec.scenarios.length, 0);
-  console.log(`Spec check passed: ${result.models.length} model(s), ${result.features.length} feature(s), ${modelItemCount} model item(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`);
+  console.log(`Spec check passed: ${result.models.length} model(s), ${result.features.length} feature(s), ${result.stacks.length} stack(s), ${result.designs.length} design(s), ${modelItemCount} model item(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`);
 }
 
 async function runReport(options: CliOptions) {
@@ -57,6 +57,8 @@ async function runReport(options: CliOptions) {
     out,
     renderHtmlReport(result.features, {
       models: result.models,
+      stacks: result.stacks,
+      designs: result.designs,
       coverage: result.coverage,
       screenshots,
       validationIssues: [...result.validationIssues, ...result.coverageIssues],
@@ -68,9 +70,9 @@ async function runReport(options: CliOptions) {
 async function runInit(options: CliOptions) {
   const dir = options.dir ?? "specs";
   const kind = options.kind ?? "feature";
-  const target = path.join(dir, kind === "model" ? "example.model.md" : "account-access.feature.md");
+  const target = path.join(dir, fileNameForKind(kind));
   await mkdir(dir, { recursive: true });
-  await writeFile(target, kind === "model" ? exampleModel : exampleFeature, "utf8");
+  await writeFile(target, exampleForKind(kind), "utf8");
   console.log(`Created ${target}`);
 }
 
@@ -112,9 +114,9 @@ function printHelp() {
   console.log(`feature-spec-md
 
 Usage:
-  feature-spec-md init [--kind feature|model] [--dir specs]
-  feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"]
-  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md init [--kind feature|model|stack|design] [--dir specs]
+  feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
+  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
   --require-model-coverage      Fail when model items have no matching test references.
@@ -123,6 +125,20 @@ Options:
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
 `);
+}
+
+function fileNameForKind(kind: string) {
+  if (kind === "model") return "example.model.md";
+  if (kind === "stack") return "example.stack.md";
+  if (kind === "design") return "example.design.md";
+  return "account-access.feature.md";
+}
+
+function exampleForKind(kind: string) {
+  if (kind === "model") return exampleModel;
+  if (kind === "stack") return exampleStack;
+  if (kind === "design") return exampleDesign;
+  return exampleFeature;
 }
 
 const exampleModel = `---
@@ -169,4 +185,73 @@ People can access their own account after proving their identity.
 Given a registered person is on the sign-in page
 When they request and open a valid sign-in link
 Then they are signed in
+`;
+
+const exampleStack = `---
+id: ACCOUNT-STACK
+title: Account stack
+status: draft
+---
+
+# Account stack
+
+## Purpose
+
+Define the initial technical stack for the account access demo.
+
+## Context
+
+The demo is a small browser-based application with automated tests.
+
+## Stack
+
+| Area | Choice |
+|---|---|
+| Frontend | React |
+| Language | TypeScript |
+| Testing | Playwright |
+
+## Rationale
+
+React, TypeScript, and Playwright fit the interaction-heavy UI and scenario-based testing style.
+
+## Consequences
+
+The stack is optimized for a browser UI and static deployment.
+`;
+
+const exampleDesign = `---
+id: ACCOUNT-DESIGN
+title: Account design
+status: draft
+model: ACCOUNT
+---
+
+# Account design
+
+## Purpose
+
+Define the initial interaction and visual design direction for account access.
+
+## Design
+
+The account access flow should feel simple, calm, and direct.
+
+## Principles
+
+- Keep the sign-in flow short.
+- Avoid revealing whether an email address exists.
+- Make recovery states easy to understand.
+
+## Layout
+
+The sign-in page uses one primary form and one primary action.
+
+## Interaction
+
+Validation messages appear near the field they describe.
+
+## Visual style
+
+Use a clean, low-distraction visual style.
 `;
