@@ -3,6 +3,10 @@
   "version": "0.1.1",
   "description": "Markdown specs for AI-assisted, testable spec driven development across model, feature, stack, and design documents.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anselmdk/feature-spec-md.git"
+  },
   "bin": {
     "feature-spec-md": "./dist/cli.js"
   },
@@ -24,6 +28,7 @@
     "dist",
     "README.md",
     "SPEC_FORMAT.md",
+    "docs",
     "templates",
     "examples",
     "LICENSE"
