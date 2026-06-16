@@ -1,15 +1,20 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  checkFeatureSpecs,
   collectSpecScreenshots,
   renderHtmlReport,
   writeTextFile,
   type ValidationIssue,
 } from "./index.js";
+import { checkSpecDocuments } from "./specDocuments.js";
+import {
+  buildSpecImplementationReport,
+  formatSpecImplementationReport,
+} from "./testImplementationReport.js";
 
-const defaultSpecPattern = "specs/**/*.feature.md";
+const defaultSpecPattern =
+  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
 
 main().catch((error) => {
@@ -23,6 +28,7 @@ async function main() {
 
   if (command === "check") return runCheck(options);
   if (command === "report") return runReport(options);
+  if (command === "coverage") return runCoverage(options);
   if (command === "init") return runInit(options);
 
   printHelp();
@@ -32,7 +38,7 @@ async function main() {
 }
 
 async function runCheck(options: CliOptions) {
-  const result = await checkFeatureSpecs({
+  const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
@@ -43,21 +49,58 @@ async function runCheck(options: CliOptions) {
   printIssues([...result.validationIssues, ...result.coverageIssues]);
   if (!result.ok) process.exit(1);
 
-  const scenarioCount = result.specs.reduce(
-    (sum, spec) => sum + spec.scenarios.length,
+  const modelItemCount = result.models.reduce(
+    (sum, spec) => sum + spec.modelItems.length,
     0,
   );
-  const ruleCount = result.specs.reduce(
+  const ruleCount = result.documents.reduce(
     (sum, spec) => sum + spec.rules.length,
     0,
   );
+  const scenarioCount = result.features.reduce(
+    (sum, spec) => sum + spec.scenarios.length,
+    0,
+  );
   console.log(
-    `Feature spec check passed: ${result.specs.length} spec(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`,
+    `Spec check passed: ${result.models.length} model(s), ${result.features.length} feature(s), ${result.stacks.length} stack(s), ${result.designs.length} design(s), ${modelItemCount} model item(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`,
   );
 }
 
+async function runCoverage(options: CliOptions) {
+  const result = await checkSpecDocuments({
+    specs: optionList(options.specs, defaultSpecPattern),
+    tests:
+      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    requireModelCoverage: false,
+    requireRuleCoverage: false,
+    requireScenarioCoverage: false,
+  });
+
+  printIssues(result.coverageIssues);
+
+  if (!result.coverage) {
+    console.log("Spec test implementation report");
+    console.log("");
+    console.log(
+      "No tests were scanned. Pass --tests or omit --tests to use the default tests/**/*.spec.ts pattern.",
+    );
+    return;
+  }
+
+  const report = buildSpecImplementationReport(
+    result.features,
+    result.coverage,
+    result.models,
+  );
+  console.log(formatSpecImplementationReport(report));
+
+  if (options["fail-on-missing"] === "true" && report.missingScenarios > 0) {
+    process.exit(1);
+  }
+}
+
 async function runReport(options: CliOptions) {
-  const result = await checkFeatureSpecs({
+  const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
@@ -71,7 +114,11 @@ async function runReport(options: CliOptions) {
     : [];
   await writeTextFile(
     out,
-    renderHtmlReport(result.specs, {
+    renderHtmlReport(result.features, {
+      title: await reportTitle(),
+      models: result.models,
+      stacks: result.stacks,
+      designs: result.designs,
       coverage: result.coverage,
       screenshots,
       validationIssues: [...result.validationIssues, ...result.coverageIssues],
@@ -82,9 +129,10 @@ async function runReport(options: CliOptions) {
 
 async function runInit(options: CliOptions) {
   const dir = options.dir ?? "specs";
-  const target = path.join(dir, "account-access.feature.md");
+  const kind = options.kind ?? "feature";
+  const target = path.join(dir, fileNameForKind(kind));
   await mkdir(dir, { recursive: true });
-  await writeFile(target, exampleSpec, "utf8");
+  await writeFile(target, exampleForKind(kind), "utf8");
   console.log(`Created ${target}`);
 }
 
@@ -129,26 +177,81 @@ function printIssues(issues: ValidationIssue[]) {
   }
 }
 
+async function reportTitle() {
+  const packageName = await readPackageName();
+  return packageName
+    ? `Feature Spec Report for ${packageName}`
+    : "Feature Spec Report";
+}
+
+async function readPackageName() {
+  try {
+    const raw = await readFile("package.json", "utf8");
+    const parsed = JSON.parse(raw) as { name?: unknown };
+    return typeof parsed.name === "string" && parsed.name.trim()
+      ? parsed.name.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function printHelp() {
   console.log(`feature-spec-md
 
 Usage:
-  feature-spec-md init [--dir specs]
-  feature-spec-md check [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"]
-  feature-spec-md report [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md init [--kind feature|model|stack|design] [--dir specs]
+  feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
+  feature-spec-md coverage [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
+  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
+  --fail-on-missing             Exit with status 1 when coverage finds missing scenario tests.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
 `);
 }
 
-const exampleSpec = `---
+function fileNameForKind(kind: string) {
+  if (kind === "model") return "example.model.md";
+  if (kind === "stack") return "example.stack.md";
+  if (kind === "design") return "example.design.md";
+  return "account-access.feature.md";
+}
+
+function exampleForKind(kind: string) {
+  if (kind === "model") return exampleModel;
+  if (kind === "stack") return exampleStack;
+  if (kind === "design") return exampleDesign;
+  return exampleFeature;
+}
+
+const exampleModel = `---
 id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define the shared account concepts used by account access features.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account represents one registered person.
+`;
+
+const exampleFeature = `---
+id: ACCOUNT-ACCESS
 title: Account access
 status: draft
+model: ACCOUNT
 ---
 
 # Account access
@@ -159,23 +262,83 @@ People can access their own account after proving their identity.
 
 ## Rules
 
-- ACCOUNT-R001: A person MUST prove control of a registered email address before accessing an account.
-- ACCOUNT-R002: The system MUST NOT reveal whether an unknown email address belongs to an account.
-- ACCOUNT-R003: A signed-in person SHOULD be returned to the page they originally requested.
+- ACCOUNT-ACCESS-R001: A person MUST prove control of a registered email address before accessing an account.
+- ACCOUNT-ACCESS-R002: The system MUST NOT reveal whether an unknown email address belongs to an account.
 
 ## Scenarios
 
-### ACCOUNT-S001: Registered person signs in
+### ACCOUNT-ACCESS-S001: Registered person signs in
 
-Given a registered person is on the sign-in page  
-When they request and open a valid sign-in link  
-Then they are signed in  
-And they are returned to the page they originally requested
+Given a registered person is on the sign-in page
+When they request and open a valid sign-in link
+Then they are signed in
+`;
 
-### ACCOUNT-S002: Unknown email receives a neutral response
+const exampleStack = `---
+id: ACCOUNT-STACK
+title: Account stack
+status: draft
+---
 
-Given a person enters an email address that is not registered  
-When they request a sign-in link  
-Then the response says to check their email  
-And the response does not reveal whether the email address is registered
+# Account stack
+
+## Purpose
+
+Define the initial technical stack for the account access demo.
+
+## Context
+
+The demo is a small browser-based application with automated tests.
+
+## Stack
+
+| Area | Choice |
+|---|---|
+| Frontend | React |
+| Language | TypeScript |
+| Testing | Playwright |
+
+## Rationale
+
+React, TypeScript, and Playwright fit the interaction-heavy UI and scenario-based testing style.
+
+## Consequences
+
+The stack is optimized for a browser UI and static deployment.
+`;
+
+const exampleDesign = `---
+id: ACCOUNT-DESIGN
+title: Account design
+status: draft
+model: ACCOUNT
+---
+
+# Account design
+
+## Purpose
+
+Define the initial interaction and visual design direction for account access.
+
+## Design
+
+The account access flow should feel simple, calm, and direct.
+
+## Principles
+
+- Keep the sign-in flow short.
+- Avoid revealing whether an email address exists.
+- Make recovery states easy to understand.
+
+## Layout
+
+The sign-in page uses one primary form and one primary action.
+
+## Interaction
+
+Validation messages appear near the field they describe.
+
+## Visual style
+
+Use a clean, low-distraction visual style.
 `;

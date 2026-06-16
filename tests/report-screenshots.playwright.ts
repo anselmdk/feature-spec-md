@@ -53,7 +53,7 @@ Then account access is granted
   );
 
   await expect(
-    page.getByRole("heading", { name: "ACCOUNT Account access" }),
+    page.getByRole("heading", { name: "Account access" }),
   ).toBeVisible();
   await expect(
     page.getByText("Given a returning person is on the access page"),

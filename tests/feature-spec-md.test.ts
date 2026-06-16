@@ -17,6 +17,15 @@ import {
   createPlaywrightSpecEvidence,
   loadSpecSteps,
 } from "../src/playwright.js";
+import {
+  buildSpecCoverageSummary,
+  parseModelSpec,
+  parseSpecTestReferences,
+} from "../src/specDocuments.js";
+import {
+  buildSpecImplementationReport,
+  formatSpecImplementationReport,
+} from "../src/testImplementationReport.js";
 
 const specSource = `---
 id: ACCOUNT
@@ -74,18 +83,291 @@ describe("feature-spec-md", () => {
     );
   });
 
-  it("renders scenario short IDs on covered rule badges", () => {
+  it("reports implemented, partial, and missing specs", () => {
+    const implementedSpec = parseFeatureSpec(specSource, {
+      filePath: "specs/account.feature.md",
+    });
+    const partialSpec = parseFeatureSpec(
+      specSource.replaceAll("ACCOUNT", "PROFILE").replace(
+        "### PROFILE-S001: Returning person completes access flow",
+        `### PROFILE-S001: Returning person completes access flow
+
+Given a returning person is on the profile page
+When they complete the required flow
+Then profile access is granted
+
+### PROFILE-S002: New person starts profile flow`,
+      ),
+      { filePath: "specs/profile.feature.md" },
+    );
+    const missingSpec = parseFeatureSpec(
+      specSource.replaceAll("ACCOUNT", "BILLING"),
+      {
+        filePath: "specs/billing.feature.md",
+      },
+    );
+    const refs = parseTestReferences(
+      'test("ACCOUNT-S001 ACCOUNT-R001", () => {}); test("PROFILE-S001 PROFILE-R001", () => {})',
+      "tests/account.spec.ts",
+    );
+    const coverage = buildCoverageSummary(
+      [implementedSpec, partialSpec, missingSpec],
+      refs,
+    );
+    const report = buildSpecImplementationReport(
+      [implementedSpec, partialSpec, missingSpec],
+      coverage,
+    );
+    const text = formatSpecImplementationReport(report);
+
+    assert.deepEqual(
+      report.implemented.map((spec) => spec.id),
+      ["ACCOUNT"],
+    );
+    assert.deepEqual(
+      report.partial.map((spec) => spec.id),
+      ["PROFILE"],
+    );
+    assert.deepEqual(
+      report.missing.map((spec) => spec.id),
+      ["BILLING"],
+    );
+    assert.match(
+      text,
+      /Summary: 1\/3 spec\(s\) implemented, 2\/4 scenario\(s\) covered, 2\/3 rule\(s\) covered\./,
+    );
+    assert.match(text, /missing PROFILE-S002: New person starts profile flow/);
+    assert.match(
+      text,
+      /covered rule PROFILE-R001: A person MUST complete the required flow before account access is granted\. \(tests\/account\.spec\.ts:1\)/,
+    );
+    assert.match(text, /missing rule BILLING-R001/);
+    assert.match(
+      text,
+      /BILLING: Account access \(0\/1 scenarios, 0\/1 rules\)/,
+    );
+  });
+
+  it("reports model item coverage when model specs are loaded", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define the account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account stores profile access.
+
+### ACCOUNT-M002: Session
+
+A session represents current browser access.
+
+## Rules
+
+- ACCOUNT-R002: An account MUST have a stable identifier.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = parseFeatureSpec(specSource, {
+      filePath: "specs/account.feature.md",
+    });
+    const feature = { ...spec, kind: "feature" as const };
+    const refs = parseSpecTestReferences(
+      'test("ACCOUNT-S001 ACCOUNT-R001", () => { /* ACCOUNT-M001 ACCOUNT-R002 */ })',
+      "tests/account.spec.ts",
+    );
+    const coverage = buildSpecCoverageSummary([model, feature], refs);
+    const report = buildSpecImplementationReport([feature], coverage, [model]);
+    const text = formatSpecImplementationReport(report);
+
+    assert.match(
+      text,
+      /Summary: 1\/1 spec\(s\) implemented, 1\/1 scenario\(s\) covered, 2\/2 rule\(s\) covered, 1\/2 model item\(s\) covered\./,
+    );
+    assert.match(text, /Missing model items: 1\./);
+    assert.match(text, /Models:/);
+    assert.match(
+      text,
+      /ACCOUNT: Account model \(1\/2 model items, 1\/1 rules\)/,
+    );
+    assert.match(
+      text,
+      /covered model ACCOUNT-M001: Account \(tests\/account\.spec\.ts:1\)/,
+    );
+    assert.match(
+      text,
+      /covered rule ACCOUNT-R002: An account MUST have a stable identifier\. \(tests\/account\.spec\.ts:1\)/,
+    );
+    assert.match(text, /missing model ACCOUNT-M002: Session/);
+  });
+
+  it("renders scenario links on covered rules and rule IDs under scenarios", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",
     });
     const refs = parseTestReferences(
-      'test("ACCOUNT-S001 ACCOUNT-R001", () => {})',
+      `test("ACCOUNT-S001 Returning person completes access flow", () => {
+  // Covers ACCOUNT-R001.
+})`,
       "account.spec.ts",
+    );
+    const coverage = buildCoverageSummary([spec], refs);
+    const html = renderHtmlReport([spec], {
+      coverage,
+      title: "Feature Spec Report for account-app",
+      validationIssues: [],
+      generatedAt: "2026-06-16T23:26:00",
+    });
+
+    assert.match(html, /<title>Feature Spec Report for account-app<\/title>/);
+    assert.match(html, /<h1>Feature Spec Report for account-app<\/h1>/);
+    assert.match(html, /Generated 16th June 2026 at 23:26\./);
+    assert.doesNotMatch(html, /<h2>Validation<\/h2>/);
+    assert.match(html, /<h2>Account access<\/h2>/);
+    assert.doesNotMatch(html, /<h2>ACCOUNT Account access<\/h2>/);
+    assert.match(html, /covered by ACCOUNT-S001/);
+    assert.match(html, /via <code>account\.spec\.ts:2<\/code>/);
+    assert.match(
+      html,
+      /Rules covered by this scenario:<\/strong> <code>ACCOUNT-R001<\/code>/,
+    );
+  });
+
+  it("renders full scenario IDs and stored feature rule IDs in the HTML report", () => {
+    const spec = parseFeatureSpec(
+      `---
+id: BOARD-VIEW
+title: Board view
+status: draft
+model: KANBAN
+---
+
+# Board view
+
+## Purpose
+
+Show the Kanban board.
+
+## Rules
+
+- BOARD-VIEW-R001: The board MUST show columns.
+
+## Scenarios
+
+### BOARD-VIEW-S001: User sees board columns
+
+Given no cards exist
+When the user opens the board
+Then the columns are visible
+`,
+      { filePath: "board-view.feature.md" },
+    );
+    const refs = parseTestReferences(
+      `test("BOARD-VIEW-S001 User sees board columns", () => {
+  // Covers BOARD-VIEW-R001.
+})`,
+      "board-view.spec.ts",
     );
     const coverage = buildCoverageSummary([spec], refs);
     const html = renderHtmlReport([spec], { coverage });
 
-    assert.match(html, /covered S001/);
+    assert.match(
+      html,
+      /<code>BOARD-VIEW-R001<\/code>: The board MUST show columns\./,
+    );
+    assert.match(html, /covered by BOARD-VIEW-S001/);
+    assert.match(
+      html,
+      /Rules covered by this scenario:<\/strong> <code>BOARD-VIEW-R001<\/code>/,
+    );
+  });
+
+  it("renders ordinal suffixes in generated timestamps", () => {
+    const spec = parseFeatureSpec(specSource, {
+      filePath: "account.feature.md",
+    });
+
+    assert.match(
+      renderHtmlReport([spec], { generatedAt: "2026-06-01T09:05:00" }),
+      /Generated 1st June 2026 at 09:05\./,
+    );
+    assert.match(
+      renderHtmlReport([spec], { generatedAt: "2026-06-02T09:05:00" }),
+      /Generated 2nd June 2026 at 09:05\./,
+    );
+    assert.match(
+      renderHtmlReport([spec], { generatedAt: "2026-06-03T09:05:00" }),
+      /Generated 3rd June 2026 at 09:05\./,
+    );
+    assert.match(
+      renderHtmlReport([spec], { generatedAt: "2026-06-11T09:05:00" }),
+      /Generated 11th June 2026 at 09:05\./,
+    );
+  });
+
+  it("renders model coverage references in the HTML report", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define the account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account stores profile access.
+
+| Field | Required |
+| ----- | -------- |
+| \`Id\` | yes |
+
+## Rules
+
+- ACCOUNT-R002: An account MUST have a stable identifier.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const refs = parseSpecTestReferences(
+      `test("ACCOUNT-S001", () => {
+  // Covers ACCOUNT-M001 ACCOUNT-R002.
+})`,
+      "tests/account.spec.ts",
+    );
+    const coverage = buildSpecCoverageSummary([model, spec], refs);
+    const reportHtml = renderHtmlReport([spec], { models: [model], coverage });
+
+    assert.match(reportHtml, /<details class="model-item">/);
+    assert.match(reportHtml, /<code>ACCOUNT-M001<\/code>: Account/);
+    assert.match(reportHtml, /An account stores profile access\./);
+    assert.match(reportHtml, /<table>/);
+    assert.match(reportHtml, /<th>Field<\/th>/);
+    assert.match(reportHtml, /<td><code>Id<\/code><\/td>/);
+    assert.match(reportHtml, /<td>yes<\/td>/);
+    assert.match(
+      reportHtml,
+      /<code>ACCOUNT-R002<\/code>: An account MUST have a stable identifier\./,
+    );
+    assert.match(reportHtml, /covered by ACCOUNT-S001/);
+    assert.match(reportHtml, /via <code>tests\/account\.spec\.ts:2<\/code>/);
   });
 
   it("renders spec line screenshots in the HTML report", async () => {
@@ -119,6 +401,16 @@ describe("feature-spec-md", () => {
       const html = renderHtmlReport([spec], { screenshots });
 
       assert.match(html, /screenshots\/account-s001-line-22\.png/);
+      assert.match(html, /data-has-images="true"/);
+      assert.match(
+        html,
+        /const topBefore = target\.getBoundingClientRect\(\)\.top/,
+      );
+      assert.match(html, /window\.scrollBy\(0, topAfter - topBefore\)/);
+      assert.match(
+        html,
+        /querySelectorAll\('details\.scenario\[data-has-images="true"\]\[open\]'\)/,
+      );
       assert.match(html, /missing screenshot/);
     } finally {
       process.chdir(cwd);

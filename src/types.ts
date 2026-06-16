@@ -1,5 +1,38 @@
+/** Shared frontmatter fields supported by all spec documents. */
+export type SpecFrontmatter = {
+  id: string;
+  title: string;
+  status?: "draft" | "active" | "deprecated";
+  owner?: string;
+};
+
+/** Frontmatter fields supported by documents that may reference models. */
+export type ModelReferenceFrontmatter = SpecFrontmatter & {
+  model?: string;
+  models?: string[] | string;
+};
+
+/** Frontmatter fields supported by `*.feature.md` files. */
+export type FeatureFrontmatter = ModelReferenceFrontmatter;
+
+/** Frontmatter fields supported by `*.design.md` files. */
+export type DesignFrontmatter = ModelReferenceFrontmatter;
+
+/** Parsed contents of one `*.model.md` file. */
+export type ModelSpec = {
+  kind: "model";
+  filePath: string;
+  frontmatter: SpecFrontmatter;
+  title: string;
+  purpose: string;
+  modelItems: ModelItem[];
+  rules: FeatureRule[];
+  source: string;
+};
+
 /** Parsed contents of one `*.feature.md` file. */
 export type FeatureSpec = {
+  kind?: "feature";
   filePath: string;
   frontmatter: FeatureFrontmatter;
   title: string;
@@ -9,15 +42,49 @@ export type FeatureSpec = {
   source: string;
 };
 
-/** Frontmatter fields supported by the feature spec format. */
-export type FeatureFrontmatter = {
-  id: string;
+/** Parsed contents of one `*.stack.md` file. */
+export type StackSpec = {
+  kind: "stack";
+  filePath: string;
+  frontmatter: SpecFrontmatter;
   title: string;
-  status?: "draft" | "active" | "deprecated";
-  owner?: string;
+  purpose: string;
+  stack: string;
+  context: string;
+  rationale: string;
+  consequences: string;
+  rules: FeatureRule[];
+  source: string;
 };
 
-/** A business rule declared in the `## Rules` section. */
+/** Parsed contents of one `*.design.md` file. */
+export type DesignSpec = {
+  kind: "design";
+  filePath: string;
+  frontmatter: DesignFrontmatter;
+  title: string;
+  purpose: string;
+  design: string;
+  principles: string;
+  layout: string;
+  interaction: string;
+  visualStyle: string;
+  rules: FeatureRule[];
+  source: string;
+};
+
+/** Any parsed spec document. */
+export type SpecDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
+
+/** A model concept declared in the `## Model` section. */
+export type ModelItem = {
+  id: string;
+  title: string;
+  body: string;
+  line: number;
+};
+
+/** A rule declared in the `## Rules` section. */
 export type FeatureRule = {
   id: string;
   text: string;
@@ -60,16 +127,16 @@ export type ValidationIssue = {
   line?: number;
 };
 
-/** A rule or scenario ID found in executable tests. */
+/** A model item, rule, or scenario ID found in executable tests. */
 export type TestReference = {
   id: string;
   filePath: string;
   line: number;
-  kind: "scenario" | "rule";
+  kind: "model" | "rule" | "scenario";
   source: "title" | "tag" | "covers" | "annotation" | "free-text";
 };
 
-/** Coverage state for one expected rule or scenario. */
+/** Coverage state for one expected model item, rule, or scenario. */
 export type CoverageItem = {
   id: string;
   title?: string;
@@ -79,12 +146,14 @@ export type CoverageItem = {
   references: TestReference[];
 };
 
-/** Complete test coverage mapping for a set of feature specs. */
+/** Complete test coverage mapping for a set of spec documents. */
 export type CoverageSummary = {
-  scenarioCoverage: CoverageItem[];
+  modelCoverage?: CoverageItem[];
   ruleCoverage: CoverageItem[];
-  orphanScenarioReferences: TestReference[];
+  scenarioCoverage: CoverageItem[];
+  orphanModelReferences?: TestReference[];
   orphanRuleReferences: TestReference[];
+  orphanScenarioReferences: TestReference[];
 };
 
 /** Screenshot evidence associated with an exact spec line. */
