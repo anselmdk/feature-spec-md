@@ -1,10 +1,20 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { collectSpecScreenshots, renderHtmlReport, writeTextFile, type ValidationIssue } from "./index.js";
+import {
+  collectSpecScreenshots,
+  renderHtmlReport,
+  writeTextFile,
+  type ValidationIssue,
+} from "./index.js";
 import { checkSpecDocuments } from "./specDocuments.js";
+import {
+  buildSpecImplementationReport,
+  formatSpecImplementationReport,
+} from "./testImplementationReport.js";
 
-const defaultSpecPattern = "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
+const defaultSpecPattern =
+  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
 
 main().catch((error) => {
@@ -18,16 +28,20 @@ async function main() {
 
   if (command === "check") return runCheck(options);
   if (command === "report") return runReport(options);
+  if (command === "coverage") return runCoverage(options);
   if (command === "init") return runInit(options);
 
   printHelp();
-  process.exit(command === "help" || command === "--help" || command === "-h" ? 0 : 1);
+  process.exit(
+    command === "help" || command === "--help" || command === "-h" ? 0 : 1,
+  );
 }
 
 async function runCheck(options: CliOptions) {
   const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
-    tests: options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    tests:
+      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
     requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: options["require-scenario-coverage"] !== "false",
@@ -36,23 +50,69 @@ async function runCheck(options: CliOptions) {
   printIssues([...result.validationIssues, ...result.coverageIssues]);
   if (!result.ok) process.exit(1);
 
-  const modelItemCount = result.models.reduce((sum, spec) => sum + spec.modelItems.length, 0);
-  const ruleCount = result.documents.reduce((sum, spec) => sum + spec.rules.length, 0);
-  const scenarioCount = result.features.reduce((sum, spec) => sum + spec.scenarios.length, 0);
-  console.log(`Spec check passed: ${result.models.length} model(s), ${result.features.length} feature(s), ${result.stacks.length} stack(s), ${result.designs.length} design(s), ${modelItemCount} model item(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`);
+  const modelItemCount = result.models.reduce(
+    (sum, spec) => sum + spec.modelItems.length,
+    0,
+  );
+  const ruleCount = result.documents.reduce(
+    (sum, spec) => sum + spec.rules.length,
+    0,
+  );
+  const scenarioCount = result.features.reduce(
+    (sum, spec) => sum + spec.scenarios.length,
+    0,
+  );
+  console.log(
+    `Spec check passed: ${result.models.length} model(s), ${result.features.length} feature(s), ${result.stacks.length} stack(s), ${result.designs.length} design(s), ${modelItemCount} model item(s), ${ruleCount} rule(s), ${scenarioCount} scenario(s).`,
+  );
+}
+
+async function runCoverage(options: CliOptions) {
+  const result = await checkSpecDocuments({
+    specs: optionList(options.specs, defaultSpecPattern),
+    tests:
+      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    requireModelCoverage: false,
+    requireRuleCoverage: false,
+    requireScenarioCoverage: false,
+  });
+
+  printIssues(result.coverageIssues);
+
+  if (!result.coverage) {
+    console.log("Spec test implementation report");
+    console.log("");
+    console.log(
+      "No tests were scanned. Pass --tests or omit --tests to use the default tests/**/*.spec.ts pattern.",
+    );
+    return;
+  }
+
+  const report = buildSpecImplementationReport(
+    result.features,
+    result.coverage,
+  );
+  console.log(formatSpecImplementationReport(report));
+
+  if (options["fail-on-missing"] === "true" && report.missingScenarios > 0) {
+    process.exit(1);
+  }
 }
 
 async function runReport(options: CliOptions) {
   const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
-    tests: options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    tests:
+      options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
     requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: false,
   });
 
   const out = options.out ?? "test-results/feature-spec-report/index.html";
-  const screenshots = options.screenshots ? await collectSpecScreenshots(optionList(options.screenshots, "")) : [];
+  const screenshots = options.screenshots
+    ? await collectSpecScreenshots(optionList(options.screenshots, ""))
+    : [];
   await writeTextFile(
     out,
     renderHtmlReport(result.features, {
@@ -100,13 +160,20 @@ function parseArgs(args: string[]): CliOptions {
 }
 
 function optionList(value: string | undefined, fallback: string) {
-  return (value ?? fallback).split(",").map((item) => item.trim()).filter(Boolean);
+  return (value ?? fallback)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function printIssues(issues: ValidationIssue[]) {
   for (const issue of issues) {
-    const location = issue.filePath ? `${issue.filePath}${issue.line ? `:${issue.line}` : ""}` : "";
-    console.error(`${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`);
+    const location = issue.filePath
+      ? `${issue.filePath}${issue.line ? `:${issue.line}` : ""}`
+      : "";
+    console.error(
+      `${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`,
+    );
   }
 }
 
@@ -116,12 +183,14 @@ function printHelp() {
 Usage:
   feature-spec-md init [--kind feature|model|stack|design] [--dir specs]
   feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
+  feature-spec-md coverage [--specs "specs/**/*.feature.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
   feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
   --require-model-coverage      Fail when model items have no matching test references.
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
+  --fail-on-missing             Exit with status 1 when coverage finds missing scenario tests.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
 `);

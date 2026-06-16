@@ -20,6 +20,11 @@ The check command validates:
 
 The report command renders model documents and feature scenarios with screenshot evidence. Stack and design documents are loaded, validated, and counted.
 
+The coverage command prints a terminal summary of feature spec implementation
+state. A feature spec is implemented when every scenario in that spec has a
+matching test reference. Specs with some scenario references are listed as
+partial, and specs with no scenario references are listed as not implemented.
+
 Coverage defaults:
 
 - scenario coverage is the normal default

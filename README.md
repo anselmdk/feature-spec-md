@@ -41,9 +41,14 @@ See `SPEC_FORMAT.md` and `examples/account-access.feature.md`.
 ```bash
 npm install
 npm run dev -- check --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts" --require-scenario-coverage=false
+npm run dev -- coverage --specs "specs/**/*.feature.md" --tests "tests/**/*.spec.ts"
 npm run dev -- report --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts"
 npm run dev -- report --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts" --screenshots "test-results/spec-report/screenshots-*.json"
 ```
+
+The `coverage` command prints a simple terminal report that groups feature
+specs by whether all, some, or none of their scenarios have matching test
+references. Use `--fail-on-missing` when missing scenario tests should fail CI.
 
 Playwright screenshot evidence can be shown in the report by passing one or
 more screenshot manifest JSON files. Each screenshot should point at the spec

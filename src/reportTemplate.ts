@@ -95,14 +95,19 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
     <h4>Model</h4>
     <ul>${model.modelItems
       .map((item) => {
-        const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+        const coverageItem = modelCoverage.find(
+          (candidate) => candidate.id === item.id,
+        );
         return `<li><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}</li>`;
       })
       .join("")}</ul>
     ${
       model.rules.length
         ? `<h4>Rules</h4><ul>${model.rules
-            .map((rule) => `<li><code>${html(rule.id)}</code>: ${html(rule.text)}</li>`)
+            .map(
+              (rule) =>
+                `<li><code>${html(rule.id)}</code>: ${html(rule.text)}</li>`,
+            )
             .join("")}</ul>`
         : ""
     }

@@ -164,11 +164,11 @@ Define the initial technical stack for implementing the Kanban board.
 
 ## Stack
 
-| Area | Choice |
-|---|---|
-| Frontend | React |
+| Area     | Choice     |
+| -------- | ---------- |
+| Frontend | React      |
 | Language | TypeScript |
-| Testing | Playwright |
+| Testing  | Playwright |
 ```
 
 ## Design files

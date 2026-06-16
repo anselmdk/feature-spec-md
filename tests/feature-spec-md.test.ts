@@ -17,6 +17,10 @@ import {
   createPlaywrightSpecEvidence,
   loadSpecSteps,
 } from "../src/playwright.js";
+import {
+  buildSpecImplementationReport,
+  formatSpecImplementationReport,
+} from "../src/testImplementationReport.js";
 
 const specSource = `---
 id: ACCOUNT
@@ -71,6 +75,68 @@ describe("feature-spec-md", () => {
     assert.deepEqual(
       validateCoverage(coverage, { requireRuleCoverage: true }),
       [],
+    );
+  });
+
+  it("reports implemented, partial, and missing specs", () => {
+    const implementedSpec = parseFeatureSpec(specSource, {
+      filePath: "specs/account.feature.md",
+    });
+    const partialSpec = parseFeatureSpec(
+      specSource.replaceAll("ACCOUNT", "PROFILE").replace(
+        "### PROFILE-S001: Returning person completes access flow",
+        `### PROFILE-S001: Returning person completes access flow
+
+Given a returning person is on the profile page
+When they complete the required flow
+Then profile access is granted
+
+### PROFILE-S002: New person starts profile flow`,
+      ),
+      { filePath: "specs/profile.feature.md" },
+    );
+    const missingSpec = parseFeatureSpec(
+      specSource.replaceAll("ACCOUNT", "BILLING"),
+      {
+        filePath: "specs/billing.feature.md",
+      },
+    );
+    const refs = parseTestReferences(
+      'test("ACCOUNT-S001 ACCOUNT-R001", () => {}); test("PROFILE-S001 PROFILE-R001", () => {})',
+      "tests/account.spec.ts",
+    );
+    const coverage = buildCoverageSummary(
+      [implementedSpec, partialSpec, missingSpec],
+      refs,
+    );
+    const report = buildSpecImplementationReport(
+      [implementedSpec, partialSpec, missingSpec],
+      coverage,
+    );
+    const text = formatSpecImplementationReport(report);
+
+    assert.deepEqual(
+      report.implemented.map((spec) => spec.id),
+      ["ACCOUNT"],
+    );
+    assert.deepEqual(
+      report.partial.map((spec) => spec.id),
+      ["PROFILE"],
+    );
+    assert.deepEqual(
+      report.missing.map((spec) => spec.id),
+      ["BILLING"],
+    );
+    assert.match(
+      text,
+      /Summary: 1\/3 spec\(s\) implemented, 2\/4 scenario\(s\) covered, 2\/3 rule\(s\) covered\./,
+    );
+    assert.match(text, /missing PROFILE-S002: New person starts profile flow/);
+    assert.match(text, /covered rule PROFILE-R001/);
+    assert.match(text, /missing rule BILLING-R001/);
+    assert.match(
+      text,
+      /BILLING: Account access \(0\/1 scenarios, 0\/1 rules\)/,
     );
   });
 
