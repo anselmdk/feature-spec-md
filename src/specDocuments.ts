@@ -258,6 +258,10 @@ export function buildSpecCoverageSummary(
     references,
   );
   const modelRefs = references.filter((ref) => ref.kind === "model");
+  const ruleRefs = references.filter((ref) => ref.kind === "rule");
+  const rules = documents.flatMap((doc) =>
+    doc.rules.map((rule) => ({ doc, rule })),
+  );
   const modelItems = documents.flatMap((doc) =>
     doc.kind === "model"
       ? doc.modelItems.map((modelItem) => ({ doc, modelItem }))
@@ -266,6 +270,12 @@ export function buildSpecCoverageSummary(
 
   return {
     ...baseCoverage,
+    ruleCoverage: rules.map(({ doc, rule }) =>
+      coverageItem(rule.id, rule.text, doc.filePath, rule.line, ruleRefs),
+    ),
+    orphanRuleReferences: ruleRefs.filter(
+      (ref) => !rules.some(({ rule }) => rule.id === ref.id),
+    ),
     modelCoverage: modelItems.map(({ doc, modelItem }) => ({
       id: modelItem.id,
       title: modelItem.title,
@@ -277,6 +287,24 @@ export function buildSpecCoverageSummary(
     orphanModelReferences: modelRefs.filter(
       (ref) => !modelItems.some(({ modelItem }) => modelItem.id === ref.id),
     ),
+  };
+}
+
+function coverageItem(
+  id: string,
+  title: string,
+  filePath: string,
+  line: number,
+  references: TestReference[],
+) {
+  const matchingReferences = references.filter((ref) => ref.id === id);
+  return {
+    id,
+    title,
+    filePath,
+    line,
+    references: matchingReferences,
+    covered: matchingReferences.length > 0,
   };
 }
 
@@ -411,15 +439,36 @@ function parseModelItems(lines: string[], bodyStartLine: number) {
       /^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-M\d{3}):\s+(.+)$/,
     );
     if (match) {
+      const bodyStart = i + 1;
+      let bodyEnd = bounds.end;
+      for (let j = bodyStart; j < bounds.end; j += 1) {
+        if (
+          /^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-M\d{3}):\s+(.+)$/.test(
+            lines[j],
+          )
+        ) {
+          bodyEnd = j;
+          break;
+        }
+      }
       items.push({
         id: match[1],
         title: match[2].trim(),
-        body: "",
+        body: trimBlankLines(lines.slice(bodyStart, bodyEnd)).join("\n"),
         line: bodyStartLine + i,
       });
+      i = bodyEnd - 1;
     }
   }
   return items;
+}
+
+function trimBlankLines(lines: string[]) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !lines[start].trim()) start += 1;
+  while (end > start && !lines[end - 1].trim()) end -= 1;
+  return lines.slice(start, end);
 }
 
 function parseRules(lines: string[], bodyStartLine: number) {

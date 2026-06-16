@@ -52,28 +52,85 @@ export function renderHtmlReport(
       .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
       .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
       .scenario-body{padding:0 16px 16px}
+      .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+      .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
+      .model-item-body{padding:0 16px 16px}
+      .model-item-body p{margin:8px 0}
+      .table-wrap{overflow-x:auto;margin:12px 0}
+      table{border-collapse:collapse;width:100%;font-size:14px}
+      th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
+      th{background:#f6f8fa}
       .step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}
       .step p{margin:8px 0}
       .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
       .screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
       .screenshot img{display:block;width:100%;height:auto}
       .screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
+      .coverage-detail{color:#57606a;font-size:12px}
     </style>
   </head>
   <body>
     <h1>${html(title)}</h1>
-    <p>Generated ${html(options.generatedAt ?? new Date().toISOString())}.</p>
+    <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
     ${renderIssues(issues)}
     ${renderModels(options.models ?? [], options.coverage)}
     ${specs.map((spec) => renderSpec(spec, options.coverage, screenshots)).join("\n")}
+    <script>
+      document.addEventListener("toggle", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLDetailsElement)) return;
+        if (!target.open || target.dataset.hasImages !== "true") return;
+        const topBefore = target.getBoundingClientRect().top;
+        document
+          .querySelectorAll('details.scenario[data-has-images="true"][open]')
+          .forEach((details) => {
+            if (details !== target) details.removeAttribute("open");
+          });
+        requestAnimationFrame(() => {
+          const topAfter = target.getBoundingClientRect().top;
+          window.scrollBy(0, topAfter - topBefore);
+        });
+      }, true);
+    </script>
   </body>
 </html>`;
 }
 
+function formatGeneratedAt(value: string | undefined) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return value ?? "";
+
+  const day = date.getDate();
+  const month = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ][date.getMonth()];
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${day}${ordinalSuffix(day)} ${month} ${date.getFullYear()} at ${hours}:${minutes}`;
+}
+
+function ordinalSuffix(day: number) {
+  if (day >= 11 && day <= 13) return "th";
+  if (day % 10 === 1) return "st";
+  if (day % 10 === 2) return "nd";
+  if (day % 10 === 3) return "rd";
+  return "th";
+}
+
 function renderIssues(issues: ValidationIssue[]) {
-  if (!issues.length) {
-    return `<section class="panel"><h2>Validation</h2><p class="ok">No validation issues found.</p></section>`;
-  }
+  if (!issues.length) return "";
 
   return `<section class="panel"><h2>Validation</h2><ul>${issues
     .map(
@@ -86,6 +143,12 @@ function renderIssues(issues: ValidationIssue[]) {
 function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
   if (!models.length) return "";
   const modelCoverage = coverage?.modelCoverage ?? [];
+  const ruleCoverage = coverage?.ruleCoverage ?? [];
+  const scenarioCoverage = coverage?.scenarioCoverage ?? [];
+  const ruleScenarioLinks = buildRuleScenarioLinks(
+    ruleCoverage,
+    scenarioCoverage,
+  );
 
   return `<section class="panel">
   <h2>Models</h2>
@@ -98,21 +161,26 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
     </div>
     <p>${html(model.purpose)}</p>
     <h4>Model</h4>
-    <ul>${model.modelItems
+    ${model.modelItems
       .map((item) => {
         const coverageItem = modelCoverage.find(
           (candidate) => candidate.id === item.id,
         );
-        return `<li><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}</li>`;
+        return `<details class="model-item">
+      <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}${renderCoverageReferences(coverageItem)}</summary>
+      <div class="model-item-body">${renderModelItemBody(item.body)}</div>
+    </details>`;
       })
-      .join("")}</ul>
+      .join("")}
     ${
       model.rules.length
         ? `<h4>Rules</h4><ul>${model.rules
-            .map(
-              (rule) =>
-                `<li><code>${html(rule.id)}</code>: ${html(rule.text)}</li>`,
-            )
+            .map((rule) => {
+              const item = ruleCoverage.find(
+                (coverageItem) => coverageItem.id === rule.id,
+              );
+              return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item)}</li>`;
+            })
             .join("")}</ul>`
         : ""
     }
@@ -137,7 +205,7 @@ function renderSpec(
 
   return `<section class="panel">
   <div class="feature-header">
-    <h2>${html(spec.frontmatter.id)} ${html(spec.title)}</h2>
+    <h2>${html(spec.title)}</h2>
     <span class="badge">${html(spec.frontmatter.status ?? "draft")}</span>
   </div>
   <p>${html(spec.purpose)}</p>
@@ -147,7 +215,7 @@ function renderSpec(
       const item = ruleCoverage.find(
         (coverageItem) => coverageItem.id === rule.id,
       );
-      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioShortIds(rule.id, ruleScenarioLinks))}</li>`;
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item)}</li>`;
     })
     .join("")}</ul>
   <h3>Scenarios</h3>
@@ -165,7 +233,7 @@ function renderSpec(
         spec.rules.map((rule) => rule.id),
         ruleScenarioLinks,
       );
-      return `<details class="scenario">
+      return `<details class="scenario" data-has-images="${screenshotCount > 0 ? "true" : "false"}">
     <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverage.find((item) => item.id === scenario.id)?.covered)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
     <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine)).join("")}</div>
   </details>`;
@@ -182,6 +250,99 @@ function renderScenarioRuleCoverage(ruleIds: string[]) {
   return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds
     .map((ruleId) => `<code>${html(ruleId)}</code>`)
     .join(" ")}</p>`;
+}
+
+function renderModelItemBody(body: string) {
+  const lines = body.split("\n");
+  const blocks: string[] = [];
+  let paragraph: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.trim()) {
+      flushParagraph();
+      continue;
+    }
+
+    if (isTableStart(lines, i)) {
+      flushParagraph();
+      const tableLines = [line];
+      i += 2;
+      while (i < lines.length && isPipeTableRow(lines[i])) {
+        tableLines.push(lines[i]);
+        i += 1;
+      }
+      i -= 1;
+      blocks.push(renderTable(tableLines));
+      continue;
+    }
+
+    paragraph.push(line.trim());
+  }
+
+  flushParagraph();
+  return blocks.join("");
+}
+
+function renderInlineMarkdown(source: string) {
+  return source
+    .split(/(`[^`]+`)/g)
+    .map((part) =>
+      part.startsWith("`") && part.endsWith("`")
+        ? `<code>${html(part.slice(1, -1))}</code>`
+        : html(part),
+    )
+    .join("");
+}
+
+function isTableStart(lines: string[], index: number) {
+  return (
+    isPipeTableRow(lines[index]) &&
+    index + 1 < lines.length &&
+    isTableSeparator(lines[index + 1])
+  );
+}
+
+function isPipeTableRow(line: string) {
+  return line.trim().startsWith("|") && line.trim().endsWith("|");
+}
+
+function isTableSeparator(line: string) {
+  return (
+    isPipeTableRow(line) &&
+    splitTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell))
+  );
+}
+
+function splitTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderTable(lines: string[]) {
+  const headers = splitTableRow(lines[0]);
+  const rows = lines.slice(1).map(splitTableRow);
+
+  return `<div class="table-wrap"><table><thead><tr>${headers
+    .map((header) => `<th>${renderInlineMarkdown(header)}</th>`)
+    .join("")}</tr></thead><tbody>${rows
+    .map(
+      (row) =>
+        `<tr>${row
+          .map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`)
+          .join("")}</tr>`,
+    )
+    .join("")}</tbody></table></div>`;
 }
 
 function renderStep(
@@ -227,7 +388,27 @@ function ruleCoverageBadge(
   return coverageBadge(ruleCoverage?.covered, scenarioIds);
 }
 
-function ruleScenarioShortIds(
+function renderCoverageReferences(item: CoverageItem | undefined) {
+  const labels = coverageReferenceLabels(item);
+  if (!labels.length) return "";
+  return ` <span class="coverage-detail">via ${labels
+    .map((label) => `<code>${html(label)}</code>`)
+    .join(" ")}</span>`;
+}
+
+function coverageReferenceLabels(item: CoverageItem | undefined) {
+  if (!item) return [];
+  return Array.from(
+    new Set(
+      item.references.map((reference) => {
+        const line = reference.line ? `:${reference.line}` : "";
+        return `${reference.filePath}${line}`;
+      }),
+    ),
+  );
+}
+
+function ruleScenarioIds(
   ruleId: string,
   ruleScenarioLinks: RuleScenarioLink[],
 ) {
@@ -235,7 +416,7 @@ function ruleScenarioShortIds(
     new Set(
       ruleScenarioLinks
         .filter((link) => link.ruleId === ruleId)
-        .map((link) => shortScenarioId(link.scenarioId)),
+        .map((link) => link.scenarioId),
     ),
   ).sort();
 }
@@ -300,10 +481,6 @@ function nearestScenarioReference(
         line - reference.line <= maxLineDistance,
     )
     .sort((left, right) => right.line - left.line)[0];
-}
-
-function shortScenarioId(id: string) {
-  return id.match(/-(S\d{3})$/)?.[1] ?? id;
 }
 
 function groupScreenshotsByLine(screenshots: SpecScreenshot[]) {

@@ -27,8 +27,12 @@ export type ModelImplementationItem = {
   filePath: string;
   totalItems: number;
   coveredItems: number;
+  totalRules: number;
+  coveredRules: number;
   coveredModelItems: CoverageItem[];
   missingModelItems: CoverageItem[];
+  coveredRuleItems: CoverageItem[];
+  missingRules: CoverageItem[];
 };
 
 export type SpecImplementationReport = {
@@ -78,6 +82,19 @@ export function buildSpecImplementationReport(
     );
     const coveredModelItems = coverageItems.filter((item) => item.covered);
     const missingModelItems = coverageItems.filter((item) => !item.covered);
+    const rules = model.rules.map(
+      (rule) =>
+        ruleCoverage.get(rule.id) ?? {
+          id: rule.id,
+          title: rule.text,
+          filePath: model.filePath,
+          line: rule.line,
+          covered: false,
+          references: [],
+        },
+    );
+    const coveredRuleItems = rules.filter((rule) => rule.covered);
+    const missingRules = rules.filter((rule) => !rule.covered);
 
     return {
       id: model.frontmatter.id,
@@ -85,8 +102,12 @@ export function buildSpecImplementationReport(
       filePath: model.filePath,
       totalItems: coverageItems.length,
       coveredItems: coveredModelItems.length,
+      totalRules: rules.length,
+      coveredRules: coveredRuleItems.length,
       coveredModelItems,
       missingModelItems,
+      coveredRuleItems,
+      missingRules,
     };
   });
 
@@ -160,12 +181,9 @@ export function buildSpecImplementationReport(
       (sum, item) => sum + item.missingScenarios.length,
       0,
     ),
-    totalRules: items.reduce((sum, item) => sum + item.totalRules, 0),
-    coveredRules: items.reduce((sum, item) => sum + item.coveredRules, 0),
-    missingRules: items.reduce(
-      (sum, item) => sum + item.missingRules.length,
-      0,
-    ),
+    totalRules: coverage.ruleCoverage.length,
+    coveredRules: coverage.ruleCoverage.filter((item) => item.covered).length,
+    missingRules: coverage.ruleCoverage.filter((item) => !item.covered).length,
   };
 }
 
@@ -217,7 +235,7 @@ function formatSection(title: string, specs: SpecImplementationItem[]) {
       ),
       ...spec.coveredRuleItems.map(
         (rule) =>
-          `    covered rule ${rule.id}: ${rule.title ?? "Untitled rule"}`,
+          `    covered rule ${rule.id}: ${rule.title ?? "Untitled rule"}${formatCoverageReferenceSuffix(rule)}`,
       ),
       ...spec.missingRules.map(
         (rule) =>
@@ -232,15 +250,39 @@ function formatModelSection(models: ModelImplementationItem[]) {
   return [
     "Models:",
     ...models.flatMap((model) => [
-      `  - ${model.id}: ${model.title} (${model.coveredItems}/${model.totalItems} model items) ${model.filePath}`,
+      `  - ${model.id}: ${model.title} (${model.coveredItems}/${model.totalItems} model items, ${model.coveredRules}/${model.totalRules} rules) ${model.filePath}`,
       ...model.coveredModelItems.map(
         (item) =>
-          `    covered model ${item.id}: ${item.title ?? "Untitled model item"}`,
+          `    covered model ${item.id}: ${item.title ?? "Untitled model item"}${formatCoverageReferenceSuffix(item)}`,
       ),
       ...model.missingModelItems.map(
         (item) =>
           `    missing model ${item.id}: ${item.title ?? "Untitled model item"}`,
       ),
+      ...model.coveredRuleItems.map(
+        (rule) =>
+          `    covered rule ${rule.id}: ${rule.title ?? "Untitled rule"}${formatCoverageReferenceSuffix(rule)}`,
+      ),
+      ...model.missingRules.map(
+        (rule) =>
+          `    missing rule ${rule.id}: ${rule.title ?? "Untitled rule"}`,
+      ),
     ]),
   ].join("\n");
+}
+
+function formatCoverageReferenceSuffix(item: CoverageItem) {
+  const references = coverageReferenceLabels(item);
+  return references.length ? ` (${references.join(", ")})` : "";
+}
+
+function coverageReferenceLabels(item: CoverageItem) {
+  return Array.from(
+    new Set(
+      item.references.map((reference) => {
+        const line = reference.line ? `:${reference.line}` : "";
+        return `${reference.filePath}${line}`;
+      }),
+    ),
+  );
 }

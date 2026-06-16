@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   collectSpecScreenshots,
@@ -115,6 +115,7 @@ async function runReport(options: CliOptions) {
   await writeTextFile(
     out,
     renderHtmlReport(result.features, {
+      title: await reportTitle(),
       models: result.models,
       stacks: result.stacks,
       designs: result.designs,
@@ -173,6 +174,25 @@ function printIssues(issues: ValidationIssue[]) {
     console.error(
       `${issue.severity.toUpperCase()} ${issue.code}${location ? ` ${location}` : ""}: ${issue.message}`,
     );
+  }
+}
+
+async function reportTitle() {
+  const packageName = await readPackageName();
+  return packageName
+    ? `Feature Spec Report for ${packageName}`
+    : "Feature Spec Report";
+}
+
+async function readPackageName() {
+  try {
+    const raw = await readFile("package.json", "utf8");
+    const parsed = JSON.parse(raw) as { name?: unknown };
+    return typeof parsed.name === "string" && parsed.name.trim()
+      ? parsed.name.trim()
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 
