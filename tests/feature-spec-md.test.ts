@@ -18,6 +18,11 @@ import {
   loadSpecSteps,
 } from "../src/playwright.js";
 import {
+  buildSpecCoverageSummary,
+  parseModelSpec,
+  parseSpecTestReferences,
+} from "../src/specDocuments.js";
+import {
   buildSpecImplementationReport,
   formatSpecImplementationReport,
 } from "../src/testImplementationReport.js";
@@ -138,6 +143,55 @@ Then profile access is granted
       text,
       /BILLING: Account access \(0\/1 scenarios, 0\/1 rules\)/,
     );
+  });
+
+  it("reports model item coverage when model specs are loaded", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define the account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account stores profile access.
+
+### ACCOUNT-M002: Session
+
+A session represents current browser access.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = parseFeatureSpec(specSource, {
+      filePath: "specs/account.feature.md",
+    });
+    const feature = { ...spec, kind: "feature" as const };
+    const refs = parseSpecTestReferences(
+      'test("ACCOUNT-S001 ACCOUNT-R001", () => { /* ACCOUNT-M001 */ })',
+      "tests/account.spec.ts",
+    );
+    const coverage = buildSpecCoverageSummary([model, feature], refs);
+    const report = buildSpecImplementationReport([feature], coverage, [model]);
+    const text = formatSpecImplementationReport(report);
+
+    assert.match(
+      text,
+      /Summary: 1\/1 spec\(s\) implemented, 1\/1 scenario\(s\) covered, 1\/1 rule\(s\) covered, 1\/2 model item\(s\) covered\./,
+    );
+    assert.match(text, /Missing model items: 1\./);
+    assert.match(text, /Models:/);
+    assert.match(text, /ACCOUNT: Account model \(1\/2 model items\)/);
+    assert.match(text, /covered model ACCOUNT-M001: Account/);
+    assert.match(text, /missing model ACCOUNT-M002: Session/);
   });
 
   it("renders scenario links on covered rules and rule IDs under scenarios", () => {

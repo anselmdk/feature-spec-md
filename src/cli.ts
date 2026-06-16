@@ -42,7 +42,6 @@ async function runCheck(options: CliOptions) {
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
-    requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: options["require-scenario-coverage"] !== "false",
   });
@@ -91,6 +90,7 @@ async function runCoverage(options: CliOptions) {
   const report = buildSpecImplementationReport(
     result.features,
     result.coverage,
+    result.models,
   );
   console.log(formatSpecImplementationReport(report));
 
@@ -104,7 +104,6 @@ async function runReport(options: CliOptions) {
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
-    requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: false,
   });
@@ -187,7 +186,6 @@ Usage:
   feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
-  --require-model-coverage      Fail when model items have no matching test references.
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
   --fail-on-missing             Exit with status 1 when coverage finds missing scenario tests.

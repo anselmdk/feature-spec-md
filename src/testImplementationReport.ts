@@ -1,4 +1,9 @@
-import type { CoverageItem, CoverageSummary, FeatureSpec } from "./types.js";
+import type {
+  CoverageItem,
+  CoverageSummary,
+  FeatureSpec,
+  ModelSpec,
+} from "./types.js";
 
 export type SpecImplementationStatus = "implemented" | "partial" | "missing";
 
@@ -16,11 +21,26 @@ export type SpecImplementationItem = {
   status: SpecImplementationStatus;
 };
 
+export type ModelImplementationItem = {
+  id: string;
+  title: string;
+  filePath: string;
+  totalItems: number;
+  coveredItems: number;
+  coveredModelItems: CoverageItem[];
+  missingModelItems: CoverageItem[];
+};
+
 export type SpecImplementationReport = {
+  models: ModelImplementationItem[];
   specs: SpecImplementationItem[];
   implemented: SpecImplementationItem[];
   partial: SpecImplementationItem[];
   missing: SpecImplementationItem[];
+  totalModels: number;
+  totalModelItems: number;
+  coveredModelItems: number;
+  missingModelItems: number;
   totalSpecs: number;
   totalScenarios: number;
   coveredScenarios: number;
@@ -33,13 +53,43 @@ export type SpecImplementationReport = {
 export function buildSpecImplementationReport(
   specs: FeatureSpec[],
   coverage: CoverageSummary,
+  models: ModelSpec[] = [],
 ): SpecImplementationReport {
+  const modelCoverage = new Map(
+    coverage.modelCoverage?.map((item) => [item.id, item]) ?? [],
+  );
   const scenarioCoverage = new Map(
     coverage.scenarioCoverage.map((item) => [item.id, item]),
   );
   const ruleCoverage = new Map(
     coverage.ruleCoverage.map((item) => [item.id, item]),
   );
+  const modelItems = models.map((model) => {
+    const coverageItems = model.modelItems.map(
+      (modelItem) =>
+        modelCoverage.get(modelItem.id) ?? {
+          id: modelItem.id,
+          title: modelItem.title,
+          filePath: model.filePath,
+          line: modelItem.line,
+          covered: false,
+          references: [],
+        },
+    );
+    const coveredModelItems = coverageItems.filter((item) => item.covered);
+    const missingModelItems = coverageItems.filter((item) => !item.covered);
+
+    return {
+      id: model.frontmatter.id,
+      title: model.title,
+      filePath: model.filePath,
+      totalItems: coverageItems.length,
+      coveredItems: coveredModelItems.length,
+      coveredModelItems,
+      missingModelItems,
+    };
+  });
+
   const items = specs.map((spec) => {
     const scenarios = spec.scenarios.map(
       (scenario) =>
@@ -85,10 +135,21 @@ export function buildSpecImplementationReport(
   });
 
   return {
+    models: modelItems,
     specs: items,
     implemented: items.filter((item) => item.status === "implemented"),
     partial: items.filter((item) => item.status === "partial"),
     missing: items.filter((item) => item.status === "missing"),
+    totalModels: modelItems.length,
+    totalModelItems: modelItems.reduce((sum, item) => sum + item.totalItems, 0),
+    coveredModelItems: modelItems.reduce(
+      (sum, item) => sum + item.coveredItems,
+      0,
+    ),
+    missingModelItems: modelItems.reduce(
+      (sum, item) => sum + item.missingModelItems.length,
+      0,
+    ),
     totalSpecs: items.length,
     totalScenarios: items.reduce((sum, item) => sum + item.totalScenarios, 0),
     coveredScenarios: items.reduce(
@@ -111,11 +172,20 @@ export function buildSpecImplementationReport(
 export function formatSpecImplementationReport(
   report: SpecImplementationReport,
 ) {
+  const modelSummary =
+    report.totalModelItems > 0
+      ? `, ${report.coveredModelItems}/${report.totalModelItems} model item(s) covered`
+      : "";
+  const missingModelSummary =
+    report.totalModelItems > 0
+      ? `. Missing model items: ${report.missingModelItems}`
+      : "";
   return [
     "Spec test implementation report",
     "",
-    `Summary: ${report.implemented.length}/${report.totalSpecs} spec(s) implemented, ${report.coveredScenarios}/${report.totalScenarios} scenario(s) covered, ${report.coveredRules}/${report.totalRules} rule(s) covered.`,
-    `Partial: ${report.partial.length}. Not implemented: ${report.missing.length}. Missing scenarios: ${report.missingScenarios}. Missing rules: ${report.missingRules}.`,
+    `Summary: ${report.implemented.length}/${report.totalSpecs} spec(s) implemented, ${report.coveredScenarios}/${report.totalScenarios} scenario(s) covered, ${report.coveredRules}/${report.totalRules} rule(s) covered${modelSummary}.`,
+    `Partial: ${report.partial.length}. Not implemented: ${report.missing.length}. Missing scenarios: ${report.missingScenarios}. Missing rules: ${report.missingRules}${missingModelSummary}.`,
+    ...(report.totalModels > 0 ? ["", formatModelSection(report.models)] : []),
     "",
     formatSection("Implemented", report.implemented),
     "",
@@ -152,6 +222,24 @@ function formatSection(title: string, specs: SpecImplementationItem[]) {
       ...spec.missingRules.map(
         (rule) =>
           `    missing rule ${rule.id}: ${rule.title ?? "Untitled rule"}`,
+      ),
+    ]),
+  ].join("\n");
+}
+
+function formatModelSection(models: ModelImplementationItem[]) {
+  if (!models.length) return "Models:\n  (none)";
+  return [
+    "Models:",
+    ...models.flatMap((model) => [
+      `  - ${model.id}: ${model.title} (${model.coveredItems}/${model.totalItems} model items) ${model.filePath}`,
+      ...model.coveredModelItems.map(
+        (item) =>
+          `    covered model ${item.id}: ${item.title ?? "Untitled model item"}`,
+      ),
+      ...model.missingModelItems.map(
+        (item) =>
+          `    missing model ${item.id}: ${item.title ?? "Untitled model item"}`,
       ),
     ]),
   ].join("\n");

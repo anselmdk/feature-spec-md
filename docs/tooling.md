@@ -24,17 +24,16 @@ The coverage command prints a terminal summary of feature spec implementation
 state. A feature spec is implemented when every scenario in that spec has a
 matching test reference. Specs with some scenario references are listed as
 partial, and specs with no scenario references are listed as not implemented.
+Model item coverage is always shown when model specs are loaded.
 
 Coverage defaults:
 
 - scenario coverage is the normal default
 - rule coverage is optional
-- model item coverage is optional
 
 Strictness flags:
 
 ```bash
---require-model-coverage
 --require-rule-coverage
 --require-scenario-coverage=false
 ```
