@@ -140,18 +140,24 @@ Then profile access is granted
     );
   });
 
-  it("renders scenario short IDs on covered rule badges", () => {
+  it("renders scenario links on covered rules and rule IDs under scenarios", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",
     });
     const refs = parseTestReferences(
-      'test("ACCOUNT-S001 ACCOUNT-R001", () => {})',
+      `test("ACCOUNT-S001 Returning person completes access flow", () => {
+  // Covers ACCOUNT-R001.
+})`,
       "account.spec.ts",
     );
     const coverage = buildCoverageSummary([spec], refs);
     const html = renderHtmlReport([spec], { coverage });
 
-    assert.match(html, /covered S001/);
+    assert.match(html, /covered by S001/);
+    assert.match(
+      html,
+      /Rules covered by this scenario:<\/strong> <code>ACCOUNT-R001<\/code>/,
+    );
   });
 
   it("renders spec line screenshots in the HTML report", async () => {

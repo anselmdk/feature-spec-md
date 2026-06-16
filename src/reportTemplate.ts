@@ -23,6 +23,11 @@ export type ReportOptions = {
   generatedAt?: string;
 };
 
+type RuleScenarioLink = {
+  ruleId: string;
+  scenarioId: string;
+};
+
 /** Render a complete self-contained feature spec report as HTML. */
 export function renderHtmlReport(
   specs: FeatureSpec[],
@@ -125,6 +130,10 @@ function renderSpec(
   const screenshotsByLine = groupScreenshotsByLine(screenshots);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
+  const ruleScenarioLinks = buildRuleScenarioLinks(
+    ruleCoverage,
+    scenarioCoverage,
+  );
 
   return `<section class="panel">
   <div class="feature-header">
@@ -138,7 +147,7 @@ function renderSpec(
       const item = ruleCoverage.find(
         (coverageItem) => coverageItem.id === rule.id,
       );
-      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${coverageBadge(item?.covered, ruleScenarioShortIds(item, scenarioCoverage))}</li>`;
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioShortIds(rule.id, ruleScenarioLinks))}</li>`;
     })
     .join("")}</ul>
   <h3>Scenarios</h3>
@@ -151,13 +160,28 @@ function renderSpec(
             ?.length ?? 0),
         0,
       );
+      const scenarioRuleIds = ruleIdsForScenario(
+        scenario.id,
+        spec.rules.map((rule) => rule.id),
+        ruleScenarioLinks,
+      );
       return `<details class="scenario">
     <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverage.find((item) => item.id === scenario.id)?.covered)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
-    <div class="scenario-body">${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine)).join("")}</div>
+    <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine)).join("")}</div>
   </details>`;
     })
     .join("\n")}
 </section>`;
+}
+
+function renderScenarioRuleCoverage(ruleIds: string[]) {
+  if (!ruleIds.length) {
+    return `<p><strong>Rules covered by this scenario:</strong> <span class="missing">none referenced</span></p>`;
+  }
+
+  return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds
+    .map((ruleId) => `<code>${html(ruleId)}</code>`)
+    .join(" ")}</p>`;
 }
 
 function renderStep(
@@ -188,29 +212,94 @@ function coverageBadge(covered?: boolean, suffixes: string[] = []) {
   return covered === undefined
     ? ""
     : covered
-      ? `<span class="badge ok">covered${suffixes.length ? ` ${suffixes.map(html).join(" ")}` : ""}</span>`
+      ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}</span>`
       : `<span class="badge missing">missing coverage</span>`;
 }
 
-function ruleScenarioShortIds(
+function ruleCoverageBadge(
   ruleCoverage: CoverageItem | undefined,
+  scenarioIds: string[],
+) {
+  if (ruleCoverage?.covered && !scenarioIds.length) {
+    return coverageBadge(true, ["direct test"]);
+  }
+
+  return coverageBadge(ruleCoverage?.covered, scenarioIds);
+}
+
+function ruleScenarioShortIds(
+  ruleId: string,
+  ruleScenarioLinks: RuleScenarioLink[],
+) {
+  return Array.from(
+    new Set(
+      ruleScenarioLinks
+        .filter((link) => link.ruleId === ruleId)
+        .map((link) => shortScenarioId(link.scenarioId)),
+    ),
+  ).sort();
+}
+
+function ruleIdsForScenario(
+  scenarioId: string,
+  specRuleIds: string[],
+  ruleScenarioLinks: RuleScenarioLink[],
+) {
+  const ruleIds = new Set(
+    ruleScenarioLinks
+      .filter((link) => link.scenarioId === scenarioId)
+      .map((link) => link.ruleId),
+  );
+  return specRuleIds.filter((ruleId) => ruleIds.has(ruleId));
+}
+
+function buildRuleScenarioLinks(
+  ruleCoverage: CoverageItem[],
   scenarioCoverage: CoverageItem[],
 ) {
-  if (!ruleCoverage?.covered) return [];
+  const scenarioReferences = scenarioCoverage.flatMap((scenario) =>
+    scenario.references.map((reference) => ({
+      scenarioId: scenario.id,
+      filePath: reference.filePath,
+      line: reference.line,
+    })),
+  );
+  const links: RuleScenarioLink[] = [];
+  const seen = new Set<string>();
 
-  const scenarioIds = new Set<string>();
-  for (const ruleReference of ruleCoverage.references) {
-    for (const scenario of scenarioCoverage) {
-      const coversRule = scenario.references.some(
-        (scenarioReference) =>
-          scenarioReference.filePath === ruleReference.filePath &&
-          scenarioReference.line === ruleReference.line,
+  for (const rule of ruleCoverage) {
+    for (const ruleReference of rule.references) {
+      const scenarioReference = nearestScenarioReference(
+        ruleReference.filePath,
+        ruleReference.line,
+        scenarioReferences,
       );
-      if (coversRule) scenarioIds.add(shortScenarioId(scenario.id));
+      if (!scenarioReference) continue;
+
+      const key = `${rule.id}:${scenarioReference.scenarioId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      links.push({ ruleId: rule.id, scenarioId: scenarioReference.scenarioId });
     }
   }
 
-  return Array.from(scenarioIds).sort();
+  return links;
+}
+
+function nearestScenarioReference(
+  filePath: string,
+  line: number,
+  scenarioReferences: { scenarioId: string; filePath: string; line: number }[],
+) {
+  const maxLineDistance = 8;
+  return scenarioReferences
+    .filter(
+      (reference) =>
+        reference.filePath === filePath &&
+        reference.line <= line &&
+        line - reference.line <= maxLineDistance,
+    )
+    .sort((left, right) => right.line - left.line)[0];
 }
 
 function shortScenarioId(id: string) {
