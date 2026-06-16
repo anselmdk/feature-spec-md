@@ -1,3 +1,7 @@
+/**
+ * Cross-document parsing, validation, graph checks, and coverage aggregation
+ * for model, feature, stack, and design spec documents.
+ */
 import { readFile } from "node:fs/promises";
 import { expandFilePatterns } from "./filePatterns.js";
 import {
@@ -6,7 +10,17 @@ import {
   parseTestReferences,
   validateCoverage,
   validateFeatureSpec,
-} from "./index.js";
+} from "./featureSpecs.js";
+import {
+  dedupeTestReferences,
+  lineForOffset,
+  modelIdPattern,
+  parseMarkdownDocument,
+  parseRuleItems,
+  sectionBounds,
+  sectionText,
+  trimBlankLines,
+} from "./specMarkdown.js";
 import type {
   DesignSpec,
   FeatureSpec,
@@ -19,7 +33,6 @@ import type {
   ValidationIssue,
 } from "./types.js";
 
-const modelIdPattern = /\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-M\d{3}\b/g;
 type DocumentIdEntry = { id: string; filePath: string; line?: number };
 type SpecKind = "model" | "feature" | "stack" | "design";
 
@@ -42,7 +55,7 @@ export function parseModelSpec(
   options: { filePath?: string } = {},
 ): ModelSpec {
   const filePath = options.filePath ?? "<inline>";
-  const parsed = parseBase(source);
+  const parsed = parseMarkdownDocument(source);
   return {
     kind: "model",
     filePath,
@@ -50,7 +63,7 @@ export function parseModelSpec(
     title: parsed.title,
     purpose: parsed.purpose,
     modelItems: parseModelItems(parsed.lines, parsed.bodyStartLine),
-    rules: parseRules(parsed.lines, parsed.bodyStartLine),
+    rules: parseRuleItems(parsed.lines, parsed.bodyStartLine),
     source,
   };
 }
@@ -60,7 +73,7 @@ export function parseStackSpec(
   options: { filePath?: string } = {},
 ): StackSpec {
   const filePath = options.filePath ?? "<inline>";
-  const parsed = parseBase(source);
+  const parsed = parseMarkdownDocument(source);
   return {
     kind: "stack",
     filePath,
@@ -71,7 +84,7 @@ export function parseStackSpec(
     context: sectionText(parsed.lines, "Context").trim(),
     rationale: sectionText(parsed.lines, "Rationale").trim(),
     consequences: sectionText(parsed.lines, "Consequences").trim(),
-    rules: parseRules(parsed.lines, parsed.bodyStartLine),
+    rules: parseRuleItems(parsed.lines, parsed.bodyStartLine),
     source,
   };
 }
@@ -81,7 +94,7 @@ export function parseDesignSpec(
   options: { filePath?: string } = {},
 ): DesignSpec {
   const filePath = options.filePath ?? "<inline>";
-  const parsed = parseBase(source);
+  const parsed = parseMarkdownDocument(source);
   return {
     kind: "design",
     filePath,
@@ -93,7 +106,7 @@ export function parseDesignSpec(
     layout: sectionText(parsed.lines, "Layout").trim(),
     interaction: sectionText(parsed.lines, "Interaction").trim(),
     visualStyle: sectionText(parsed.lines, "Visual style").trim(),
-    rules: parseRules(parsed.lines, parsed.bodyStartLine),
+    rules: parseRuleItems(parsed.lines, parsed.bodyStartLine),
     source,
   };
 }
@@ -122,7 +135,10 @@ export function parseSpecTestReferences(
       source: "free-text" as const,
     }),
   );
-  return dedupe([...parseTestReferences(source, filePath), ...modelRefs]);
+  return dedupeTestReferences([
+    ...parseTestReferences(source, filePath),
+    ...modelRefs,
+  ]);
 }
 
 export async function collectSpecTestReferences(patterns: string[]) {
@@ -383,53 +399,6 @@ function validateModelCoverage(
   return issues;
 }
 
-function parseBase(source: string) {
-  const normalized = source.replace(/\r\n/g, "\n");
-  if (!normalized.startsWith("---\n")) {
-    throw new Error(
-      "Spec document must start with frontmatter delimited by ---. ",
-    );
-  }
-  const endIndex = normalized.indexOf("\n---\n", 4);
-  if (endIndex === -1) {
-    throw new Error(
-      "Spec document frontmatter must end with a second --- delimiter.",
-    );
-  }
-  const frontmatter = parseFrontmatter(normalized.slice(4, endIndex));
-  if (!frontmatter.id || !frontmatter.title) {
-    throw new Error("Spec document frontmatter must contain id and title.");
-  }
-  const body = normalized.slice(endIndex + 5);
-  const lines = body.split("\n");
-  const bodyStartLine = normalized.slice(0, endIndex + 5).split("\n").length;
-  return {
-    frontmatter,
-    lines,
-    bodyStartLine,
-    title:
-      lines
-        .find((line) => line.startsWith("# "))
-        ?.replace(/^#\s+/, "")
-        .trim() ?? frontmatter.title,
-    purpose: sectionText(lines, "Purpose").trim(),
-  };
-}
-
-function parseFrontmatter(source: string) {
-  const data: Record<string, string> = {};
-  for (const line of source.split("\n")) {
-    const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/);
-    if (match) {
-      data[match[1]] = match[2]
-        .replace(/^[']|[']$/g, "")
-        .replace(/^[\"]|[\"]$/g, "")
-        .trim();
-    }
-  }
-  return data;
-}
-
 function parseModelItems(lines: string[], bodyStartLine: number) {
   const bounds = sectionBounds(lines, "Model");
   if (!bounds) return [];
@@ -461,52 +430,6 @@ function parseModelItems(lines: string[], bodyStartLine: number) {
     }
   }
   return items;
-}
-
-function trimBlankLines(lines: string[]) {
-  let start = 0;
-  let end = lines.length;
-  while (start < end && !lines[start].trim()) start += 1;
-  while (end > start && !lines[end - 1].trim()) end -= 1;
-  return lines.slice(start, end);
-}
-
-function parseRules(lines: string[], bodyStartLine: number) {
-  const bounds = sectionBounds(lines, "Rules");
-  if (!bounds) return [];
-  return lines.slice(bounds.start, bounds.end).flatMap((line, index) => {
-    const match = line.match(
-      /^\s*-\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-R\d{3}):\s+(.+)$/,
-    );
-    return match
-      ? [
-          {
-            id: match[1],
-            text: match[2].trim(),
-            strength: "unspecified" as const,
-            line: bodyStartLine + bounds.start + index,
-          },
-        ]
-      : [];
-  });
-}
-
-function sectionBounds(lines: string[], heading: string) {
-  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
-  if (start === -1) return null;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^##\s+/.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  return { start: start + 1, end };
-}
-
-function sectionText(lines: string[], heading: string) {
-  const bounds = sectionBounds(lines, heading);
-  return bounds ? lines.slice(bounds.start, bounds.end).join("\n") : "";
 }
 
 function validateCommonSpec(spec: SpecDocument, issues: ValidationIssue[]) {
@@ -588,21 +511,4 @@ function documentIds(doc: SpecDocument): DocumentIdEntry[] {
           }))
         : []),
   ];
-}
-function lineForOffset(lines: string[], offset: number) {
-  let consumed = 0;
-  for (const [index, line] of lines.entries()) {
-    consumed += line.length + 1;
-    if (consumed > offset) return index + 1;
-  }
-  return lines.length;
-}
-function dedupe(refs: TestReference[]) {
-  const seen = new Set<string>();
-  return refs.filter((ref) => {
-    const key = `${ref.kind}:${ref.id}:${ref.filePath}:${ref.line}:${ref.source}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }

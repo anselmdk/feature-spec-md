@@ -1,3 +1,7 @@
+/**
+ * Glob expansion helpers for source specs, tests, and generated artifact
+ * patterns while filtering directories that should never be scanned.
+ */
 import { glob } from "node:fs/promises";
 
 /** Expand user-provided source globs while ignoring generated directories. */

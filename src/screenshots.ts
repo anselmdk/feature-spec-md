@@ -1,3 +1,7 @@
+/**
+ * Screenshot evidence manifest loading and normalization for generated spec
+ * implementation reports.
+ */
 import { readFile } from "node:fs/promises";
 import { expandArtifactPatterns } from "./filePatterns.js";
 import type { SpecScreenshot } from "./types.js";

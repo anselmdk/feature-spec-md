@@ -1,3 +1,7 @@
+/**
+ * HTML report renderer for feature specs, models, coverage state, validation
+ * issues, and optional screenshot evidence.
+ */
 import { html } from "./html.js";
 import { screenshotKey } from "./screenshots.js";
 import type {

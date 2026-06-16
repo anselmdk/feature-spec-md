@@ -1,3 +1,6 @@
+/**
+ * Minimal HTML escaping utilities used by generated reports.
+ */
 export function html(value: string) {
   return value
     .replace(/&/g, "&amp;")

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/**
+ * Command-line interface for initializing, validating, reporting on, and
+ * measuring test coverage for Feature Spec Markdown documents.
+ */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {

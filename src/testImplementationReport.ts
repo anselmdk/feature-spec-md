@@ -1,3 +1,7 @@
+/**
+ * Terminal report builder and formatter for summarizing which specs, model
+ * items, rules, and scenarios have executable test coverage.
+ */
 import type {
   CoverageItem,
   CoverageSummary,

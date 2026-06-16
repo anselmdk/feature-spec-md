@@ -1,5 +1,10 @@
+/**
+ * Playwright integration helpers for mapping spec scenario steps to test steps
+ * and capturing screenshot evidence tied to exact spec lines.
+ */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { parseFeatureSpec } from "./featureSpecs.js";
 import { expandFilePatterns } from "./filePatterns.js";
 import type { StepKeyword } from "./types.js";
 
@@ -92,31 +97,19 @@ export async function loadSpecSteps(patterns: string[], cwd = process.cwd()) {
     process.chdir(cwd);
     for (const specPath of await expandFilePatterns(patterns)) {
       const source = await readFile(path.resolve(cwd, specPath), "utf8");
-      let scenarioId = "";
+      const spec = parseFeatureSpec(source, { filePath: specPath });
 
-      for (const [index, line] of source
-        .replace(/\r\n/g, "\n")
-        .split("\n")
-        .entries()) {
-        const scenario = line.match(
-          /^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3}):/,
-        );
-        if (scenario) {
-          scenarioId = scenario[1];
-          continue;
-        }
-
-        const step = line.trim().match(/^(Given|When|Then|And|But)\s+(.+)$/);
-        if (scenarioId && step) {
-          steps.push({
-            scenarioId,
+      steps.push(
+        ...spec.scenarios.flatMap((scenario) =>
+          scenario.steps.map((step) => ({
+            scenarioId: scenario.id,
             specPath,
-            line: index + 1,
-            keyword: step[1] as StepKeyword,
-            text: step[2].trim(),
-          });
-        }
-      }
+            line: step.line,
+            keyword: step.keyword,
+            text: step.text,
+          })),
+        ),
+      );
     }
   } finally {
     process.chdir(previousCwd);

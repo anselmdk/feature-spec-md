@@ -1,3 +1,7 @@
+/**
+ * Shared TypeScript types for parsed spec documents, validation issues,
+ * coverage summaries, test references, and screenshot evidence.
+ */
 /** Shared frontmatter fields supported by all spec documents. */
 export type SpecFrontmatter = {
   id: string;
