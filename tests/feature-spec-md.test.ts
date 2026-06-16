@@ -5,9 +5,11 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   buildCoverageSummary,
+  checkSpecDocuments,
   checkFeatureSpecs,
   collectSpecScreenshots,
   parseFeatureSpec,
+  parseSpecDocument,
   parseTestReferences,
   renderHtmlReport,
   validateCoverage,
@@ -209,6 +211,40 @@ A session represents current browser access.
       /covered rule ACCOUNT-R002: An account MUST have a stable identifier\. \(tests\/account\.spec\.ts:1\)/,
     );
     assert.match(text, /missing model ACCOUNT-M002: Session/);
+  });
+
+  it("exports document-level helpers from the package root", async () => {
+    const doc = parseSpecDocument(specSource, {
+      filePath: "specs/account.feature.md",
+    });
+    assert.equal(doc.kind, "feature");
+
+    const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
+    const cwd = process.cwd();
+    try {
+      await mkdir(path.join(root, "specs"), { recursive: true });
+      await mkdir(path.join(root, "tests"), { recursive: true });
+      await writeFile(
+        path.join(root, "specs", "account.feature.md"),
+        specSource,
+        "utf8",
+      );
+      await writeFile(
+        path.join(root, "tests", "account.spec.ts"),
+        'test("ACCOUNT-S001", () => { /* ACCOUNT-R001 */ })',
+        "utf8",
+      );
+      process.chdir(root);
+      const result = await checkSpecDocuments({
+        specs: ["specs/**/*.feature.md"],
+        tests: ["tests/**/*.spec.ts"],
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.features.length, 1);
+    } finally {
+      process.chdir(cwd);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("renders scenario links on covered rules and rule IDs under scenarios", () => {

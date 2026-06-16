@@ -1,7 +1,7 @@
 {
   "name": "@anselmdk/feature-spec-md",
   "version": "0.1.1",
-  "description": "Markdown feature specs with model, rule, and scenario IDs, validation, coverage checks, and generated reports.",
+  "description": "Markdown specs for AI-assisted, testable spec driven development across model, feature, stack, and design documents.",
   "type": "module",
   "bin": {
     "feature-spec-md": "./dist/cli.js"
@@ -53,6 +53,7 @@
     "gherkin",
     "playwright",
     "specification",
+    "spec-driven-development",
     "testing"
   ],
   "license": "MIT",

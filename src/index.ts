@@ -4,6 +4,22 @@ import { expandFilePatterns } from "./filePatterns.js";
 export { expandFilePatterns } from "./filePatterns.js";
 export { renderHtmlReport } from "./reportTemplate.js";
 export { collectSpecScreenshots } from "./screenshots.js";
+export {
+  buildSpecCoverageSummary,
+  checkSpecDocuments,
+  collectSpecTestReferences,
+  loadSpecDocuments,
+  parseDesignSpec,
+  parseModelSpec,
+  parseSpecDocument,
+  parseSpecTestReferences,
+  parseStackSpec,
+  validateDesignSpec,
+  validateModelSpec,
+  validateSpecDocument,
+  validateSpecGraph,
+  validateStackSpec,
+} from "./specDocuments.js";
 export type {
   CoverageItem,
   CoverageSummary,

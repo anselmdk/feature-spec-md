@@ -1,82 +1,122 @@
 # feature-spec-md
 
-Markdown feature specs with stable model, rule, and scenario IDs, validation, coverage checks, and generated reports.
+Markdown specs for AI-assisted, testable spec driven development.
 
-The goal is simple:
-
-```txt
-human-readable model + feature specs
-→ exact executable tests
-→ generated coverage report
-```
-
-The handwritten specs stay clean. Shared domain language lives in `*.model.md` files. User-facing capabilities live in `*.feature.md` files with rules and scenarios. Test mapping is derived from stable IDs instead of being written manually in the spec.
-
-## Format
-
-Feature Spec Markdown uses ordinary Markdown files:
+The concept is deliberately small:
 
 ```txt
-*.model.md
-*.feature.md
+model + features + stack + design
+-> AI-written executable tests that reference stable spec IDs
+-> validation, coverage, screenshots, and reports
 ```
 
-Model files use:
+The specs are meant to be written with an AI before implementation. The tests are meant to be written with an AI from those specs. `feature-spec-md` checks that the Markdown stays structured and that executable tests still cover the model items, rules, and scenarios the specs define.
 
-- frontmatter for metadata
-- `## Model` for shared domain vocabulary
-- optional `## Rules` for global invariants
+## What You Write
 
-Feature files use:
+Use four ordinary Markdown document types:
 
-- frontmatter for metadata
-- optional `model` or `models` references
-- `## Rules` for durable product truths
-- `## Scenarios` for Given / When / Then examples
+```txt
+*.model.md    shared domain vocabulary
+*.feature.md  user-facing behavior, rules, and scenarios
+*.stack.md    technical platform choices
+*.design.md   product, UI, and interaction direction
+```
 
-See `SPEC_FORMAT.md` and `examples/account-access.feature.md`.
+Each document has frontmatter, a short `## Purpose`, and stable IDs. Tests reference those IDs in titles, tags, annotations, comments, or metadata.
+
+```md
+### ACCOUNT-ACCESS-S001: Registered person signs in
+
+Given a registered person is on the sign-in page
+When they request and open a valid sign-in link
+Then they are signed in
+```
+
+```ts
+test("ACCOUNT-ACCESS-S001 registered person signs in", async ({ page }) => {
+  // Covers ACCOUNT-ACCESS-R001 and ACCOUNT-M001.
+});
+```
+
+See [SPEC_FORMAT.md](SPEC_FORMAT.md) for the exact document format.
+
+## Install
+
+```bash
+npm install -D @anselmdk/feature-spec-md
+```
+
+Create starter specs:
+
+```bash
+npx feature-spec-md init --kind model --dir specs
+npx feature-spec-md init --kind feature --dir specs
+npx feature-spec-md init --kind stack --dir specs
+npx feature-spec-md init --kind design --dir specs
+```
+
+## Workflow
+
+1. Ask an AI to draft or update `*.model.md`, `*.feature.md`, `*.stack.md`, and `*.design.md` files.
+2. Run `npx feature-spec-md check` until the spec set is valid.
+3. Ask an AI to write executable tests from the specs, preserving the relevant `-M001`, `-R001`, and `-S001` IDs in the test source.
+4. Run `npx feature-spec-md coverage` to see which scenarios, rules, and model items have tests.
+5. Run `npx feature-spec-md report` to generate an HTML implementation report for review or CI artifacts.
+
+The longer flow, including AI prompts and CI setup, is in [docs/spec-driven-flow.md](docs/spec-driven-flow.md).
 
 ## CLI
 
 ```bash
-npm install
-npm run dev -- check --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts" --require-scenario-coverage=false
-npm run dev -- coverage --specs "specs/**/*.feature.md" --tests "tests/**/*.spec.ts"
-npm run dev -- report --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts"
-npm run dev -- report --specs "examples/**/*.feature.md" --tests "tests/**/*.test.ts" --screenshots "test-results/spec-report/screenshots-*.json"
+npx feature-spec-md check
+npx feature-spec-md coverage --fail-on-missing
+npx feature-spec-md report --out test-results/feature-spec-report/index.html
 ```
 
-The `coverage` command prints a simple terminal report that groups feature
-specs by whether all, some, or none of their scenarios have matching test
-references. Use `--fail-on-missing` when missing scenario tests should fail CI.
+By default the CLI scans:
 
-Playwright screenshot evidence can be shown in the report by passing one or
-more screenshot manifest JSON files. Each screenshot should point at the spec
-file and line it proves:
+```txt
+specs/**/*.model.md
+specs/**/*.feature.md
+specs/**/*.stack.md
+specs/**/*.design.md
+tests/**/*.spec.ts
+```
 
-```json
-{
-  "screenshots": [
-    {
-      "specPath": "specs/account-access.feature.md",
-      "line": 24,
-      "path": "screenshots/account-s001-line-24.png",
-      "title": "ACCOUNT-S001:24 Given a registered person is on the sign-in page"
-    }
-  ]
-}
+Use explicit patterns when your project uses different paths:
+
+```bash
+npx feature-spec-md check \
+  --specs "product/**/*.model.md,product/**/*.feature.md,product/**/*.stack.md,product/**/*.design.md" \
+  --tests "e2e/**/*.spec.ts"
+```
+
+The `check` command validates spec structure, references between documents, and test coverage. Scenario coverage is required by default when tests are scanned. Use `--require-scenario-coverage=false` while drafting.
+
+The `coverage` command prints a terminal implementation report. Use `--fail-on-missing` when missing scenario tests should fail CI.
+
+The `report` command writes an HTML report. It can include screenshot evidence from Playwright or another test runner by passing one or more screenshot manifest files:
+
+```bash
+npx feature-spec-md report \
+  --screenshots "test-results/spec-report/screenshots-*.json"
 ```
 
 ## Library API
 
+Most integrations can use the top-level document API:
+
 ```ts
 import {
-  checkFeatureSpecs,
-  parseFeatureSpec,
+  checkSpecDocuments,
+  parseSpecDocument,
   renderHtmlReport,
-  validateFeatureSpec,
-} from "feature-spec-md";
+  validateSpecDocument,
+} from "@anselmdk/feature-spec-md";
 ```
+
+Feature-only helpers such as `parseFeatureSpec` and `checkFeatureSpecs` remain available for compatibility.
 
 ## Development
 
