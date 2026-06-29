@@ -92,9 +92,9 @@ npx feature-spec-md check \
   --tests "e2e/**/*.spec.ts"
 ```
 
-The `check` command validates spec structure, references between documents, and test coverage. Scenario coverage is required by default when tests are scanned. Use `--require-scenario-coverage=false` while drafting.
+The `check` command validates spec structure, references between documents, and test coverage. Scenario coverage is required by default when tests are scanned. Use `--require-scenario-coverage=false` while drafting. Use `--require-rule-coverage` and `--require-model-coverage` when rules and model items must also fail validation if they have no test references.
 
-The `coverage` command prints a terminal implementation report. Use `--fail-on-missing` when missing scenario tests should fail CI.
+The `coverage` command prints a terminal implementation report. Use `--fail-on-missing` when missing model item, rule, or scenario coverage should fail CI.
 
 The `report` command writes an HTML report. It can include screenshot evidence from Playwright or another test runner by passing one or more screenshot manifest files:
 
