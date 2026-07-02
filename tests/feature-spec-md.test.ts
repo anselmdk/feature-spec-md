@@ -247,7 +247,7 @@ A session represents current browser access.
     }
   });
 
-  it("renders scenario links on covered rules and rule IDs under scenarios", () => {
+  it("renders source links in report titles, coverage badges, and line badges", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",
     });
@@ -258,23 +258,40 @@ A session represents current browser access.
       "account.spec.ts",
     );
     const coverage = buildCoverageSummary([spec], refs);
-    const html = renderHtmlReport([spec], {
+    const reportHtml = renderHtmlReport([spec], {
       coverage,
-      title: "Feature Spec Report for account-app",
+      title: "Feature Spec Report for feature-spec-md-demo",
       validationIssues: [],
       generatedAt: "2026-06-16T23:26:00",
+      githubBaseUrl: "https://github.com/anselmdk/feature-spec-md-demo",
+      githubRef: "abc123",
+      repositoryUrl: "https://github.com/anselmdk/feature-spec-md-demo",
     });
 
-    assert.match(html, /<title>Feature Spec Report for account-app<\/title>/);
-    assert.match(html, /<h1>Feature Spec Report for account-app<\/h1>/);
-    assert.match(html, /Generated 16th June 2026 at 23:26\./);
-    assert.doesNotMatch(html, /<h2>Validation<\/h2>/);
-    assert.match(html, /<h2>Account access<\/h2>/);
-    assert.doesNotMatch(html, /<h2>ACCOUNT Account access<\/h2>/);
-    assert.match(html, /covered by ACCOUNT-S001/);
-    assert.match(html, /via <code>account\.spec\.ts:2<\/code>/);
     assert.match(
-      html,
+      reportHtml,
+      /<title>Feature Spec Report for feature-spec-md-demo<\/title>/,
+    );
+    assert.match(
+      reportHtml,
+      /<h1>Feature Spec Report for <a href="https:\/\/github\.com\/anselmdk\/feature-spec-md-demo" target="_blank" rel="noopener noreferrer">feature-spec-md-demo<\/a><\/h1>/,
+    );
+    assert.match(reportHtml, /Generated 16th June 2026 at 23:26\./);
+    assert.doesNotMatch(reportHtml, /<h2>Validation<\/h2>/);
+    assert.match(reportHtml, /<h2>Account access<\/h2>/);
+    assert.doesNotMatch(reportHtml, /<h2>ACCOUNT Account access<\/h2>/);
+    assert.match(reportHtml, /covered by ACCOUNT-S001/);
+    assert.doesNotMatch(reportHtml, /via/);
+    assert.match(
+      reportHtml,
+      /<a class="coverage-ref" href="https:\/\/github\.com\/anselmdk\/feature-spec-md-demo\/blob\/abc123\/account\.spec\.ts#L2" title="account\.spec\.ts:2" target="_blank" rel="noopener noreferrer">1<\/a>/,
+    );
+    assert.match(
+      reportHtml,
+      /<a class="badge line-link" href="https:\/\/github\.com\/anselmdk\/feature-spec-md-demo\/blob\/abc123\/account\.feature\.md#L21" title="account\.feature\.md:21" target="_blank" rel="noopener noreferrer">line 21<\/a>/,
+    );
+    assert.match(
+      reportHtml,
       /Rules covered by this scenario:<\/strong> <code>ACCOUNT-R001<\/code>/,
     );
   });
@@ -403,7 +420,11 @@ An account stores profile access.
       /<code>ACCOUNT-R002<\/code>: An account MUST have a stable identifier\./,
     );
     assert.match(reportHtml, /covered by ACCOUNT-S001/);
-    assert.match(reportHtml, /via <code>tests\/account\.spec\.ts:2<\/code>/);
+    assert.doesNotMatch(reportHtml, /via/);
+    assert.match(
+      reportHtml,
+      /<span class="coverage-ref" title="tests\/account\.spec\.ts:2">1<\/span>/,
+    );
   });
 
   it("renders spec line screenshots in the HTML report", async () => {

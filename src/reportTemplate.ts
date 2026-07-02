@@ -77,17 +77,17 @@ export function renderHtmlReport(
       table{border-collapse:collapse;width:100%;font-size:14px}
       th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
       th{background:#f6f8fa}
-      h1 a{color:inherit;text-decoration:none}
-      h1 a:hover{text-decoration:underline}
+      h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}
+      h1 a:hover{text-decoration-thickness:2px}
       .step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}
       .step p{margin:8px 0}
       .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
       .screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
       .screenshot img{display:block;width:100%;height:auto}
       .screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
-      .coverage-detail{color:#57606a;font-size:12px}
-      .coverage-link{color:inherit;text-decoration:none}
-      .coverage-link:hover{text-decoration:underline}
+      .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}
+      .coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
+      .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
     </style>
   </head>
   <body>
@@ -204,7 +204,7 @@ function renderModels(
           (candidate) => candidate.id === item.id,
         );
         return `<details class="model-item">
-      <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}${renderCoverageReferences(coverageItem, sourceLinks)}</summary>
+      <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
       <div class="model-item-body">${renderModelItemBody(item.body)}</div>
     </details>`;
       })
@@ -216,7 +216,7 @@ function renderModels(
               const item = ruleCoverage.find(
                 (coverageItem) => coverageItem.id === rule.id,
               );
-              return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item, sourceLinks)}</li>`;
+              return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
             })
             .join("")}</ul>`
         : ""
@@ -253,7 +253,7 @@ function renderSpec(
       const item = ruleCoverage.find(
         (coverageItem) => coverageItem.id === rule.id,
       );
-      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item, sourceLinks)}</li>`;
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
     })
     .join("")}</ul>
   <h3>Scenarios</h3>
@@ -271,9 +271,12 @@ function renderSpec(
         spec.rules.map((rule) => rule.id),
         ruleScenarioLinks,
       );
+      const scenarioCoverageItem = scenarioCoverage.find(
+        (item) => item.id === scenario.id,
+      );
       return `<details class="scenario" data-has-images="${screenshotCount > 0 ? "true" : "false"}">
-    <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverage.find((item) => item.id === scenario.id)?.covered)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
-    <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine)).join("")}</div>
+    <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
+    <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine, sourceLinks)).join("")}</div>
   </details>`;
     })
     .join("\n")}
@@ -387,6 +390,7 @@ function renderStep(
   spec: FeatureSpec,
   step: FeatureStep,
   screenshotsByLine: Map<string, SpecScreenshot[]>,
+  sourceLinks: SourceLinkOptions,
 ) {
   const screenshots =
     screenshotsByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
@@ -394,7 +398,19 @@ function renderStep(
     ? `<span class="badge ok">${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}</span>`
     : `<span class="badge missing">missing screenshot</span>`;
 
-  return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} <span class="badge">line ${step.line}</span> ${evidenceBadge}</p>${renderScreenshots(screenshots)}</div>`;
+  return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} ${renderLineBadge(spec.filePath, step.line, sourceLinks)} ${evidenceBadge}</p>${renderScreenshots(screenshots)}</div>`;
+}
+
+function renderLineBadge(
+  filePath: string,
+  line: number,
+  sourceLinks: SourceLinkOptions,
+) {
+  const label = `line ${line}`;
+  const url = sourceLineUrl(filePath, line, sourceLinks);
+  if (!url) return `<span class="badge">${html(label)}</span>`;
+
+  return `<a class="badge line-link" href="${html(url)}" title="${html(`${filePath}:${line}`)}" target="_blank" rel="noopener noreferrer">${html(label)}</a>`;
 }
 
 function renderScreenshots(screenshots: SpecScreenshot[]) {
@@ -407,46 +423,55 @@ function renderScreenshots(screenshots: SpecScreenshot[]) {
     .join("")}</div>`;
 }
 
-function coverageBadge(covered?: boolean, suffixes: string[] = []) {
+function coverageBadge(
+  covered?: boolean,
+  suffixes: string[] = [],
+  item?: CoverageItem,
+  sourceLinks: SourceLinkOptions = {},
+) {
   return covered === undefined
     ? ""
     : covered
-      ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}</span>`
+      ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}${renderCoverageReferenceMarkers(item, sourceLinks)}</span>`
       : `<span class="badge missing">missing coverage</span>`;
 }
 
 function ruleCoverageBadge(
   ruleCoverage: CoverageItem | undefined,
   scenarioIds: string[],
+  sourceLinks: SourceLinkOptions,
 ) {
   if (ruleCoverage?.covered && !scenarioIds.length) {
-    return coverageBadge(true, ["direct test"]);
+    return coverageBadge(true, ["direct test"], ruleCoverage, sourceLinks);
   }
 
-  return coverageBadge(ruleCoverage?.covered, scenarioIds);
+  return coverageBadge(ruleCoverage?.covered, scenarioIds, ruleCoverage, sourceLinks);
 }
 
-function renderCoverageReferences(
+function renderCoverageReferenceMarkers(
   item: CoverageItem | undefined,
   sourceLinks: SourceLinkOptions,
 ) {
   const references = uniqueCoverageReferences(item);
   if (!references.length) return "";
-  return ` <span class="coverage-detail">via ${references
-    .map((reference) => renderCoverageReference(reference, sourceLinks))
-    .join(" ")}</span>`;
+  return ` <span class="coverage-refs">${references
+    .map((reference, index) =>
+      renderCoverageReferenceMarker(reference, index + 1, sourceLinks),
+    )
+    .join(",")}</span>`;
 }
 
-function renderCoverageReference(
+function renderCoverageReferenceMarker(
   reference: TestReference,
+  index: number,
   sourceLinks: SourceLinkOptions,
 ) {
   const label = coverageReferenceLabel(reference);
   const url = coverageReferenceUrl(reference, sourceLinks);
 
-  if (!url) return `<code>${html(label)}</code>`;
+  if (!url) return `<span class="coverage-ref" title="${html(label)}">${index}</span>`;
 
-  return `<a class="coverage-link" href="${html(url)}" title="${html(label)}" target="_blank" rel="noopener noreferrer"><code>${html(compactReferenceLabel(reference))}</code></a>`;
+  return `<a class="coverage-ref" href="${html(url)}" title="${html(label)}" target="_blank" rel="noopener noreferrer">${index}</a>`;
 }
 
 function uniqueCoverageReferences(item: CoverageItem | undefined) {
@@ -467,26 +492,26 @@ function coverageReferenceLabel(reference: TestReference) {
   return `${reference.filePath}${line}`;
 }
 
-function compactReferenceLabel(reference: TestReference) {
-  const segments = reference.filePath.split("/").filter(Boolean);
-  const fileLabel = segments.slice(-2).join("/") || reference.filePath;
-  const line = reference.line ? `:${reference.line}` : "";
-  return `${fileLabel}${line}`;
-}
-
 function coverageReferenceUrl(
   reference: TestReference,
+  sourceLinks: SourceLinkOptions,
+) {
+  return sourceLineUrl(reference.filePath, reference.line, sourceLinks);
+}
+
+function sourceLineUrl(
+  filePath: string,
+  line: number,
   sourceLinks: SourceLinkOptions,
 ) {
   if (!sourceLinks.githubBaseUrl || !sourceLinks.githubRef) return undefined;
   const baseUrl = sourceLinks.githubBaseUrl.replace(/\/$/, "");
   const ref = encodeURIComponent(sourceLinks.githubRef);
-  const filePath = reference.filePath
+  const encodedFilePath = filePath
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  const line = reference.line ? `#L${reference.line}` : "";
-  return `${baseUrl}/blob/${ref}/${filePath}${line}`;
+  return `${baseUrl}/blob/${ref}/${encodedFilePath}#L${line}`;
 }
 
 function ruleScenarioIds(
