@@ -6,16 +6,15 @@ Bare semver tags are valid git tags and match the package version exactly. The `
 
 ## Release Candidate
 
-Use an RC when you want a testable npm package for the next release without updating the `latest` npm dist-tag.
+Use an RC when you want a testable npm package for the next release without updating the `latest` npm dist-tag or permanently changing the repository version.
 
-1. Make sure `main` contains the intended final version in `package.json` and `package-lock.json`.
-   - For the next minor release from `0.1.1`, the base version should be `0.2.0`.
-   - For the next major release from `0.2.0`, the base version should be `1.0.0`.
+1. Make sure `main` contains the intended stable base version in `package.json` and `package-lock.json`.
+   - For a release candidate for `0.2.1`, the base version should be `0.2.1`.
+   - For a release candidate for `0.3.0`, the base version should be `0.3.0`.
 2. Open GitHub Actions.
-3. Run the `Publish to npm` workflow from `main`.
-4. Choose `rc` for the release type.
-5. Keep the RC number at `1` for the first release candidate, or increase it manually for later candidates.
-6. The workflow runs verification, changes the package version only inside the workflow to `<base>-rc.<number>`, and publishes it with the npm `rc` dist-tag.
+3. Run the `Publish RC to npm` workflow from `main`.
+4. Keep the RC number at `1` for the first release candidate, or increase it manually for later candidates.
+5. The workflow runs verification, changes the package version only inside the workflow to `<base>-rc.<number>`, publishes it with the npm `rc` dist-tag, and writes the published version to the run summary.
 
 Install the latest RC with:
 
@@ -26,83 +25,45 @@ npm install @anselmdk/feature-spec-md@rc
 Install a specific RC with:
 
 ```bash
-npm install @anselmdk/feature-spec-md@0.2.0-rc.1
+npm install @anselmdk/feature-spec-md@0.2.1-rc.1
 ```
 
-Repeat the workflow as needed. Increase the RC number for each published candidate so npm receives a unique version, for example `0.2.0-rc.2`, and the workflow moves the `rc` dist-tag to that version.
+Repeat the workflow as needed. Increase the RC number for each published candidate so npm receives a unique version, for example `0.2.1-rc.2`, and the workflow moves the `rc` dist-tag to that version.
 
-## Stable Minor Release
+## Stable Release
 
-Use this for backward-compatible features.
+Use a stable release when you want to publish the next package version to the npm `latest` dist-tag.
 
-1. Start from a clean branch based on `main`.
-2. Bump the package version:
+1. Open GitHub Actions.
+2. Run the `Publish Stable to npm` workflow from `main`.
+3. Choose the version bump:
+   - `patch`, for example `0.2.1` -> `0.2.2`.
+   - `minor`, for example `0.2.1` -> `0.3.0`.
+   - `major`, for example `0.2.1` -> `1.0.0`.
+4. The workflow runs verification, bumps `package.json` and `package-lock.json`, commits the release version, creates a bare semver git tag, pushes the commit and tag, publishes the package with the npm `latest` dist-tag, and writes the published version to the run summary.
 
-   ```bash
-   npm version minor --no-git-tag-version
-   ```
+You do not need to manually run `npm version`, edit `package.json`, edit `package-lock.json`, or create a git tag for stable releases. The workflow does that for you.
 
-3. Run verification locally:
+Install the latest stable version with:
 
-   ```bash
-   npm run verify
-   npm run format
-   ```
+```bash
+npm install @anselmdk/feature-spec-md@latest
+```
 
-4. Open and merge a pull request containing the version bump and any release notes.
-5. After the PR is merged, update local `main` and create a bare semver tag that exactly matches `package.json`:
+Install the exact version reported by the workflow summary, for example:
 
-   ```bash
-   git checkout main
-   git pull --ff-only
-   git tag 0.2.0
-   git push origin 0.2.0
-   ```
-
-6. Confirm the `Publish to npm` workflow succeeds.
-
-The workflow validates that the tag is a stable semver version and exactly matches `package.json` before publishing to npm with the `latest` dist-tag.
-
-## Stable Major Release
-
-Use this for breaking changes.
-
-1. Document the breaking changes in the release PR.
-2. Bump the package version:
-
-   ```bash
-   npm version major --no-git-tag-version
-   ```
-
-3. Run verification locally:
-
-   ```bash
-   npm run verify
-   npm run format
-   ```
-
-4. Open and merge the release PR.
-5. Tag the merged commit with the exact version, for example:
-
-   ```bash
-   git checkout main
-   git pull --ff-only
-   git tag 1.0.0
-   git push origin 1.0.0
-   ```
-
-6. Confirm the `Publish to npm` workflow succeeds.
+```bash
+npm install @anselmdk/feature-spec-md@0.2.2
+```
 
 ## npm Publishing Setup
 
-The publish workflows are ready for npm provenance. The best setup is npm trusted publishing with GitHub Actions OIDC, which avoids long-lived npm publish tokens.
+The publish workflows are ready for npm provenance. If you publish with an npm token, keep the `NPM_TOKEN` repository secret configured.
 
-On npmjs.com, configure this package with trusted publishing:
+If you use npm trusted publishing instead of `NPM_TOKEN`, configure npmjs.com for the workflow files that publish this package:
 
 - Publisher: GitHub Actions
 - Repository owner: `anselmdk`
 - Repository name: `feature-spec-md`
-- Workflow filename: `publish.yml`
-- Allowed action: `npm publish`
-
-If trusted publishing is not configured yet, the workflow can still use the `NPM_TOKEN` repository secret. Keep RC and stable publishing in the same workflow because npm trusted publishing allows only one trusted publisher workflow per package.
+- Workflow filename: `publish-rc.yml` for RC publishing
+- Workflow filename: `publish-stable.yml` for stable publishing
