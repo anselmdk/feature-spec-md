@@ -28,6 +28,7 @@ export type ReportOptions = {
   generatedAt?: string;
   githubBaseUrl?: string;
   githubRef?: string;
+  repositoryUrl?: string;
 };
 
 type RuleScenarioLink = {
@@ -76,6 +77,8 @@ export function renderHtmlReport(
       table{border-collapse:collapse;width:100%;font-size:14px}
       th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
       th{background:#f6f8fa}
+      h1 a{color:inherit;text-decoration:none}
+      h1 a:hover{text-decoration:underline}
       .step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}
       .step p{margin:8px 0}
       .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
@@ -88,7 +91,7 @@ export function renderHtmlReport(
     </style>
   </head>
   <body>
-    <h1>${html(title)}</h1>
+    <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
     <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
     ${renderIssues(issues)}
     ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
@@ -112,6 +115,18 @@ export function renderHtmlReport(
     </script>
   </body>
 </html>`;
+}
+
+function renderReportTitle(title: string, repositoryUrl: string | undefined) {
+  if (!repositoryUrl) return html(title);
+
+  const prefix = "Feature Spec Report for ";
+  const attributes = `href="${html(repositoryUrl)}" target="_blank" rel="noopener noreferrer"`;
+  if (title.startsWith(prefix) && title.length > prefix.length) {
+    return `${html(prefix)}<a ${attributes}>${html(title.slice(prefix.length))}</a>`;
+  }
+
+  return `<a ${attributes}>${html(title)}</a>`;
 }
 
 function formatGeneratedAt(value: string | undefined) {
