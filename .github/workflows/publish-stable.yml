@@ -59,14 +59,14 @@ jobs:
           git tag "${published_version}"
 
           echo "PUBLISHED_VERSION=${published_version}" >> "${GITHUB_ENV}"
-      - name: Publish to npm
-        run: npm publish --access public --tag "${NPM_TAG}" --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Push release commit and tag
         run: |
           git push origin "HEAD:${RELEASE_BRANCH}"
           git push origin "${PUBLISHED_VERSION}"
+      - name: Publish to npm
+        run: npm publish --access public --tag "${NPM_TAG}" --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Report published version
         run: |
           published_name="$(node -p "require('./package.json').name")"
