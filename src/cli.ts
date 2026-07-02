@@ -46,6 +46,7 @@ async function runCheck(options: CliOptions) {
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
+    requireModelCoverage: options["require-model-coverage"] === "true",
     requireRuleCoverage: options["require-rule-coverage"] === "true",
     requireScenarioCoverage: options["require-scenario-coverage"] !== "false",
   });
@@ -98,7 +99,7 @@ async function runCoverage(options: CliOptions) {
   );
   console.log(formatSpecImplementationReport(report));
 
-  if (options["fail-on-missing"] === "true" && report.missingScenarios > 0) {
+  if (options["fail-on-missing"] === "true" && hasMissingCoverage(report)) {
     process.exit(1);
   }
 }
@@ -181,6 +182,14 @@ function printIssues(issues: ValidationIssue[]) {
   }
 }
 
+function hasMissingCoverage(report: ReturnType<typeof buildSpecImplementationReport>) {
+  return (
+    report.missingScenarios > 0 ||
+    report.missingRules > 0 ||
+    report.missingModelItems > 0
+  );
+}
+
 async function reportTitle() {
   const packageName = await readPackageName();
   return packageName
@@ -210,9 +219,10 @@ Usage:
   feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
 
 Options:
+  --require-model-coverage      Fail when model items have no matching test references.
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
-  --fail-on-missing             Exit with status 1 when coverage finds missing scenario tests.
+  --fail-on-missing             Exit with status 1 when coverage finds missing model items, rules, or scenarios.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
 `);
