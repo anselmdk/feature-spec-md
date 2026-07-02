@@ -19,7 +19,7 @@ import {
 } from "./testImplementationReport.js";
 
 const defaultSpecPattern =
-  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
+  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*..stack.md,specs/**/*.design.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
 
 main().catch((error) => {
@@ -217,9 +217,11 @@ function githubSourceLinkOptions() {
   const githubRef = githubRefFromEnv();
   if (!repository || !githubRef) return {};
 
+  const githubBaseUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`;
   return {
-    githubBaseUrl: `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`,
+    githubBaseUrl,
     githubRef,
+    repositoryUrl: githubBaseUrl,
   };
 }
 
