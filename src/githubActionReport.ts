@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 
 export type GithubActionReportOptions = Record<string, string | undefined>;
@@ -21,9 +21,11 @@ type FtpConfig = {
 export async function publishGithubActionReport(
   options: GithubActionReportOptions,
 ) {
-  const reportDir = value(options, "report-dir", "FEATURE_SPEC_REPORT_DIR") ??
+  const reportDir =
+    value(options, "report-dir", "FEATURE_SPEC_REPORT_DIR") ??
     "test-results/spec-report";
-  const reportName = value(options, "name", "FEATURE_SPEC_REPORT_NAME") ??
+  const reportName =
+    value(options, "name", "FEATURE_SPEC_REPORT_NAME") ??
     "feature-spec-report";
   const mode = publishMode(
     value(options, "publish", "FEATURE_SPEC_REPORT_PUBLISH") ?? "artifact",
@@ -80,7 +82,7 @@ async function publishReportToFtp(reportDir: string, config: FtpConfig) {
   await writeFile(localIndex, renderBuildIndex(config.baseUrl, builds), "utf8");
   await uploadFile(localIndex, pathJoin(config.remoteDir, "index.html"), config);
 
-  return `${trimTrailingSlash(config.baseUrl)}/${encodeURIComponent(config.buildNumber)}/`;
+  return buildUrl(config.baseUrl, config.buildNumber);
 }
 
 async function uploadDirectory(
@@ -94,12 +96,19 @@ async function uploadDirectory(
   }
 
   for (const file of files) {
-    const remotePath = pathJoin(remoteDir, relative(localDir, file).split(sep).join("/"));
+    const remotePath = pathJoin(
+      remoteDir,
+      relative(localDir, file).split(sep).join("/"),
+    );
     await uploadFile(file, remotePath, config);
   }
 }
 
-async function uploadFile(localFile: string, remotePath: string, config: FtpConfig) {
+async function uploadFile(
+  localFile: string,
+  remotePath: string,
+  config: FtpConfig,
+) {
   await runCurl([
     "--silent",
     "--show-error",
@@ -180,9 +189,10 @@ function ftpConfig(options: GithubActionReportOptions): FtpConfig {
     "FEATURE_SPEC_FTP_PASSWORD",
   );
   const baseUrl = required(options, "base-url", "FEATURE_SPEC_REPORT_BASE_URL");
-  const remoteDir = value(options, "ftp-remote-dir", "FEATURE_SPEC_FTP_REMOTE_DIR") ??
-    ".";
-  const buildNumber = value(options, "build-number", "GITHUB_RUN_NUMBER") ??
+  const remoteDir =
+    value(options, "ftp-remote-dir", "FEATURE_SPEC_FTP_REMOTE_DIR") ?? "";
+  const buildNumber =
+    value(options, "build-number", "GITHUB_RUN_NUMBER") ??
     value(options, "build-number", "FEATURE_SPEC_BUILD_NUMBER") ??
     "local";
   const secure = booleanValue(
@@ -191,7 +201,9 @@ function ftpConfig(options: GithubActionReportOptions): FtpConfig {
   const port = value(options, "ftp-port", "FEATURE_SPEC_FTP_PORT");
 
   if (!/^\d+$/.test(buildNumber)) {
-    throw new Error(`Build number must be numeric for FTP publishing: ${buildNumber}`);
+    throw new Error(
+      `Build number must be numeric for FTP publishing: ${buildNumber}`,
+    );
   }
 
   return { host, user, password, port, secure, remoteDir, baseUrl, buildNumber };
@@ -227,19 +239,21 @@ function booleanValue(value: string | undefined) {
 function ftpUrl(config: FtpConfig, remotePath: string) {
   const protocol = config.secure ? "ftps" : "ftp";
   const port = config.port ? `:${config.port}` : "";
-  return `${protocol}://${config.host}${port}/${remotePath
+  const encodedPath = remotePath
     .split("/")
     .filter(Boolean)
     .map(encodeURIComponent)
-    .join("/")}`;
+    .join("/");
+  return `${protocol}://${config.host}${port}/${encodedPath}`;
 }
 
 function pathJoin(...parts: string[]) {
   const joined = parts
     .flatMap((part) => part.split("/"))
-    .filter((part, index) => part || index === 0)
+    .map((part) => part.trim())
+    .filter((part) => part && part !== ".")
     .join("/");
-  return joined || ".";
+  return joined;
 }
 
 function renderBuildIndex(baseUrl: string, builds: string[]) {
@@ -295,7 +309,7 @@ function escapeHtml(value: string) {
 async function writeGithubSummary(markdown: string) {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (!summaryPath) return;
-  await mkdir(join(summaryPath, ".."), { recursive: true });
+  await mkdir(dirname(summaryPath), { recursive: true });
   const existing = await readTextIfExists(summaryPath);
   await writeFile(summaryPath, `${existing}${markdown}`, "utf8");
 }
