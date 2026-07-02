@@ -129,6 +129,7 @@ async function runReport(options: CliOptions) {
       coverage: result.coverage,
       screenshots,
       validationIssues: [...result.validationIssues, ...result.coverageIssues],
+      ...githubSourceLinkOptions(),
     }),
   );
   console.log(`Feature spec report written to ${out}`);
@@ -209,6 +210,27 @@ async function readPackageName() {
   } catch {
     return undefined;
   }
+}
+
+function githubSourceLinkOptions() {
+  const repository = process.env.GITHUB_REPOSITORY;
+  const githubRef = githubRefFromEnv();
+  if (!repository || !githubRef) return {};
+
+  const githubBaseUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`;
+  return {
+    githubBaseUrl,
+    githubRef,
+    repositoryUrl: githubBaseUrl,
+  };
+}
+
+function githubRefFromEnv() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
+  if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
+  const ref = process.env.GITHUB_REF;
+  return ref?.replace(/^refs\/(heads|tags)\//, "");
 }
 
 function printHelp() {
