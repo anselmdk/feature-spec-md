@@ -11,6 +11,7 @@ import {
   writeTextFile,
   type ValidationIssue,
 } from "./index.js";
+import { publishGithubActionDiffReport } from "./githubActionDiffReport.js";
 import { publishGithubActionReport } from "./githubActionReport.js";
 import { checkSpecDocuments } from "./specDocuments.js";
 import {
@@ -35,6 +36,7 @@ async function main() {
   if (command === "report") return runReport(options);
   if (command === "coverage") return runCoverage(options);
   if (command === "github-report") return publishGithubActionReport(options);
+  if (command === "github-diff-report") return publishGithubActionDiffReport(options);
   if (command === "init") return runInit(options);
 
   printHelp();
@@ -242,6 +244,7 @@ Usage:
   feature-spec-md coverage [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
   feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
   feature-spec-md github-report [--report-dir test-results/spec-report] [--publish artifact|ftp]
+  feature-spec-md github-diff-report --publish ftp --pr-number 123
 
 Options:
   --require-model-coverage      Fail when model items have no matching test references.
@@ -259,6 +262,8 @@ GitHub report publishing:
   --ftp-password                FTP password, or FEATURE_SPEC_FTP_PASSWORD.
   --ftp-remote-dir              FTP root directory for reports, or FEATURE_SPEC_FTP_REMOTE_DIR.
   --base-url                    Public base URL, or FEATURE_SPEC_REPORT_BASE_URL.
+  --build-number                Numeric build number, or FEATURE_SPEC_BUILD_NUMBER / GITHUB_RUN_NUMBER.
+  --pr-number                   Numeric PR number, or FEATURE_SPEC_PR_NUMBER. Required for github-diff-report.
 `);
 }
 
