@@ -48,7 +48,10 @@ export function renderHtmlReport(
   const title = options.title ?? "Feature Spec Report";
   const issues = options.validationIssues ?? [];
   const screenshots = options.screenshots ?? [];
-  const sourceLinks = reportSourceLinks(options);
+  const sourceLinks: SourceLinkOptions = {
+    githubBaseUrl: options.githubBaseUrl,
+    githubRef: options.githubRef,
+  };
 
   return `<!doctype html>
 <html lang="en">
@@ -109,27 +112,6 @@ export function renderHtmlReport(
     </script>
   </body>
 </html>`;
-}
-
-function reportSourceLinks(options: ReportOptions): SourceLinkOptions {
-  return {
-    githubBaseUrl: options.githubBaseUrl ?? githubBaseUrlFromEnv(),
-    githubRef: options.githubRef ?? githubRefFromEnv(),
-  };
-}
-
-function githubBaseUrlFromEnv() {
-  const repository = process.env.GITHUB_REPOSITORY;
-  if (!repository) return undefined;
-  return `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`;
-}
-
-function githubRefFromEnv() {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
-  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
-  if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
-  const ref = process.env.GITHUB_REF;
-  return ref?.replace(/^refs\/(heads|tags)\//, "");
 }
 
 function formatGeneratedAt(value: string | undefined) {
@@ -444,13 +426,12 @@ function renderCoverageReference(
   reference: TestReference,
   sourceLinks: SourceLinkOptions,
 ) {
-  const label = compactReferenceLabel(reference);
-  const fullLabel = coverageReferenceLabel(reference);
+  const label = coverageReferenceLabel(reference);
   const url = coverageReferenceUrl(reference, sourceLinks);
 
-  if (!url) return `<code title="${html(fullLabel)}">${html(label)}</code>`;
+  if (!url) return `<code>${html(label)}</code>`;
 
-  return `<a class="coverage-link" href="${html(url)}" title="${html(fullLabel)}" target="_blank" rel="noopener noreferrer"><code>${html(label)}</code></a>`;
+  return `<a class="coverage-link" href="${html(url)}" title="${html(label)}" target="_blank" rel="noopener noreferrer"><code>${html(compactReferenceLabel(reference))}</code></a>`;
 }
 
 function uniqueCoverageReferences(item: CoverageItem | undefined) {
