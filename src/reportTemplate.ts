@@ -13,6 +13,7 @@ import type {
   ModelSpec,
   SpecScreenshot,
   StackSpec,
+  TestReference,
   ValidationIssue,
 } from "./types.js";
 
@@ -25,11 +26,18 @@ export type ReportOptions = {
   validationIssues?: ValidationIssue[];
   title?: string;
   generatedAt?: string;
+  githubBaseUrl?: string;
+  githubRef?: string;
 };
 
 type RuleScenarioLink = {
   ruleId: string;
   scenarioId: string;
+};
+
+type SourceLinkOptions = {
+  githubBaseUrl?: string;
+  githubRef?: string;
 };
 
 /** Render a complete self-contained feature spec report as HTML. */
@@ -40,6 +48,7 @@ export function renderHtmlReport(
   const title = options.title ?? "Feature Spec Report";
   const issues = options.validationIssues ?? [];
   const screenshots = options.screenshots ?? [];
+  const sourceLinks = reportSourceLinks(options);
 
   return `<!doctype html>
 <html lang="en">
@@ -71,14 +80,16 @@ export function renderHtmlReport(
       .screenshot img{display:block;width:100%;height:auto}
       .screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
       .coverage-detail{color:#57606a;font-size:12px}
+      .coverage-link{color:inherit;text-decoration:none}
+      .coverage-link:hover{text-decoration:underline}
     </style>
   </head>
   <body>
     <h1>${html(title)}</h1>
     <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
     ${renderIssues(issues)}
-    ${renderModels(options.models ?? [], options.coverage)}
-    ${specs.map((spec) => renderSpec(spec, options.coverage, screenshots)).join("\n")}
+    ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
+    ${specs.map((spec) => renderSpec(spec, options.coverage, screenshots, sourceLinks)).join("\n")}
     <script>
       document.addEventListener("toggle", (event) => {
         const target = event.target;
@@ -98,6 +109,27 @@ export function renderHtmlReport(
     </script>
   </body>
 </html>`;
+}
+
+function reportSourceLinks(options: ReportOptions): SourceLinkOptions {
+  return {
+    githubBaseUrl: options.githubBaseUrl ?? githubBaseUrlFromEnv(),
+    githubRef: options.githubRef ?? githubRefFromEnv(),
+  };
+}
+
+function githubBaseUrlFromEnv() {
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!repository) return undefined;
+  return `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`;
+}
+
+function githubRefFromEnv() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
+  if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
+  const ref = process.env.GITHUB_REF;
+  return ref?.replace(/^refs\/(heads|tags)\//, "");
 }
 
 function formatGeneratedAt(value: string | undefined) {
@@ -144,7 +176,11 @@ function renderIssues(issues: ValidationIssue[]) {
     .join("")}</ul></section>`;
 }
 
-function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
+function renderModels(
+  models: ModelSpec[],
+  coverage?: CoverageSummary,
+  sourceLinks: SourceLinkOptions = {},
+) {
   if (!models.length) return "";
   const modelCoverage = coverage?.modelCoverage ?? [];
   const ruleCoverage = coverage?.ruleCoverage ?? [];
@@ -171,7 +207,7 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
           (candidate) => candidate.id === item.id,
         );
         return `<details class="model-item">
-      <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}${renderCoverageReferences(coverageItem)}</summary>
+      <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered)}${renderCoverageReferences(coverageItem, sourceLinks)}</summary>
       <div class="model-item-body">${renderModelItemBody(item.body)}</div>
     </details>`;
       })
@@ -183,7 +219,7 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary) {
               const item = ruleCoverage.find(
                 (coverageItem) => coverageItem.id === rule.id,
               );
-              return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item)}</li>`;
+              return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item, sourceLinks)}</li>`;
             })
             .join("")}</ul>`
         : ""
@@ -198,6 +234,7 @@ function renderSpec(
   spec: FeatureSpec,
   coverage?: CoverageSummary,
   screenshots: SpecScreenshot[] = [],
+  sourceLinks: SourceLinkOptions = {},
 ) {
   const screenshotsByLine = groupScreenshotsByLine(screenshots);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
@@ -219,7 +256,7 @@ function renderSpec(
       const item = ruleCoverage.find(
         (coverageItem) => coverageItem.id === rule.id,
       );
-      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item)}</li>`;
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks))}${renderCoverageReferences(item, sourceLinks)}</li>`;
     })
     .join("")}</ul>
   <h3>Scenarios</h3>
@@ -392,24 +429,68 @@ function ruleCoverageBadge(
   return coverageBadge(ruleCoverage?.covered, scenarioIds);
 }
 
-function renderCoverageReferences(item: CoverageItem | undefined) {
-  const labels = coverageReferenceLabels(item);
-  if (!labels.length) return "";
-  return ` <span class="coverage-detail">via ${labels
-    .map((label) => `<code>${html(label)}</code>`)
+function renderCoverageReferences(
+  item: CoverageItem | undefined,
+  sourceLinks: SourceLinkOptions,
+) {
+  const references = uniqueCoverageReferences(item);
+  if (!references.length) return "";
+  return ` <span class="coverage-detail">via ${references
+    .map((reference) => renderCoverageReference(reference, sourceLinks))
     .join(" ")}</span>`;
 }
 
-function coverageReferenceLabels(item: CoverageItem | undefined) {
+function renderCoverageReference(
+  reference: TestReference,
+  sourceLinks: SourceLinkOptions,
+) {
+  const label = compactReferenceLabel(reference);
+  const fullLabel = coverageReferenceLabel(reference);
+  const url = coverageReferenceUrl(reference, sourceLinks);
+
+  if (!url) return `<code title="${html(fullLabel)}">${html(label)}</code>`;
+
+  return `<a class="coverage-link" href="${html(url)}" title="${html(fullLabel)}" target="_blank" rel="noopener noreferrer"><code>${html(label)}</code></a>`;
+}
+
+function uniqueCoverageReferences(item: CoverageItem | undefined) {
   if (!item) return [];
-  return Array.from(
-    new Set(
-      item.references.map((reference) => {
-        const line = reference.line ? `:${reference.line}` : "";
-        return `${reference.filePath}${line}`;
-      }),
-    ),
-  );
+  const seen = new Set<string>();
+  const references: TestReference[] = [];
+  for (const reference of item.references) {
+    const key = coverageReferenceLabel(reference);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    references.push(reference);
+  }
+  return references;
+}
+
+function coverageReferenceLabel(reference: TestReference) {
+  const line = reference.line ? `:${reference.line}` : "";
+  return `${reference.filePath}${line}`;
+}
+
+function compactReferenceLabel(reference: TestReference) {
+  const segments = reference.filePath.split("/").filter(Boolean);
+  const fileLabel = segments.slice(-2).join("/") || reference.filePath;
+  const line = reference.line ? `:${reference.line}` : "";
+  return `${fileLabel}${line}`;
+}
+
+function coverageReferenceUrl(
+  reference: TestReference,
+  sourceLinks: SourceLinkOptions,
+) {
+  if (!sourceLinks.githubBaseUrl || !sourceLinks.githubRef) return undefined;
+  const baseUrl = sourceLinks.githubBaseUrl.replace(/\/$/, "");
+  const ref = encodeURIComponent(sourceLinks.githubRef);
+  const filePath = reference.filePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const line = reference.line ? `#L${reference.line}` : "";
+  return `${baseUrl}/blob/${ref}/${filePath}${line}`;
 }
 
 function ruleScenarioIds(
