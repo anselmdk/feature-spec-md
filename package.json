@@ -8,7 +8,7 @@
     "url": "git+https://github.com/anselmdk/feature-spec-md.git"
   },
   "bin": {
-    "feature-spec-md": "./dist/cli.js"
+    "feature-spec-md": "dist/cli.js"
   },
   "exports": {
     ".": {
