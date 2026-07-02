@@ -1,0 +1,67 @@
+name: Publish RC to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      rc:
+        description: "RC number, e.g. 1 publishes package.json version as -rc.1"
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-rc:
+    runs-on: ubuntu-latest
+    env:
+      RC_NUMBER: ${{ inputs.rc }}
+      NPM_TAG: rc
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run verify
+      - name: Prepare RC version
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+
+          if [[ ! "${package_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json must contain a stable semver version, like 0.2.0."
+            exit 1
+          fi
+
+          if [[ ! "${RC_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "RC releases must use a positive integer RC number, like 1."
+            exit 1
+          fi
+
+          npm version --no-git-tag-version "${package_version}-rc.${RC_NUMBER}"
+      - run: npm publish --access public --tag "${NPM_TAG}" --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Report published version
+        run: |
+          published_name="$(node -p "require('./package.json').name")"
+          published_version="$(node -p "require('./package.json').version")"
+
+          {
+            echo "## Published npm package"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`${published_name}\` |"
+            echo "| Version | \`${published_version}\` |"
+            echo "| Dist tag | \`${NPM_TAG}\` |"
+            echo
+            echo "Install with:"
+            echo
+            echo "\`\`\`bash"
+            echo "npm install ${published_name}@${published_version}"
+            echo "\`\`\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
