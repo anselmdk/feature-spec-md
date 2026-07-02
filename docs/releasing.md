@@ -14,7 +14,8 @@ Use an RC when you want a testable npm package for the next release without upda
 2. Open GitHub Actions.
 3. Run the `Publish to npm` workflow from `main`.
 4. Choose `rc` for the release type.
-5. The workflow runs verification, changes the package version only inside the workflow to `<base>-rc.<run>.<attempt>`, and publishes it with the npm `rc` dist-tag.
+5. Keep the RC number at `1` for the first release candidate, or increase it manually for later candidates.
+6. The workflow runs verification, changes the package version only inside the workflow to `<base>-rc.<number>`, and publishes it with the npm `rc` dist-tag.
 
 Install the latest RC with:
 
@@ -25,10 +26,10 @@ npm install @anselmdk/feature-spec-md@rc
 Install a specific RC with:
 
 ```bash
-npm install @anselmdk/feature-spec-md@0.2.0-rc.123.1
+npm install @anselmdk/feature-spec-md@0.2.0-rc.1
 ```
 
-Repeat the workflow as needed. Each run publishes a new RC and moves the `rc` dist-tag to that version.
+Repeat the workflow as needed. Increase the RC number for each published candidate so npm receives a unique version, for example `0.2.0-rc.2`, and the workflow moves the `rc` dist-tag to that version.
 
 ## Stable Minor Release
 
