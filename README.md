@@ -103,6 +103,35 @@ npx feature-spec-md report \
   --screenshots "test-results/spec-report/screenshots-*.json"
 ```
 
+## GitHub Actions report publishing
+
+`feature-spec-md github-report` writes the GitHub Actions job summary and can either prepare outputs for a GitHub artifact upload or publish the generated report to FTP.
+
+```bash
+npx feature-spec-md github-report \
+  --report-dir test-results/spec-report \
+  --publish ftp
+```
+
+For FTP publishing, configure these repository secrets or environment variables:
+
+```txt
+FEATURE_SPEC_FTP_HOST
+FEATURE_SPEC_FTP_USER
+FEATURE_SPEC_FTP_PASSWORD
+FEATURE_SPEC_REPORT_BASE_URL
+```
+
+Optional values:
+
+```txt
+FEATURE_SPEC_FTP_REMOTE_DIR
+FEATURE_SPEC_FTP_PORT
+FEATURE_SPEC_FTP_SECURE
+```
+
+FTP reports are uploaded into a build-numbered directory using `GITHUB_RUN_NUMBER`, and an `index.html` file is created or updated at the public base URL so all uploaded builds can be browsed. When FTP publishing is used, the command emits `upload-github-artifact=false` and links the GitHub Actions job summary directly to the hosted report URL.
+
 ## Library API
 
 Most integrations can use the top-level document API:
