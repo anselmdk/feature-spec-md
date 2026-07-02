@@ -19,7 +19,7 @@ import {
 } from "./testImplementationReport.js";
 
 const defaultSpecPattern =
-  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*..stack.md,specs/**/*.design.md";
+  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
 const defaultTestPattern = "tests/**/*.spec.ts";
 
 main().catch((error) => {
