@@ -11,6 +11,7 @@ import {
   writeTextFile,
   type ValidationIssue,
 } from "./index.js";
+import { publishGithubActionReport } from "./githubActionReport.js";
 import { checkSpecDocuments } from "./specDocuments.js";
 import {
   buildSpecImplementationReport,
@@ -33,6 +34,7 @@ async function main() {
   if (command === "check") return runCheck(options);
   if (command === "report") return runReport(options);
   if (command === "coverage") return runCoverage(options);
+  if (command === "github-report") return publishGithubActionReport(options);
   if (command === "init") return runInit(options);
 
   printHelp();
@@ -217,6 +219,7 @@ Usage:
   feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
   feature-spec-md coverage [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
   feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md github-report [--report-dir test-results/spec-report] [--publish artifact|ftp]
 
 Options:
   --require-model-coverage      Fail when model items have no matching test references.
@@ -225,6 +228,15 @@ Options:
   --fail-on-missing             Exit with status 1 when coverage finds missing model items, rules, or scenarios.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
+
+GitHub report publishing:
+  --publish artifact            Write summary and outputs for GitHub artifact upload.
+  --publish ftp                 Upload report files and an index.html to FTP; no GitHub artifact is needed.
+  --ftp-host                    FTP host, or FEATURE_SPEC_FTP_HOST.
+  --ftp-user                    FTP username, or FEATURE_SPEC_FTP_USER.
+  --ftp-password                FTP password, or FEATURE_SPEC_FTP_PASSWORD.
+  --ftp-remote-dir              FTP root directory for reports, or FEATURE_SPEC_FTP_REMOTE_DIR.
+  --base-url                    Public base URL, or FEATURE_SPEC_REPORT_BASE_URL.
 `);
 }
 
