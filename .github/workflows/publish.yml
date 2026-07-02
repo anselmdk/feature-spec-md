@@ -75,3 +75,23 @@ jobs:
       - run: npm publish --access public --tag "${NPM_TAG}" --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Report published version
+        run: |
+          published_name="$(node -p "require('./package.json').name")"
+          published_version="$(node -p "require('./package.json').version")"
+
+          {
+            echo "## Published npm package"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`${published_name}\` |"
+            echo "| Version | \`${published_version}\` |"
+            echo "| Dist tag | \`${NPM_TAG}\` |"
+            echo
+            echo "Install with:"
+            echo
+            echo "\`\`\`bash"
+            echo "npm install ${published_name}@${published_version}"
+            echo "\`\`\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
