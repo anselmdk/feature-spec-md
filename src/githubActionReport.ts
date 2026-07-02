@@ -124,25 +124,43 @@ async function uploadFile(
 
 async function listBuildNumbers(remoteDir: string, config: FtpConfig) {
   try {
-    const listing = await runCurl([
-      "--silent",
-      "--show-error",
-      "--fail",
-      "-u",
-      `${config.user}:${config.password}`,
-      ftpUrl(config, pathJoin(remoteDir, "/")),
-    ]);
-    return Array.from(
-      new Set(
-        listing
-          .split(/\r?\n/)
-          .map((line) => line.trim().split(/\s+/).at(-1) ?? "")
-          .filter((name) => /^\d+$/.test(name)),
-      ),
-    );
+    const listing = await listRemoteDirectory(remoteDir, config);
+    return Array.from(new Set(parseBuildNumbersFromDirectoryListing(listing)));
   } catch {
     return [];
   }
+}
+
+async function listRemoteDirectory(remoteDir: string, config: FtpConfig) {
+  const directoryUrl = ftpUrl(config, asDirectoryPath(remoteDir));
+  const commonArgs = [
+    "--silent",
+    "--show-error",
+    "--fail",
+    "-u",
+    `${config.user}:${config.password}`,
+  ];
+
+  try {
+    return await runCurl([...commonArgs, "--list-only", directoryUrl]);
+  } catch {
+    return runCurl([...commonArgs, directoryUrl]);
+  }
+}
+
+function parseBuildNumbersFromDirectoryListing(listing: string) {
+  return listing
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const hrefBuilds = Array.from(
+        line.matchAll(/href=["'][^"']*?(\d+)\/?["']/gi),
+        (match) => match[1],
+      );
+      const lastToken = line.trim().split(/\s+/).at(-1) ?? "";
+
+      return /^\d+$/.test(lastToken) ? [...hrefBuilds, lastToken] : hrefBuilds;
+    })
+    .filter((name) => /^\d+$/.test(name));
 }
 
 async function runCurl(args: string[]) {
@@ -239,12 +257,19 @@ function booleanValue(value: string | undefined) {
 function ftpUrl(config: FtpConfig, remotePath: string) {
   const protocol = config.secure ? "ftps" : "ftp";
   const port = config.port ? `:${config.port}` : "";
+  const hasTrailingSlash = remotePath.endsWith("/");
   const encodedPath = remotePath
     .split("/")
     .filter(Boolean)
     .map(encodeURIComponent)
     .join("/");
-  return `${protocol}://${config.host}${port}/${encodedPath}`;
+  const directorySlash = hasTrailingSlash ? "/" : "";
+  return `${protocol}://${config.host}${port}/${encodedPath}${directorySlash}`;
+}
+
+function asDirectoryPath(remotePath: string) {
+  const path = pathJoin(remotePath);
+  return path ? `${path}/` : "";
 }
 
 function pathJoin(...parts: string[]) {
