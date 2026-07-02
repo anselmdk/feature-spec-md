@@ -12,11 +12,15 @@ export async function writeGithubSummary(markdown: string) {
 export async function writeGithubOutput(values: Record<string, string>) {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (!outputPath) return;
-  const lines = Object.entries(values)
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
+  const lines = Object.entries(values).map(([key, value]) => outputLine(key, value));
   const existing = await readTextIfExists(outputPath);
-  await writeFile(outputPath, `${existing}${lines}\n`, "utf8");
+  await writeFile(outputPath, `${existing}${lines.join("\n")}\n`, "utf8");
+}
+
+function outputLine(key: string, value: string) {
+  if (!value.includes("\n")) return `${key}=${value}`;
+  const delimiter = `feature_spec_md_${Math.random().toString(36).slice(2)}`;
+  return `${key}<<${delimiter}\n${value}\n${delimiter}`;
 }
 
 async function readTextIfExists(filePath: string) {
