@@ -113,21 +113,58 @@ npx feature-spec-md github-report \
   --publish ftp
 ```
 
-For FTP publishing, configure these repository secrets or environment variables:
+For FTP publishing, configure repository secrets in GitHub under **Settings → Secrets and variables → Actions → Repository secrets**. For this repository, the direct settings URL is:
 
 ```txt
-FEATURE_SPEC_FTP_HOST
-FEATURE_SPEC_FTP_USER
-FEATURE_SPEC_FTP_PASSWORD
-FEATURE_SPEC_REPORT_BASE_URL
+https://github.com/anselmdk/feature-spec-md/settings/secrets/actions
+```
+
+GitHub's documentation for repository secrets is here:
+
+```txt
+https://docs.github.com/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
+```
+
+Required secrets or environment variables:
+
+```txt
+FEATURE_SPEC_FTP_HOST=ftp.example.com
+FEATURE_SPEC_FTP_USER=feature-spec-md
+FEATURE_SPEC_FTP_PASSWORD=<your FTP password>
+FEATURE_SPEC_REPORT_BASE_URL=http://feature-spec-md.anselm.dk/
 ```
 
 Optional values:
 
 ```txt
-FEATURE_SPEC_FTP_REMOTE_DIR
-FEATURE_SPEC_FTP_PORT
-FEATURE_SPEC_FTP_SECURE
+FEATURE_SPEC_FTP_REMOTE_DIR=/public_html/feature-spec-md
+FEATURE_SPEC_FTP_PORT=21
+FEATURE_SPEC_FTP_SECURE=false
+```
+
+Example GitHub Actions step:
+
+```yaml
+- name: Publish feature spec report
+  if: always() && hashFiles('test-results/spec-report/index.html') != ''
+  run: npx feature-spec-md github-report --publish ftp --report-dir test-results/spec-report
+  env:
+    FEATURE_SPEC_FTP_HOST: ${{ secrets.FEATURE_SPEC_FTP_HOST }}
+    FEATURE_SPEC_FTP_USER: ${{ secrets.FEATURE_SPEC_FTP_USER }}
+    FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
+    FEATURE_SPEC_REPORT_BASE_URL: ${{ secrets.FEATURE_SPEC_REPORT_BASE_URL }}
+```
+
+With `FEATURE_SPEC_REPORT_BASE_URL=http://feature-spec-md.anselm.dk/` and GitHub Actions build number `42`, the report is uploaded to a build-numbered directory and linked as:
+
+```txt
+http://feature-spec-md.anselm.dk/42/
+```
+
+The build index is created or updated at:
+
+```txt
+http://feature-spec-md.anselm.dk/
 ```
 
 FTP reports are uploaded into a build-numbered directory using `GITHUB_RUN_NUMBER`, and an `index.html` file is created or updated at the public base URL so all uploaded builds can be browsed. When FTP publishing is used, the command emits `upload-github-artifact=false` and links the GitHub Actions job summary directly to the hosted report URL.
