@@ -57,9 +57,10 @@ export async function loadMockReportData(variant: MockReportVariant = "current")
     requireRuleCoverage: false,
     requireScenarioCoverage: false,
   });
-  const screenshots = await collectSpecScreenshots([
-    path.join(variantRoot, "screenshots/screenshots.json"),
-  ]);
+  const screenshots = normalizeMockScreenshots(
+    await collectSpecScreenshots([path.join(variantRoot, "screenshots/screenshots.json")]),
+    fixturesRoot,
+  );
 
   return {
     title: "Feature Spec Report for mock-support-desk",
@@ -224,6 +225,18 @@ async function mockFixturesRoot() {
   throw new Error(
     `Could not find mock report fixtures. Tried: ${candidates.join(", ")}`,
   );
+}
+
+function normalizeMockScreenshots(
+  screenshots: SpecScreenshot[],
+  fixturesRoot: string,
+): SpecScreenshot[] {
+  return screenshots.map((screenshot) => ({
+    ...screenshot,
+    specPath: path.isAbsolute(screenshot.specPath)
+      ? screenshot.specPath
+      : path.join(fixturesRoot, screenshot.specPath.replace(/^src\/mocks\//, "")),
+  }));
 }
 
 async function pathExists(filePath: string) {
