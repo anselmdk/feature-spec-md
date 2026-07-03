@@ -220,9 +220,11 @@ function normalizeMockDocuments<T extends SpecDocument | FeatureSpec | ModelSpec
 }
 
 function normalizeMockCoverage(
-  coverage: CoverageSummary,
+  coverage: CoverageSummary | undefined,
   variantRoot: string,
-): CoverageSummary {
+): CoverageSummary | undefined {
+  if (!coverage) return undefined;
+
   return {
     ...coverage,
     modelCoverage: coverage.modelCoverage
