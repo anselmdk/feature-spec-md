@@ -26,6 +26,7 @@
   },
   "files": [
     "dist",
+    "src/mocks",
     "README.md",
     "SPEC_FORMAT.md",
     "docs",
