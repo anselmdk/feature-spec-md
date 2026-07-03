@@ -20,15 +20,6 @@ A spec set can contain four document types:
 - `*.stack.md` defines technical platform choices and their rationale.
 - `*.design.md` defines product, UI, layout, visual, and interaction direction.
 
-The short version:
-
-```txt
-model tells tests what things mean
-features tell tests what behavior must work
-stack tells implementation what tools and constraints to use
-design tells implementation what experience to create
-```
-
 ## Frontmatter
 
 Every file starts with YAML-like frontmatter:
@@ -53,6 +44,8 @@ Optional fields:
 - `owner`
 - `model`: a single referenced model id, for feature and design files
 - `models`: comma-separated referenced model ids, for feature and design files
+- `test`: default scenario test type for feature files
+- `screenshots`: default screenshot evidence policy for feature files
 
 IDs use uppercase words separated by hyphens. IDs are the contract between specs, tests, reports, and implementation work.
 
@@ -128,21 +121,52 @@ When they create a card with the title "Write release notes"
 Then the card "Write release notes" is visible in the To do column
 ```
 
-Allowed step keywords:
-
-- `Given`
-- `When`
-- `Then`
-- `And`
-- `But`
+Allowed step keywords are `Given`, `When`, `Then`, `And`, and `But`.
 
 Rules state durable product truths. Scenarios show concrete examples that executable tests can implement.
 
+### Scenario Test And Evidence Policy
+
+Feature specs can declare how scenarios are expected to be tested and whether screenshot evidence is required.
+
+Feature-level frontmatter sets defaults for all scenarios in a feature:
+
+```md
+---
+id: KANBAN-CARD-AUTHORING
+title: Card authoring
+test: playwright
+screenshots: required
+---
+```
+
+Scenario-level overrides go directly below a scenario heading:
+
+```md
+### KANBAN-CARD-AUTHORING-S002: Card title is normalized
+Test: unit
+Screenshots: skip
+
+Given the raw card title contains leading whitespace
+When the title is normalized
+Then the stored title has no leading whitespace
+```
+
+Supported `test` values are `unit`, `integration`, `playwright`, `manual`, and `skip`.
+
+Supported `screenshots` values are `required`, `optional`, and `skip`. `screenshots: none` is accepted as an alias for `screenshots: skip`.
+
+Defaults:
+
+- If `test` is omitted, scenarios default to `unit`.
+- If `screenshots` is omitted and `test` resolves to `playwright`, screenshots default to `required`.
+- If `screenshots` is omitted and `test` resolves to `unit`, `integration`, `manual`, or `skip`, screenshots default to `skip`.
+
+See [Scenario Test And Evidence Policy](docs/evidence-policy.md) for details and CI examples.
+
 ## Stack Files
 
-Stack files use the `.stack.md` suffix.
-
-A stack file defines technical platform choices and the reasoning behind them.
+Stack files use the `.stack.md` suffix and define technical platform choices and the reasoning behind them.
 
 Required sections:
 
@@ -154,45 +178,11 @@ Required sections:
 ## Stack
 ```
 
-Optional sections:
-
-```md
-## Context
-
-## Rationale
-
-## Consequences
-```
-
-Example:
-
-```md
----
-id: KANBAN-STACK
-title: Kanban tech stack
-status: draft
----
-
-# Kanban tech stack
-
-## Purpose
-
-Define the initial technical stack for implementing the Kanban board.
-
-## Stack
-
-| Area     | Choice     |
-| -------- | ---------- |
-| Frontend | React      |
-| Language | TypeScript |
-| Testing  | Playwright |
-```
+Optional sections are `## Context`, `## Rationale`, and `## Consequences`.
 
 ## Design Files
 
-Design files use the `.design.md` suffix.
-
-A design file defines product, UI, layout, visual, and interaction direction.
+Design files use the `.design.md` suffix and define product, UI, layout, visual, and interaction direction.
 
 Required sections:
 
@@ -204,38 +194,7 @@ Required sections:
 ## Design
 ```
 
-Optional sections:
-
-```md
-## Principles
-
-## Layout
-
-## Interaction
-
-## Visual style
-```
-
-Example:
-
-```md
----
-id: KANBAN-DESIGN
-title: Kanban board design
-status: draft
-model: KANBAN
----
-
-# Kanban board design
-
-## Purpose
-
-Define the visual and interaction design direction for the Kanban board.
-
-## Design
-
-The board should feel lightweight, immediate, and calm.
-```
+Optional sections are `## Principles`, `## Layout`, `## Interaction`, and `## Visual style`.
 
 ## Splitting Guidance
 
@@ -251,7 +210,7 @@ Keep each document small enough for an AI to read, revise, and use as test-writi
 
 ## Test Coverage Convention
 
-Spec files do not contain test mappings.
+Spec files declare expected test and evidence policy, but they do not map scenarios to concrete test files.
 
 Tests reference model item, rule, and scenario IDs in test titles, tags, annotations, comments, or metadata.
 
@@ -261,6 +220,7 @@ Generated tooling can answer:
 - Which scenarios have tests?
 - Which rules have executable coverage?
 - Which tests reference deleted or unknown spec IDs?
+- Which scenarios are expected to have screenshot evidence?
 - Which visible flows have screenshots, traces, or other evidence?
 
 Example:
