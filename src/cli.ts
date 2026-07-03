@@ -7,9 +7,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   collectSpecScreenshots,
+  insertReportMetadata,
   renderHtmlReport,
   validateScenarioScreenshots,
   writeTextFile,
+  type ReportMetadataItem,
   type ValidationIssue,
 } from "./index.js";
 import { publishGithubActionDiffReport } from "./githubActionDiffReport.js";
@@ -135,19 +137,18 @@ async function runReport(options: CliOptions) {
     ...screenshotIssues,
   ];
 
-  await writeTextFile(
-    out,
-    renderHtmlReport(result.features, {
-      title: await reportTitle(),
-      models: result.models,
-      stacks: result.stacks,
-      designs: result.designs,
-      coverage: result.coverage,
-      screenshots,
-      validationIssues,
-      ...githubSourceLinkOptions(),
-    }),
-  );
+  const report = renderHtmlReport(result.features, {
+    title: await reportTitle(),
+    models: result.models,
+    stacks: result.stacks,
+    designs: result.designs,
+    coverage: result.coverage,
+    screenshots,
+    validationIssues,
+    ...githubSourceLinkOptions(),
+  });
+
+  await writeTextFile(out, insertReportMetadata(report, await githubReportMetadata()));
   console.log(`Feature spec report written to ${out}`);
 
   printIssues(screenshotIssues);
@@ -252,6 +253,111 @@ function githubRefFromEnv() {
   return ref?.replace(/^refs\/(heads|tags)\//, "");
 }
 
+async function githubReportMetadata(): Promise<ReportMetadataItem[]> {
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!repository) return [];
+
+  const githubBaseUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`;
+  const event = await readGithubEvent();
+  const pullRequest = githubPullRequestFromEvent(event);
+  const branch = githubBranchFromEnv(pullRequest);
+  const buildNumber = process.env.FEATURE_SPEC_BUILD_NUMBER ?? process.env.GITHUB_RUN_NUMBER;
+  const runId = process.env.GITHUB_RUN_ID;
+  const sha = process.env.GITHUB_SHA;
+  const prNumber = process.env.FEATURE_SPEC_PR_NUMBER ?? pullRequest?.number;
+
+  return [
+    branch
+      ? {
+          label: "Branch",
+          value: branch,
+          url: `${githubBaseUrl}/tree/${encodeGithubPath(branch)}`,
+        }
+      : undefined,
+    buildNumber
+      ? {
+          label: "Build",
+          value: buildNumber,
+          url: runId ? `${githubBaseUrl}/actions/runs/${runId}` : undefined,
+        }
+      : undefined,
+    sha
+      ? {
+          label: "Commit",
+          value: shortSha(sha),
+          url: `${githubBaseUrl}/commit/${sha}`,
+        }
+      : undefined,
+    prNumber
+      ? {
+          label: "Pull request",
+          value: `#${prNumber}`,
+          url: pullRequest?.url ?? `${githubBaseUrl}/pull/${prNumber}`,
+        }
+      : undefined,
+  ].filter((item): item is ReportMetadataItem => Boolean(item));
+}
+
+type GithubPullRequestMetadata = {
+  number: string;
+  branch?: string;
+  url?: string;
+};
+
+async function readGithubEvent(): Promise<unknown> {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) return undefined;
+
+  try {
+    return JSON.parse(await readFile(eventPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function githubPullRequestFromEvent(
+  event: unknown,
+): GithubPullRequestMetadata | undefined {
+  if (!isRecord(event) || !isRecord(event.pull_request)) return undefined;
+  const pullRequest = event.pull_request;
+  const number = stringValue(pullRequest.number);
+  if (!number) return undefined;
+
+  return {
+    number,
+    branch: isRecord(pullRequest.head)
+      ? stringValue(pullRequest.head.ref)
+      : undefined,
+    url: stringValue(pullRequest.html_url),
+  };
+}
+
+function githubBranchFromEnv(pullRequest: GithubPullRequestMetadata | undefined) {
+  if (pullRequest?.branch) return pullRequest.branch;
+  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
+  if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
+  const ref = process.env.GITHUB_REF;
+  return ref?.replace(/^refs\/(heads|tags)\//, "").replace(/^refs\/pull\/(\d+)\/merge$/, "PR #$1");
+}
+
+function encodeGithubPath(value: string) {
+  return value.split("/").map(encodeURIComponent).join("/");
+}
+
+function shortSha(value: string) {
+  return value.slice(0, 7);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function stringValue(value: unknown) {
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return undefined;
+}
+
 function printHelp() {
   console.log(`feature-spec-md
 
@@ -279,7 +385,6 @@ GitHub report publishing:
   --publish ftp                 Upload report files and an index.html to FTP; no GitHub artifact is needed.
   --ftp-host                    FTP host, or FEATURE_SPEC_FTP_HOST.
   --ftp-user                    FTP user, or FEATURE_SPEC_FTP_USER.
-  --ftp-password                FTP password, or FEATURE_SPEC_FTP_PASSWORD.
   --ftp-remote-dir              FTP remote directory, or FEATURE_SPEC_FTP_REMOTE_DIR.
   --report-base-url             Public report base URL, or FEATURE_SPEC_REPORT_BASE_URL.
   --build-number                Build number, or FEATURE_SPEC_BUILD_NUMBER/GITHUB_RUN_NUMBER.
