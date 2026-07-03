@@ -73,8 +73,8 @@ Configure these repository settings before enabling the workflow:
 | `FEATURE_SPEC_FTP_HOST` | Repository variable |
 | `FEATURE_SPEC_FTP_USER` | Repository variable |
 | `FEATURE_SPEC_FTP_PASSWORD` | Repository secret |
-| `FEATURE_SPEC_MOCK_REPORT_BASE_URL` | Repository variable |
-| `FEATURE_SPEC_MOCK_FTP_REMOTE_DIR` | Repository variable |
+| `FEATURE_SPEC_REPORT_BASE_URL` | Repository variable |
+| `FEATURE_SPEC_FTP_REMOTE_DIR` | Repository variable |
 
 Optional settings:
 
@@ -83,7 +83,7 @@ Optional settings:
 | `FEATURE_SPEC_FTP_PORT` | Repository variable |
 | `FEATURE_SPEC_FTP_SECURE` | Repository variable |
 
-Use mock-specific base URL and remote directory values so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
+Use a mock-specific base URL and remote directory value so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 
 The same data is available from the library for custom dev servers or visual tests:
 
