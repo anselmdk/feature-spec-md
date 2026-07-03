@@ -25,7 +25,7 @@ export async function collectSpecScreenshots(patterns: string[]) {
   return screenshots;
 }
 
-/** Validate that every scenario step has screenshot evidence in the report inputs. */
+/** Validate screenshot evidence manifests against scenario policies. */
 export function validateScenarioScreenshots(
   specs: FeatureSpec[],
   screenshots: SpecScreenshot[],
@@ -37,15 +37,18 @@ export function validateScenarioScreenshots(
 
   for (const spec of specs) {
     for (const scenario of spec.scenarios) {
-      for (const step of scenario.steps) {
-        if (screenshotKeys.has(screenshotKey(spec.filePath, step.line))) continue;
-        issues.push({
-          code: "missing-screenshot-evidence",
-          severity: "error",
-          filePath: spec.filePath,
-          line: step.line,
-          message: `Missing screenshot evidence for ${scenario.id} ${step.keyword} ${step.text}`,
-        });
+      if (scenario.evidence.screenshots === "required") {
+        for (const step of scenario.steps) {
+          if (!screenshotKeys.has(screenshotKey(spec.filePath, step.line))) {
+            issues.push({
+              code: "missing-screenshot-evidence",
+              severity: "error",
+              filePath: spec.filePath,
+              line: step.line,
+              message: `Screenshot evidence is required for ${scenario.id} ${step.keyword} ${step.text}`,
+            });
+          }
+        }
       }
     }
   }
