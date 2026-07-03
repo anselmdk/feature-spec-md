@@ -38,7 +38,6 @@ test-results/mock-reports/
 The fixtures intentionally include the states that are otherwise cumbersome to reproduce by hand:
 
 - covered and missing model/rule/scenario coverage
-- orphan test references
 - current and previous screenshot evidence
 - report metadata for branch, build, commit, and pull request
 - a PR diff report with changed spec text, added spec text, changed screenshots, and added screenshots
@@ -48,6 +47,43 @@ Use `--out` to write the mock reports somewhere else:
 ```bash
 npm run report:mock -- --out /tmp/feature-spec-md-reports
 ```
+
+## FTP publishing
+
+The `.github/workflows/mock-reports.yml` workflow publishes the generated mock reports on every push and on manual workflow dispatch.
+
+It uses the same publishing command that consuming projects use:
+
+```bash
+node dist/cli.js github-report --publish ftp --report-dir test-results/mock-reports --name mock-feature-spec-reports
+```
+
+Before publishing, the workflow adds a root `test-results/mock-reports/index.html` that links to:
+
+- `feature-spec-report/`
+- `previous-feature-spec-report/`
+- `diff-report/`
+
+The FTP publisher then uploads the whole `test-results/mock-reports` directory to `build/<github.run_number>/` and updates the build index.
+
+Configure these repository secrets or variables before enabling the workflow:
+
+```txt
+FEATURE_SPEC_FTP_HOST
+FEATURE_SPEC_FTP_USER
+FEATURE_SPEC_FTP_PASSWORD
+FEATURE_SPEC_MOCK_REPORT_BASE_URL
+FEATURE_SPEC_MOCK_FTP_REMOTE_DIR
+```
+
+Optional secrets or variables:
+
+```txt
+FEATURE_SPEC_FTP_PORT
+FEATURE_SPEC_FTP_SECURE
+```
+
+Use mock-specific base URL and remote directory values so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 
 The same data is available from the library for custom dev servers or visual tests:
 
