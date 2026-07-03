@@ -7,7 +7,17 @@ import { collectSpecScreenshots } from "./screenshots.js";
 import { checkSpecDocuments } from "./specDocuments.js";
 import { insertReportMetadata, type ReportMetadataItem } from "./reportMetadata.js";
 import { renderHtmlReport } from "./reportTemplate.js";
-import type { SpecScreenshot } from "./types.js";
+import type {
+  CoverageItem,
+  CoverageSummary,
+  DesignSpec,
+  FeatureSpec,
+  ModelSpec,
+  SpecDocument,
+  SpecScreenshot,
+  StackSpec,
+  TestReference,
+} from "./types.js";
 
 export type MockReportVariant = "current" | "previous";
 
@@ -38,20 +48,24 @@ export async function loadMockReportData(variant: MockReportVariant = "current")
   const screenshots = normalizeMockScreenshots(
     await collectSpecScreenshots([path.join(variantRoot, "screenshots/screenshots.json")]),
     fixturesRoot,
+    variantRoot,
   );
 
   return {
     title: "Feature Spec Report for mock-support-desk",
     fixturesRoot,
     variantRoot,
-    documents: result.documents,
-    models: result.models,
-    features: result.features,
-    stacks: result.stacks,
-    designs: result.designs,
-    coverage: result.coverage,
+    documents: normalizeMockDocuments(result.documents, variantRoot),
+    models: normalizeMockDocuments(result.models, variantRoot),
+    features: normalizeMockDocuments(result.features, variantRoot),
+    stacks: normalizeMockDocuments(result.stacks, variantRoot),
+    designs: normalizeMockDocuments(result.designs, variantRoot),
+    coverage: normalizeMockCoverage(result.coverage, variantRoot),
     screenshots,
-    validationIssues: [...result.validationIssues, ...result.coverageIssues],
+    validationIssues: [...result.validationIssues, ...result.coverageIssues].map((issue) => ({
+      ...issue,
+      filePath: issue.filePath ? normalizeMockSourcePath(issue.filePath, variantRoot) : issue.filePath,
+    })),
     metadata: mockMetadata(variant),
   };
 }
@@ -195,16 +209,90 @@ async function mockFixturesRoot() {
   );
 }
 
+function normalizeMockDocuments<T extends SpecDocument | FeatureSpec | ModelSpec | StackSpec | DesignSpec>(
+  documents: T[],
+  variantRoot: string,
+): T[] {
+  return documents.map((document) => ({
+    ...document,
+    filePath: normalizeMockSourcePath(document.filePath, variantRoot),
+  }));
+}
+
+function normalizeMockCoverage(
+  coverage: CoverageSummary | undefined,
+  variantRoot: string,
+): CoverageSummary | undefined {
+  if (!coverage) return undefined;
+
+  return {
+    ...coverage,
+    modelCoverage: coverage.modelCoverage
+      ? normalizeMockCoverageItems(coverage.modelCoverage, variantRoot)
+      : coverage.modelCoverage,
+    ruleCoverage: normalizeMockCoverageItems(coverage.ruleCoverage, variantRoot),
+    scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage, variantRoot),
+    orphanModelReferences: coverage.orphanModelReferences
+      ? normalizeMockReferences(coverage.orphanModelReferences, variantRoot)
+      : coverage.orphanModelReferences,
+    orphanRuleReferences: normalizeMockReferences(coverage.orphanRuleReferences, variantRoot),
+    orphanScenarioReferences: normalizeMockReferences(coverage.orphanScenarioReferences, variantRoot),
+  };
+}
+
+function normalizeMockCoverageItems<T extends CoverageItem>(
+  items: T[],
+  variantRoot: string,
+): T[] {
+  return items.map((item) => ({
+    ...item,
+    filePath: item.filePath ? normalizeMockSourcePath(item.filePath, variantRoot) : item.filePath,
+    references: normalizeMockReferences(item.references, variantRoot),
+  }));
+}
+
+function normalizeMockReferences(
+  references: TestReference[],
+  variantRoot: string,
+): TestReference[] {
+  return references.map((reference) => ({
+    ...reference,
+    filePath: normalizeMockSourcePath(reference.filePath, variantRoot),
+  }));
+}
+
 function normalizeMockScreenshots(
   screenshots: SpecScreenshot[],
   fixturesRoot: string,
+  variantRoot: string,
 ): SpecScreenshot[] {
   return screenshots.map((screenshot) => ({
     ...screenshot,
-    specPath: path.isAbsolute(screenshot.specPath)
-      ? screenshot.specPath
-      : path.join(fixturesRoot, screenshot.specPath.replace(/^src\/mocks\//, "")),
+    specPath: normalizeMockSourcePath(
+      path.isAbsolute(screenshot.specPath)
+        ? screenshot.specPath
+        : path.join(fixturesRoot, screenshot.specPath.replace(/^src\/mocks\//, "")),
+      variantRoot,
+    ),
+    testPath: screenshot.testPath
+      ? normalizeMockSourcePath(screenshot.testPath, variantRoot)
+      : screenshot.testPath,
   }));
+}
+
+function normalizeMockSourcePath(filePath: string, variantRoot: string) {
+  const relativePath = path.relative(variantRoot, filePath).split("\\").join("/");
+  if (relativePath && !relativePath.startsWith("../") && relativePath !== "..") {
+    return relativePath;
+  }
+
+  return filePath
+    .split("\\")
+    .join("/")
+    .replace(/^\.\//, "")
+    .replace(/^src\/mocks\/(?:current|previous)\//, "")
+    .replace(/^.*\/src\/mocks\/(?:current|previous)\//, "")
+    .replace(/^.*\/mocks\/(?:current|previous)\//, "");
 }
 
 async function pathExists(filePath: string) {
