@@ -17,7 +17,7 @@ export {
   validateFeatureSpec,
 } from "./featureSpecs.js";
 export {
-  createMockReportData,
+  loadMockReportData,
   renderMockDiffReport,
   renderMockFeatureSpecReport,
   writeMockReports,
