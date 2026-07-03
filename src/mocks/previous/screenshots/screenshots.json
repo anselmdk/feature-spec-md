@@ -1,0 +1,11 @@
+{
+  "screenshots": [
+    {
+      "specPath": "src/mocks/previous/specs/ticket-inbox.feature.md",
+      "line": 27,
+      "path": "screenshots/SUPPORT-INBOX-S001-line-27-previous.svg",
+      "title": "Inbox before priority badges",
+      "testPath": "src/mocks/previous/tests/supportDesk.spec.ts"
+    }
+  ]
+}
