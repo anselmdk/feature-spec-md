@@ -8,6 +8,7 @@ import { checkSpecDocuments } from "./specDocuments.js";
 import { insertReportMetadata, type ReportMetadataItem } from "./reportMetadata.js";
 import { renderHtmlReport } from "./reportTemplate.js";
 import type {
+  CoverageItem,
   CoverageSummary,
   DesignSpec,
   FeatureSpec,
@@ -223,18 +224,27 @@ function normalizeMockCoverage(
   variantRoot: string,
 ): CoverageSummary {
   return {
-    modelCoverage: normalizeMockCoverageItems(coverage.modelCoverage, variantRoot),
+    ...coverage,
+    modelCoverage: coverage.modelCoverage
+      ? normalizeMockCoverageItems(coverage.modelCoverage, variantRoot)
+      : coverage.modelCoverage,
     ruleCoverage: normalizeMockCoverageItems(coverage.ruleCoverage, variantRoot),
     scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage, variantRoot),
+    orphanModelReferences: coverage.orphanModelReferences
+      ? normalizeMockReferences(coverage.orphanModelReferences, variantRoot)
+      : coverage.orphanModelReferences,
+    orphanRuleReferences: normalizeMockReferences(coverage.orphanRuleReferences, variantRoot),
+    orphanScenarioReferences: normalizeMockReferences(coverage.orphanScenarioReferences, variantRoot),
   };
 }
 
-function normalizeMockCoverageItems(
-  items: CoverageSummary["modelCoverage"],
+function normalizeMockCoverageItems<T extends CoverageItem>(
+  items: T[],
   variantRoot: string,
-): CoverageSummary["modelCoverage"] {
+): T[] {
   return items.map((item) => ({
     ...item,
+    filePath: item.filePath ? normalizeMockSourcePath(item.filePath, variantRoot) : item.filePath,
     references: normalizeMockReferences(item.references, variantRoot),
   }));
 }
