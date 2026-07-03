@@ -16,8 +16,8 @@ jobs:
     name: Generate and publish mock reports
     runs-on: ubuntu-latest
     env:
-      FEATURE_SPEC_FTP_HOST: ${{ secrets.FEATURE_SPEC_FTP_HOST }}
-      FEATURE_SPEC_FTP_USER: ${{ secrets.FEATURE_SPEC_FTP_USER }}
+      FEATURE_SPEC_FTP_HOST: ${{ secrets.FEATURE_SPEC_FTP_HOST || vars.FEATURE_SPEC_FTP_HOST }}
+      FEATURE_SPEC_FTP_USER: ${{ secrets.FEATURE_SPEC_FTP_USER || vars.FEATURE_SPEC_FTP_USER }}
       FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
       FEATURE_SPEC_FTP_PORT: ${{ vars.FEATURE_SPEC_FTP_PORT || secrets.FEATURE_SPEC_FTP_PORT }}
       FEATURE_SPEC_FTP_SECURE: ${{ vars.FEATURE_SPEC_FTP_SECURE || secrets.FEATURE_SPEC_FTP_SECURE }}
@@ -25,6 +25,20 @@ jobs:
       FEATURE_SPEC_REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_MOCK_REPORT_BASE_URL || secrets.FEATURE_SPEC_MOCK_REPORT_BASE_URL }}
       FEATURE_SPEC_BUILD_NUMBER: ${{ github.run_number }}
     steps:
+      - name: Check FTP publish settings
+        run: |
+          missing=0
+          for name in FEATURE_SPEC_FTP_HOST FEATURE_SPEC_FTP_USER FEATURE_SPEC_FTP_PASSWORD FEATURE_SPEC_REPORT_BASE_URL
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. Add host/user/base URL as repository variables or secrets, and add the password as a repository secret."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v4
 
