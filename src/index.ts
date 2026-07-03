@@ -17,6 +17,9 @@ export {
   validateFeatureSpec,
 } from "./featureSpecs.js";
 export {
+  renderLocalDiffReport,
+} from "./githubActionDiffReport.js";
+export {
   loadMockReportData,
   renderMockDiffReport,
   renderMockFeatureSpecReport,
@@ -47,6 +50,9 @@ export {
   validateSpecGraph,
   validateStackSpec,
 } from "./specDocuments.js";
+export type {
+  LocalDiffReportOptions,
+} from "./githubActionDiffReport.js";
 export type {
   MockReportData,
   MockReportVariant,
