@@ -27,6 +27,45 @@ type ComparedFile = {
   currentSize?: number;
 };
 
+type DiffLine = {
+  kind: "context" | "added" | "removed";
+  previousLine?: number;
+  currentLine?: number;
+  text: string;
+};
+
+type SpecSection = {
+  key: string;
+  title: string;
+  filePath?: string;
+  scenarioIds: string[];
+  text: string;
+};
+
+type SpecDiff = {
+  key: string;
+  title: string;
+  filePath?: string;
+  status: "added" | "removed" | "changed";
+  lines: DiffLine[];
+};
+
+type ScreenshotDiffItem = {
+  path: string;
+  title: string;
+  status: "added" | "removed" | "changed";
+  previousUrl?: string;
+  currentUrl?: string;
+  previousSize?: number;
+  currentSize?: number;
+};
+
+type ScreenshotDiffGroup = {
+  specLabel: string;
+  specPath?: string;
+  items: ScreenshotDiffItem[];
+};
+
 type DiffReport = {
   prNumber: string;
   baseBuild?: string;
@@ -35,6 +74,8 @@ type DiffReport = {
   currentBuildUrl: string;
   baseLabel: "main" | "previous" | "none";
   files: ComparedFile[];
+  specDiffs: SpecDiff[];
+  screenshotDiffs: ScreenshotDiffGroup[];
 };
 
 export async function publishGithubActionDiffReport(
@@ -88,6 +129,8 @@ function emptyReport(config: ReturnType<typeof ftpConfig>, prNumber: string, cur
     currentBuildUrl: publicUrl(config.baseUrl, "build", currentBuild, ""),
     baseLabel: "none",
     files: [],
+    specDiffs: [],
+    screenshotDiffs: [],
   };
 }
 
@@ -132,6 +175,14 @@ async function compareBuilds(
     });
   }
 
+  const previousIndex = await readFileMaybe(join(localRoot, "base", "index.html"));
+  const currentIndex = await readFileMaybe(join(localRoot, "current", "index.html"));
+  const previousSpecs = extractSpecSections(previousIndex ?? "");
+  const currentSpecs = extractSpecSections(currentIndex ?? "");
+  const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
+  const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
+  const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, config, baseBuild, currentBuild);
+
   return {
     prNumber,
     baseBuild,
@@ -140,6 +191,8 @@ async function compareBuilds(
     currentBuildUrl: publicUrl(config.baseUrl, "build", currentBuild, ""),
     baseLabel,
     files,
+    specDiffs,
+    screenshotDiffs,
   };
 }
 
@@ -157,6 +210,14 @@ async function fileInfo(filePath: string) {
   return { hash: createHash("sha256").update(buffer).digest("hex"), size: buffer.byteLength };
 }
 
+async function readFileMaybe(filePath: string) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
 function relativeRemotePath(root: string, filePath: string) {
   return relative(root, filePath).split("\\").join("/");
 }
@@ -168,10 +229,197 @@ function fileKind(filePath: string): ComparedFile["kind"] {
   return "asset";
 }
 
+function extractSpecSections(source: string): SpecSection[] {
+  if (!source) return [];
+  const sections: SpecSection[] = [];
+  const matches = source.matchAll(/<section class="panel">([\s\S]*?)(?=<section class="panel">|<script>|<\/body>)/g);
+  for (const match of matches) {
+    const fragment = match[1] ?? "";
+    const heading = fragment.match(/<h2[^>]*>([\s\S]*?)<\/h2>/)?.[1];
+    if (!heading) continue;
+    const title = textContent(heading).trim();
+    if (!title || title === "Validation" || title === "Models") continue;
+    const filePaths = Array.from(fragment.matchAll(/title="([^":]+\.md):\d+"/g), (item) => item[1]);
+    const scenarioIds = Array.from(fragment.matchAll(/<summary><code>([^<]+)<\/code>/g), (item) => textContent(item[1] ?? ""));
+    const text = specText(fragment);
+    const filePath = filePaths[0];
+    sections.push({
+      key: filePath ?? title,
+      title,
+      filePath,
+      scenarioIds,
+      text,
+    });
+  }
+  return sections;
+}
+
+function specText(fragment: string) {
+  return textContent(fragment)
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function textContent(fragment: string) {
+  return decodeEntities(
+    fragment
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>|<\/li>|<\/summary>|<\/h[1-6]>|<\/div>/gi, "\n")
+      .replace(/<[^>]+>/g, ""),
+  );
+}
+
+function decodeEntities(value: string) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function compareSpecSections(previous: SpecSection[], current: SpecSection[]): SpecDiff[] {
+  const previousByKey = new Map(previous.map((spec) => [spec.key, spec]));
+  const currentByKey = new Map(current.map((spec) => [spec.key, spec]));
+  const keys = Array.from(new Set([...previousByKey.keys(), ...currentByKey.keys()])).sort();
+  const diffs: SpecDiff[] = [];
+  for (const key of keys) {
+    const before = previousByKey.get(key);
+    const after = currentByKey.get(key);
+    const status = !before ? "added" : !after ? "removed" : before.text === after.text ? undefined : "changed";
+    if (!status) continue;
+    diffs.push({
+      key,
+      title: after?.title ?? before?.title ?? key,
+      filePath: after?.filePath ?? before?.filePath,
+      status,
+      lines: diffLines(before?.text ?? "", after?.text ?? ""),
+    });
+  }
+  return diffs;
+}
+
+function diffLines(previous: string, current: string): DiffLine[] {
+  const a = previous.split("\n");
+  const b = current.split("\n");
+  const matrix = Array.from({ length: a.length + 1 }, () => Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i -= 1) {
+    for (let j = b.length - 1; j >= 0; j -= 1) {
+      matrix[i][j] = a[i] === b[j] ? matrix[i + 1][j + 1] + 1 : Math.max(matrix[i + 1][j], matrix[i][j + 1]);
+    }
+  }
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      lines.push({ kind: "context", previousLine: i + 1, currentLine: j + 1, text: a[i] });
+      i += 1;
+      j += 1;
+    } else if (j < b.length && (i === a.length || matrix[i][j + 1] >= matrix[i + 1][j])) {
+      lines.push({ kind: "added", currentLine: j + 1, text: b[j] });
+      j += 1;
+    } else if (i < a.length) {
+      lines.push({ kind: "removed", previousLine: i + 1, text: a[i] });
+      i += 1;
+    }
+  }
+  return compactContext(lines);
+}
+
+function compactContext(lines: DiffLine[]) {
+  const keep = new Set<number>();
+  lines.forEach((line, index) => {
+    if (line.kind === "context") return;
+    for (let offset = -3; offset <= 3; offset += 1) {
+      const candidate = index + offset;
+      if (candidate >= 0 && candidate < lines.length) keep.add(candidate);
+    }
+  });
+  return lines.filter((line, index) => line.kind !== "context" || keep.has(index));
+}
+
+function scenarioSpecMap(specs: SpecSection[]) {
+  const map = new Map<string, SpecSection>();
+  for (const spec of specs) {
+    for (const scenarioId of spec.scenarioIds) {
+      map.set(scenarioId, spec);
+    }
+  }
+  return map;
+}
+
+function groupScreenshotDiffs(
+  files: ComparedFile[],
+  scenarioMap: Map<string, SpecSection>,
+  config: ReturnType<typeof ftpConfig>,
+  baseBuild: string,
+  currentBuild: string,
+): ScreenshotDiffGroup[] {
+  const groups = new Map<string, ScreenshotDiffGroup>();
+  for (const file of files.filter((item) => item.kind === "screenshot" && item.status !== "unchanged")) {
+    const scenarioId = scenarioIdFromScreenshotPath(file.path);
+    const spec = scenarioId ? scenarioMap.get(scenarioId) : undefined;
+    const specLabel = spec?.filePath ?? spec?.title ?? scenarioId ?? "Unmapped screenshots";
+    const group = groups.get(specLabel) ?? { specLabel, specPath: spec?.filePath, items: [] };
+    group.items.push({
+      path: file.path,
+      title: screenshotTitle(file.path, scenarioId),
+      status: file.status,
+      previousUrl: file.status !== "added" ? publicUrl(config.baseUrl, "build", baseBuild, file.path) : undefined,
+      currentUrl: file.status !== "removed" ? publicUrl(config.baseUrl, "build", currentBuild, file.path) : undefined,
+      previousSize: file.previousSize,
+      currentSize: file.currentSize,
+    });
+    groups.set(specLabel, group);
+  }
+  return Array.from(groups.values()).sort((a, b) => a.specLabel.localeCompare(b.specLabel));
+}
+
+function scenarioIdFromScreenshotPath(filePath: string) {
+  return basename(filePath).match(/^(.+?)-line-\d+-/)?.[1];
+}
+
+function screenshotTitle(filePath: string, scenarioId: string | undefined) {
+  const name = basename(filePath).replace(/\.png$/i, "");
+  return scenarioId ? name.replace(`${scenarioId}-`, `${scenarioId} `) : name;
+}
+
 function renderDiffReport(report: DiffReport) {
-  const changed = report.files.filter((file) => file.status !== "unchanged");
-  const byKind = (kind: ComparedFile["kind"]) => changed.filter((file) => file.kind === kind);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature spec PR diff</title><style>body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}</style></head><body><h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1><p>Generated ${html(new Date().toISOString())}.</p><section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${changed.length} changed file${changed.length === 1 ? "" : "s"}</span> <span class="muted">${report.files.length} file${report.files.length === 1 ? "" : "s"} checked</span></p></section>${renderFileSection("Report output", byKind("report"))}${renderFileSection("Screenshots", byKind("screenshot"))}${renderFileSection("Other assets", byKind("asset"))}</body></html>`;
+  const changed = report.files.filter((file) => file.status !== "unchanged" && file.kind !== "report");
+  const assetChanges = changed.filter((file) => file.kind === "asset");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature spec PR diff</title><style>body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}.diff-add td{background:#dafbe1}.diff-del td{background:#ffebe9}.diff-context td{background:#fff}.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}</style></head><body><h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1><p>Generated ${html(new Date().toISOString())}.</p><section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>${renderSpecDiffs(report.specDiffs)}${renderScreenshotDiffs(report.screenshotDiffs)}${renderFileSection("Other assets", assetChanges)}</body></html>`;
+}
+
+function renderSpecDiffs(specDiffs: SpecDiff[]) {
+  if (!specDiffs.length) return `<section class="panel"><h2>Spec changes</h2><p class="muted">No spec text changes detected in the published report.</p></section>`;
+  return `<section class="panel"><h2>Spec changes</h2>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
+}
+
+function renderSpecDiff(diff: SpecDiff) {
+  return `<details open><summary><strong>${html(diff.filePath ?? diff.title)}</strong> <span class="badge ${diff.status}">${html(diff.status)}</span></summary><table class="diff"><tbody>${diff.lines.map(renderDiffLine).join("")}</tbody></table></details>`;
+}
+
+function renderDiffLine(line: DiffLine) {
+  const marker = line.kind === "added" ? "+" : line.kind === "removed" ? "-" : "";
+  return `<tr class="diff-${line.kind}"><td class="line-no">${line.previousLine ?? ""}</td><td class="line-no">${line.currentLine ?? ""}</td><td>${html(marker)} ${html(line.text)}</td></tr>`;
+}
+
+function renderScreenshotDiffs(groups: ScreenshotDiffGroup[]) {
+  if (!groups.length) return `<section class="panel"><h2>Screenshots</h2><p class="muted">No screenshot changes.</p></section>`;
+  return `<section class="panel"><h2>Screenshots</h2>${groups.map(renderScreenshotGroup).join("\n")}</section>`;
+}
+
+function renderScreenshotGroup(group: ScreenshotDiffGroup) {
+  return `<section><h3>${html(group.specPath ?? group.specLabel)}</h3>${group.items.map(renderScreenshotItem).join("\n")}</section>`;
+}
+
+function renderScreenshotItem(item: ScreenshotDiffItem) {
+  const before = item.previousUrl ? `<div class="image-card"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}"></div>` : "";
+  const after = item.currentUrl ? `<div class="image-card"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}"></div>` : "";
+  return `<details open><summary><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair">${before}${after}</div></details>`;
 }
 
 function renderFileSection(title: string, files: ComparedFile[]) {
@@ -179,18 +427,25 @@ function renderFileSection(title: string, files: ComparedFile[]) {
   return `<section class="panel"><h2>${html(title)}</h2><table><thead><tr><th>Status</th><th>File</th><th>Size change</th></tr></thead><tbody>${files.map((file) => `<tr><td class="${file.status}">${html(file.status)}</td><td><code>${html(file.path)}</code></td><td>${html(sizeChange(file))}</td></tr>`).join("")}</tbody></table></section>`;
 }
 
-function sizeChange(file: ComparedFile) {
+function sizeChange(file: { previousSize?: number; currentSize?: number }) {
   if (file.previousSize === undefined) return `+${file.currentSize ?? 0} bytes`;
   if (file.currentSize === undefined) return `-${file.previousSize} bytes`;
   const diff = file.currentSize - file.previousSize;
   return diff === 0 ? "same size" : `${diff > 0 ? "+" : ""}${diff} bytes`;
 }
 
+function screenshotChangeCount(report: DiffReport) {
+  return report.screenshotDiffs.reduce((sum, group) => sum + group.items.length, 0);
+}
+
 function commentBody(report: DiffReport, reportUrl: string) {
-  const changed = report.files.filter((file) => file.status !== "unchanged");
-  const reportChanges = changed.filter((file) => file.kind === "report").length;
-  const screenshotChanges = changed.filter((file) => file.kind === "screenshot").length;
-  return ["## Feature spec PR diff", "", `[Open the diff report](${reportUrl}) for ${comparisonText(report)}.`, "", `Changed files: **${changed.length}** total, **${reportChanges}** report output, **${screenshotChanges}** screenshots.`].join("\n");
+  return [
+    "## Feature spec PR diff",
+    "",
+    `[Open the diff report](${reportUrl}) for ${comparisonText(report)}.`,
+    "",
+    `Changed: **${report.specDiffs.length}** spec file(s), **${screenshotChangeCount(report)}** screenshot(s).`,
+  ].join("\n");
 }
 
 function comparisonText(report: DiffReport) {
