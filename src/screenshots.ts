@@ -4,7 +4,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { expandArtifactPatterns } from "./filePatterns.js";
-import type { SpecScreenshot } from "./types.js";
+import type { FeatureSpec, SpecScreenshot, ValidationIssue } from "./types.js";
 
 /** Load screenshot evidence manifests and normalize entries for report rendering. */
 export async function collectSpecScreenshots(patterns: string[]) {
@@ -23,6 +23,34 @@ export async function collectSpecScreenshots(patterns: string[]) {
     }
   }
   return screenshots;
+}
+
+/** Validate that every scenario step has screenshot evidence in the report inputs. */
+export function validateScenarioScreenshots(
+  specs: FeatureSpec[],
+  screenshots: SpecScreenshot[],
+) {
+  const screenshotKeys = new Set(
+    screenshots.map((screenshot) => screenshotKey(screenshot.specPath, screenshot.line)),
+  );
+  const issues: ValidationIssue[] = [];
+
+  for (const spec of specs) {
+    for (const scenario of spec.scenarios) {
+      for (const step of scenario.steps) {
+        if (screenshotKeys.has(screenshotKey(spec.filePath, step.line))) continue;
+        issues.push({
+          code: "missing-screenshot-evidence",
+          severity: "error",
+          filePath: spec.filePath,
+          line: step.line,
+          message: `Missing screenshot evidence for ${scenario.id} ${step.keyword} ${step.text}`,
+        });
+      }
+    }
+  }
+
+  return issues;
 }
 
 export function screenshotKey(filePath: string, line: number) {
