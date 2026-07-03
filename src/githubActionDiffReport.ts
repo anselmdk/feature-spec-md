@@ -53,7 +53,7 @@ type SpecDiff = {
 type ScreenshotDiffItem = {
   path: string;
   title: string;
-  status: "added" | "removed" | "changed";
+  status: ComparedFile["status"];
   previousUrl?: string;
   currentUrl?: string;
   previousSize?: number;
