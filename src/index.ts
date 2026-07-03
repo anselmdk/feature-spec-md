@@ -16,6 +16,12 @@ export {
   validateCoverage,
   validateFeatureSpec,
 } from "./featureSpecs.js";
+export {
+  createMockReportData,
+  renderMockDiffReport,
+  renderMockFeatureSpecReport,
+  writeMockReports,
+} from "./mockReports.js";
 export { renderHtmlReport } from "./reportTemplate.js";
 export {
   insertReportMetadata,
@@ -41,6 +47,11 @@ export {
   validateSpecGraph,
   validateStackSpec,
 } from "./specDocuments.js";
+export type {
+  MockReportData,
+  MockReportVariant,
+  WriteMockReportsOptions,
+} from "./mockReports.js";
 export type {
   ReportMetadataItem,
 } from "./reportMetadata.js";
