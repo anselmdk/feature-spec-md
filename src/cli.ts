@@ -8,6 +8,7 @@ import path from "node:path";
 import {
   collectSpecScreenshots,
   renderHtmlReport,
+  validateScenarioScreenshots,
   writeTextFile,
   type ValidationIssue,
 } from "./index.js";
@@ -121,6 +122,19 @@ async function runReport(options: CliOptions) {
   const screenshots = options.screenshots
     ? await collectSpecScreenshots(optionList(options.screenshots, ""))
     : [];
+  const enforceEvidence =
+    options["enforce-evidence"] === "true" ||
+    options["require-declared-evidence"] === "true" ||
+    options["require-screenshots"] === "true";
+  const screenshotIssues = enforceEvidence
+    ? validateScenarioScreenshots(result.features, screenshots)
+    : [];
+  const validationIssues = [
+    ...result.validationIssues,
+    ...result.coverageIssues,
+    ...screenshotIssues,
+  ];
+
   await writeTextFile(
     out,
     renderHtmlReport(result.features, {
@@ -130,11 +144,14 @@ async function runReport(options: CliOptions) {
       designs: result.designs,
       coverage: result.coverage,
       screenshots,
-      validationIssues: [...result.validationIssues, ...result.coverageIssues],
+      validationIssues,
       ...githubSourceLinkOptions(),
     }),
   );
   console.log(`Feature spec report written to ${out}`);
+
+  printIssues(screenshotIssues);
+  if (screenshotIssues.length) process.exit(1);
 }
 
 async function runInit(options: CliOptions) {
@@ -242,7 +259,7 @@ Usage:
   feature-spec-md init [--kind feature|model|stack|design] [--dir specs]
   feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
   feature-spec-md coverage [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
-  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--enforce-evidence] [--out test-results/feature-spec-report/index.html]
   feature-spec-md github-report [--report-dir test-results/spec-report] [--publish artifact|ftp]
   feature-spec-md github-diff-report --publish ftp --pr-number 123
 
@@ -250,6 +267,9 @@ Options:
   --require-model-coverage      Fail when model items have no matching test references.
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
+  --enforce-evidence            For report, fail when declared screenshot evidence is missing.
+  --require-declared-evidence   Alias for --enforce-evidence.
+  --require-screenshots         Deprecated alias for --enforce-evidence.
   --fail-on-missing             Exit with status 1 when coverage finds missing model items, rules, or scenarios.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
@@ -258,12 +278,12 @@ GitHub report publishing:
   --publish artifact            Write summary and outputs for GitHub artifact upload.
   --publish ftp                 Upload report files and an index.html to FTP; no GitHub artifact is needed.
   --ftp-host                    FTP host, or FEATURE_SPEC_FTP_HOST.
-  --ftp-user                    FTP username, or FEATURE_SPEC_FTP_USER.
+  --ftp-user                    FTP user, or FEATURE_SPEC_FTP_USER.
   --ftp-password                FTP password, or FEATURE_SPEC_FTP_PASSWORD.
-  --ftp-remote-dir              FTP root directory for reports, or FEATURE_SPEC_FTP_REMOTE_DIR.
-  --base-url                    Public base URL, or FEATURE_SPEC_REPORT_BASE_URL.
-  --build-number                Numeric build number, or FEATURE_SPEC_BUILD_NUMBER / GITHUB_RUN_NUMBER.
-  --pr-number                   Numeric PR number, or FEATURE_SPEC_PR_NUMBER. Required for github-diff-report.
+  --ftp-remote-dir              FTP remote directory, or FEATURE_SPEC_FTP_REMOTE_DIR.
+  --report-base-url             Public report base URL, or FEATURE_SPEC_REPORT_BASE_URL.
+  --build-number                Build number, or FEATURE_SPEC_BUILD_NUMBER/GITHUB_RUN_NUMBER.
+  --pr-number                   Pull request number, or FEATURE_SPEC_PR_NUMBER.
 `);
 }
 
@@ -271,127 +291,97 @@ function fileNameForKind(kind: string) {
   if (kind === "model") return "example.model.md";
   if (kind === "stack") return "example.stack.md";
   if (kind === "design") return "example.design.md";
-  return "account-access.feature.md";
+  return "example.feature.md";
 }
 
 function exampleForKind(kind: string) {
-  if (kind === "model") return exampleModel;
-  if (kind === "stack") return exampleStack;
-  if (kind === "design") return exampleDesign;
-  return exampleFeature;
-}
-
-const exampleModel = `---
-id: ACCOUNT
-title: Account model
+  if (kind === "model") {
+    return `---
+id: EXAMPLE
+title: Example domain model
 status: draft
 ---
 
-# Account model
+# Example domain model
 
 ## Purpose
 
-Define the shared account concepts used by account access features.
+Define the shared domain vocabulary for the feature set.
 
 ## Model
 
-### ACCOUNT-M001: Account
+### EXAMPLE-M001: Example entity
 
-An account represents one registered person.
-`;
-
-const exampleFeature = `---
-id: ACCOUNT-ACCESS
-title: Account access
-status: draft
-model: ACCOUNT
----
-
-# Account access
-
-## Purpose
-
-People can access their own account after proving their identity.
+An entity that participates in the feature behavior.
 
 ## Rules
 
-- ACCOUNT-ACCESS-R001: A person MUST prove control of a registered email address before accessing an account.
-- ACCOUNT-ACCESS-R002: The system MUST NOT reveal whether an unknown email address belongs to an account.
-
-## Scenarios
-
-### ACCOUNT-ACCESS-S001: Registered person signs in
-
-Given a registered person is on the sign-in page
-When they request and open a valid sign-in link
-Then they are signed in
+- EXAMPLE-R001: The example entity MUST have a stable identifier.
 `;
-
-const exampleStack = `---
-id: ACCOUNT-STACK
-title: Account stack
+  }
+  if (kind === "stack") {
+    return `---
+id: EXAMPLE-STACK
+title: Example stack
 status: draft
 ---
 
-# Account stack
+# Example stack
 
 ## Purpose
 
-Define the initial technical stack for the account access demo.
-
-## Context
-
-The demo is a small browser-based application with automated tests.
+Document the technical stack choices that shape the implementation.
 
 ## Stack
 
 | Area | Choice |
-|---|---|
+| --- | --- |
 | Frontend | React |
-| Language | TypeScript |
 | Testing | Playwright |
-
-## Rationale
-
-React, TypeScript, and Playwright fit the interaction-heavy UI and scenario-based testing style.
-
-## Consequences
-
-The stack is optimized for a browser UI and static deployment.
 `;
-
-const exampleDesign = `---
-id: ACCOUNT-DESIGN
-title: Account design
+  }
+  if (kind === "design") {
+    return `---
+id: EXAMPLE-DESIGN
+title: Example design
 status: draft
-model: ACCOUNT
+model: EXAMPLE
 ---
 
-# Account design
+# Example design
 
 ## Purpose
 
-Define the initial interaction and visual design direction for account access.
+Describe the user experience and visual direction for the feature.
 
 ## Design
 
-The account access flow should feel simple, calm, and direct.
-
-## Principles
-
-- Keep the sign-in flow short.
-- Avoid revealing whether an email address exists.
-- Make recovery states easy to understand.
-
-## Layout
-
-The sign-in page uses one primary form and one primary action.
-
-## Interaction
-
-Validation messages appear near the field they describe.
-
-## Visual style
-
-Use a clean, low-distraction visual style.
+The interface should make the primary task clear and keep feedback visible.
 `;
+  }
+  return `---
+id: EXAMPLE-FEATURE
+title: Example feature
+status: draft
+model: EXAMPLE
+---
+
+# Example feature
+
+## Purpose
+
+Describe the user-facing behavior this feature provides.
+
+## Rules
+
+- EXAMPLE-FEATURE-R001: The feature MUST provide a clear success state.
+
+## Scenarios
+
+### EXAMPLE-FEATURE-S001: User completes the happy path
+
+Given the user is on the feature screen
+When they complete the primary action
+Then they see the success state
+`;
+}

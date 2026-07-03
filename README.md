@@ -20,22 +20,12 @@ It gives you:
 - **Stable IDs** for model items, rules, and scenarios, so tests can reference exactly what they implement.
 - **Validation** that checks frontmatter, headings, IDs, cross-document references, and test coverage expectations.
 - **Coverage reporting** that shows which model items, rules, and scenarios are implemented by tests.
+- **Scenario evidence policy** so specs can declare whether behavior should be tested by unit, integration, Playwright, manual, or no executable tests.
 - **HTML reports** that are useful for reviews, CI artifacts, or published build reports.
 - **Screenshot evidence** for scenarios when using the Playwright helper.
 - **A library API** for projects that want to parse specs, check coverage, collect screenshots, or render reports from their own tooling.
 
 The specs are meant to be written with an AI before implementation. The tests are meant to be written with an AI from those specs. `feature-spec-md` then checks that the Markdown stays structured and that executable tests still cover the model items, rules, and scenarios the specs define.
-
-## Why this exists
-
-AI can write tests quickly, but it needs a stable source of truth. Free-form product notes are often too ambiguous, and generated tests are hard to audit later. `feature-spec-md` keeps the source of truth in readable Markdown and makes the AI preserve IDs such as `ACCOUNT-M001`, `TICKET-R001`, or `TICKET-S001` in the generated tests.
-
-That gives humans a simple review loop:
-
-1. Read the Markdown spec.
-2. Read or run the generated tests.
-3. Run `feature-spec-md check` or `coverage` to see what is missing.
-4. Open the HTML report to review the implemented scenarios, rules, model items, and screenshots.
 
 ## Demo project
 
@@ -75,9 +65,24 @@ A person who has completed registration and can request sign-in links.
 Feature specs describe user-facing behavior with rules and scenarios. Rules and scenarios get stable IDs that tests can reference.
 
 ```md
-### ACCOUNT-ACCESS-R001: Sign-in links expire
+---
+id: ACCOUNT-ACCESS
+title: Account access
+test: playwright
+screenshots: required
+---
 
-Sign-in links can only be used within the configured expiry window.
+# Account access
+
+## Purpose
+
+Allow registered people to access their account securely.
+
+## Rules
+
+- ACCOUNT-ACCESS-R001: Sign-in links MUST expire.
+
+## Scenarios
 
 ### ACCOUNT-ACCESS-S001: Registered person signs in
 
@@ -86,6 +91,27 @@ When they request and open a valid sign-in link
 Then they are signed in
 ```
 
+Feature specs can declare the expected test and evidence policy:
+
+```txt
+test: unit | integration | playwright | manual | skip
+screenshots: required | optional | skip
+```
+
+If `screenshots` is omitted, Playwright scenarios default to `required`; non-Playwright scenarios default to `skip`. Scenario-level overrides can be written directly below a scenario heading:
+
+```md
+### ACCOUNT-ACCESS-S002: Link expiry is calculated
+Test: unit
+Screenshots: skip
+
+Given a sign-in link was created 31 minutes ago
+When expiry is calculated
+Then the link is expired
+```
+
+See [SPEC_FORMAT.md](SPEC_FORMAT.md) and [docs/evidence-policy.md](docs/evidence-policy.md) for the exact format.
+
 ### Stack specs
 
 Stack specs document technical decisions that shape the implementation: framework, storage, test runner, deployment constraints, external services, or architecture decisions.
@@ -93,8 +119,6 @@ Stack specs document technical decisions that shape the implementation: framewor
 ### Design specs
 
 Design specs capture product, UI, and interaction direction: layout priorities, states, accessibility expectations, empty states, or copy tone.
-
-See [SPEC_FORMAT.md](SPEC_FORMAT.md) for the exact document format.
 
 ## How tests connect to specs
 
@@ -126,11 +150,12 @@ npx feature-spec-md init --kind design --dir specs
 ## Workflow
 
 1. Ask an AI to draft or update `*.model.md`, `*.feature.md`, `*.stack.md`, and `*.design.md` files.
-2. Run `npx feature-spec-md check` until the spec set is valid.
-3. Ask an AI to write executable tests from the specs, preserving the relevant `-M001`, `-R001`, and `-S001` IDs in the test source.
-4. Run `npx feature-spec-md coverage` to see which scenarios, rules, and model items have tests.
-5. Run `npx feature-spec-md report` to generate an HTML implementation report for review or CI artifacts.
-6. Use `npx feature-spec-md github-report` in GitHub Actions when the report should be linked from the job summary or published.
+2. Declare each feature/scenario test evidence policy where the default is not right.
+3. Run `npx feature-spec-md check` until the spec set is valid.
+4. Ask an AI to write executable tests from the specs, preserving the relevant `-M001`, `-R001`, and `-S001` IDs in the test source.
+5. Run `npx feature-spec-md coverage` to see which scenarios, rules, and model items have tests.
+6. Run `npx feature-spec-md report` to generate an HTML implementation report for review or CI artifacts.
+7. Use `npx feature-spec-md github-report` in GitHub Actions when the report should be linked from the job summary or published.
 
 The longer flow, including AI prompts and CI setup, is in [docs/spec-driven-flow.md](docs/spec-driven-flow.md). The demo repository also shows the flow in practice: <https://github.com/anselmdk/feature-spec-md-demo>.
 
@@ -161,16 +186,6 @@ npx feature-spec-md check \
   --tests "e2e/**/*.spec.ts"
 ```
 
-### `init`
-
-Creates starter Markdown files for one spec kind.
-
-```bash
-npx feature-spec-md init --kind feature --dir specs
-```
-
-Supported kinds are `model`, `feature`, `stack`, and `design`.
-
 ### `check`
 
 Validates the spec set and, by default, requires scenario coverage when tests are scanned.
@@ -180,12 +195,6 @@ npx feature-spec-md check
 ```
 
 `check` validates spec structure, references between documents, and test coverage. Use `--require-scenario-coverage=false` while drafting. Use `--require-rule-coverage` and `--require-model-coverage` when rules and model items must also fail validation if they have no test references.
-
-The demo uses stricter coverage gates for all tests:
-
-```bash
-feature-spec-md check --tests "tests/**/*.ts" --require-rule-coverage --require-model-coverage
-```
 
 ### `coverage`
 
@@ -214,19 +223,20 @@ npx feature-spec-md report \
   --screenshots "test-results/spec-report/screenshots-*.json"
 ```
 
-The demo report is published at <https://feature-spec-md.anselm.dk/demo/> and includes scenario screenshots, so it is the best place to see what the report output looks like.
+When CI should fail for missing declared screenshot evidence, add `--enforce-evidence`:
+
+```bash
+npx feature-spec-md report \
+  --screenshots "test-results/spec-report/screenshots-*.json" \
+  --enforce-evidence \
+  --out test-results/spec-report/index.html
+```
+
+This gate only fails for scenarios whose resolved screenshot policy is `required`.
 
 ### `github-report`
 
 Writes a GitHub Actions job summary and prepares the generated report for either artifact upload or FTP publishing.
-
-```bash
-npx feature-spec-md github-report \
-  --report-dir test-results/spec-report \
-  --publish artifact
-```
-
-Use `--publish ftp` when the report should be uploaded to a public report site from CI.
 
 ```bash
 npx feature-spec-md github-report \
@@ -238,29 +248,13 @@ npx feature-spec-md github-report \
 
 The package exports a Playwright helper from `@anselmdk/feature-spec-md/playwright`. It maps scenario step text back to the spec line, wraps the implementation in a Playwright `test.step`, captures a screenshot after the step, attaches it to the test, and writes a screenshot manifest such as `test-results/spec-report/screenshots-0.json`.
 
-That manifest can then be passed to `feature-spec-md report` with `--screenshots "test-results/spec-report/screenshots-*.json"` so the HTML report can show scenario evidence next to the relevant spec step.
+That manifest can then be passed to `feature-spec-md report` with `--screenshots "test-results/spec-report/screenshots-*.json"` so the HTML report can show scenario evidence next to the relevant spec step. With `--enforce-evidence`, missing screenshots fail only for scenarios declared as `screenshots: required`.
 
 ## GitHub Actions report publishing
 
 `feature-spec-md github-report` writes the GitHub Actions job summary and can either prepare outputs for a GitHub artifact upload or publish the generated report to FTP.
 
-```bash
-npx feature-spec-md github-report \
-  --report-dir test-results/spec-report \
-  --publish ftp
-```
-
-For FTP publishing, configure repository secrets in GitHub under **Settings → Secrets and variables → Actions → Repository secrets**. For this repository, the direct settings URL is:
-
-```txt
-https://github.com/anselmdk/feature-spec-md/settings/secrets/actions
-```
-
-GitHub's documentation for repository secrets is here:
-
-```txt
-https://docs.github.com/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
-```
+For FTP publishing, configure repository secrets in GitHub under **Settings → Secrets and variables → Actions → Repository secrets**.
 
 Required secrets or environment variables:
 
@@ -292,20 +286,6 @@ Example GitHub Actions step:
     FEATURE_SPEC_REPORT_BASE_URL: ${{ secrets.FEATURE_SPEC_REPORT_BASE_URL }}
 ```
 
-With `FEATURE_SPEC_REPORT_BASE_URL=http://feature-spec-md.anselm.dk/` and GitHub Actions build number `42`, the report is uploaded to a build-numbered directory and linked as:
-
-```txt
-http://feature-spec-md.anselm.dk/42/
-```
-
-The build index is created or updated at:
-
-```txt
-http://feature-spec-md.anselm.dk/
-```
-
-FTP reports are uploaded into a build-numbered directory using `GITHUB_RUN_NUMBER`, and an `index.html` file is created or updated at the public base URL so all uploaded builds can be browsed. When FTP publishing is used, the command emits `upload-github-artifact=false` and links the GitHub Actions job summary directly to the hosted report URL.
-
 ## Library API
 
 Most integrations can use the top-level document API:
@@ -316,6 +296,7 @@ import {
   collectSpecScreenshots,
   parseSpecDocument,
   renderHtmlReport,
+  validateScenarioScreenshots,
   validateSpecDocument,
 } from "@anselmdk/feature-spec-md";
 ```
@@ -326,8 +307,8 @@ Useful exports include:
 - `validateSpecDocument` and `validateSpecGraph` for checking one document or a connected spec set.
 - `checkSpecDocuments` for loading specs and tests, validating documents, and computing coverage in one call.
 - `buildSpecCoverageSummary` and `collectSpecTestReferences` for custom coverage workflows.
+- `collectSpecScreenshots` and `validateScenarioScreenshots` for loading and enforcing screenshot evidence.
 - `renderHtmlReport` for generating the same report UI from your own integration.
-- `collectSpecScreenshots` for loading screenshot manifest files before rendering a report.
 - `writeTextFile` for small report-writing integrations.
 
 Feature-only helpers such as `parseFeatureSpec` and `checkFeatureSpecs` remain available for compatibility.

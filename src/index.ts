@@ -17,7 +17,10 @@ export {
   validateFeatureSpec,
 } from "./featureSpecs.js";
 export { renderHtmlReport } from "./reportTemplate.js";
-export { collectSpecScreenshots } from "./screenshots.js";
+export {
+  collectSpecScreenshots,
+  validateScenarioScreenshots,
+} from "./screenshots.js";
 export {
   buildSpecCoverageSummary,
   checkSpecDocuments,
@@ -48,6 +51,9 @@ export type {
   ModelReferenceFrontmatter,
   ModelSpec,
   RuleKeyword,
+  ScenarioEvidencePolicy,
+  ScenarioTestType,
+  ScreenshotPolicy,
   SpecDocument,
   SpecFrontmatter,
   SpecScreenshot,

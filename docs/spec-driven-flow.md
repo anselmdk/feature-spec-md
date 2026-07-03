@@ -4,9 +4,9 @@
 
 ```txt
 AI drafts specs
--> humans review intent
+-> humans review intent and evidence policy
 -> AI writes tests from stable IDs
--> tooling checks coverage
+-> tooling checks coverage and declared evidence
 -> implementation follows failing tests
 -> reports show what is implemented
 ```
@@ -54,7 +54,9 @@ Useful instruction:
 ```txt
 Create feature-spec-md documents for this change. Keep the documents small.
 Use stable uppercase IDs. Put durable behavior in rules. Put testable examples
-in scenarios. Do not include test mappings inside the specs.
+in scenarios. For each feature or scenario, declare whether the expected test
+is unit, integration, playwright, manual, or skip. Require screenshots only for
+UI flows where visual evidence should be part of the review.
 ```
 
 Run:
@@ -74,8 +76,33 @@ Check that:
 - model terms are clear enough for test authors
 - feature rules are durable product truths
 - scenarios are concrete enough to become executable tests
+- each scenario has the right test policy
+- screenshots are required only for UI/browser behavior where visual evidence is valuable
 - stack choices are specific enough to guide implementation
 - design direction covers the visible behavior users will judge
+
+Example feature-level policy for UI behavior:
+
+```md
+---
+id: ACCOUNT-ACCESS
+title: Account access
+test: playwright
+screenshots: required
+---
+```
+
+Example scenario-level override for unit-only behavior:
+
+```md
+### ACCOUNT-ACCESS-S002: Link expiry is calculated
+Test: unit
+Screenshots: skip
+
+Given a sign-in link was created 31 minutes ago
+When expiry is calculated
+Then the link is expired
+```
 
 Then run:
 
@@ -87,14 +114,17 @@ This keeps the spec set valid while allowing missing tests.
 
 ## 3. Ask AI To Write Tests From The Specs
 
-Give the AI the relevant spec files and tell it to write executable tests that preserve spec IDs in the test source.
+Give the AI the relevant spec files and tell it to write executable tests that preserve spec IDs in the test source and match the declared test policy.
 
 Useful instruction:
 
 ```txt
 Write tests from these feature-spec-md specs. Each scenario test must include
 the scenario ID in the test title. Add comments or annotations for covered
-rule IDs and model item IDs. Do not invent IDs that are not in the specs.
+rule IDs and model item IDs. Use Playwright and the screenshot evidence helper
+for scenarios declared as test: playwright with screenshots: required. Use unit
+or integration tests for scenarios declared that way. Do not invent IDs that are
+not in the specs.
 ```
 
 Example:
@@ -137,7 +167,7 @@ Run:
 npx feature-spec-md report --out test-results/feature-spec-report/index.html
 ```
 
-The report is useful as a PR artifact because it shows specs, coverage state, validation issues, and optional screenshot evidence.
+The report is useful as a PR artifact because it shows specs, coverage state, validation issues, declared evidence policy, and optional screenshot evidence.
 
 If your tests produce screenshot manifests, include them:
 
@@ -146,6 +176,17 @@ npx feature-spec-md report \
   --screenshots "test-results/spec-report/screenshots-*.json" \
   --out test-results/feature-spec-report/index.html
 ```
+
+When missing declared screenshot evidence should block the build, enforce evidence policy:
+
+```bash
+npx feature-spec-md report \
+  --screenshots "test-results/spec-report/screenshots-*.json" \
+  --enforce-evidence \
+  --out test-results/feature-spec-report/index.html
+```
+
+The gate only fails for scenarios whose resolved screenshot policy is `required`.
 
 Screenshot manifest shape:
 
@@ -162,14 +203,32 @@ Screenshot manifest shape:
 }
 ```
 
-## 6. Keep The Loop Honest
+## 6. Publish The Report From CI
+
+A typical CI sequence is:
+
+```bash
+npm run build
+npx feature-spec-md check --require-rule-coverage --require-model-coverage
+npx feature-spec-md coverage --fail-on-missing
+npm test
+npx feature-spec-md report \
+  --screenshots "test-results/spec-report/screenshots-*.json" \
+  --enforce-evidence \
+  --out test-results/spec-report/index.html
+npx feature-spec-md github-report --publish ftp --report-dir test-results/spec-report
+```
+
+Use `--enforce-evidence` when the project wants missing required screenshots to fail the build. Leave it out when the report should show screenshot state without blocking.
+
+## 7. Keep The Loop Honest
 
 When behavior changes, update specs first, then regenerate or update tests from the changed specs.
 
 The expected loop is:
 
 ```txt
-spec change -> validation -> AI test update -> coverage -> implementation -> report
+spec change -> validation -> AI test update -> coverage -> implementation -> evidence report
 ```
 
 That keeps the AI-generated work anchored to a small, reviewable contract instead of a loose conversation history.
