@@ -15,8 +15,3 @@ export function verifiesReplyDraftMock() {
   // Covers SUPPORT-REPLY-R001 and SUPPORT-REPLY-S001.
   return draftReply("Existing draft", "Updated draft");
 }
-
-export function legacyReferenceForWarningState() {
-  // Deliberately orphaned so the mock report has an issue state: SUPPORT-INBOX-R999.
-  return true;
-}
