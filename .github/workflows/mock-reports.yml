@@ -1,0 +1,74 @@
+name: Mock feature spec reports
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mock-feature-spec-reports-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Generate and publish mock reports
+    runs-on: ubuntu-latest
+    env:
+      FEATURE_SPEC_FTP_HOST: ${{ secrets.FEATURE_SPEC_FTP_HOST }}
+      FEATURE_SPEC_FTP_USER: ${{ secrets.FEATURE_SPEC_FTP_USER }}
+      FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
+      FEATURE_SPEC_FTP_PORT: ${{ vars.FEATURE_SPEC_FTP_PORT || secrets.FEATURE_SPEC_FTP_PORT }}
+      FEATURE_SPEC_FTP_SECURE: ${{ vars.FEATURE_SPEC_FTP_SECURE || secrets.FEATURE_SPEC_FTP_SECURE }}
+      FEATURE_SPEC_FTP_REMOTE_DIR: ${{ vars.FEATURE_SPEC_MOCK_FTP_REMOTE_DIR || secrets.FEATURE_SPEC_MOCK_FTP_REMOTE_DIR }}
+      FEATURE_SPEC_REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_MOCK_REPORT_BASE_URL || secrets.FEATURE_SPEC_MOCK_REPORT_BASE_URL }}
+      FEATURE_SPEC_BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build library
+        run: npm run build
+
+      - name: Generate mock reports
+        run: npm run report:mock
+
+      - name: Add mock report index
+        run: |
+          cat > test-results/mock-reports/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Feature spec mock reports</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; color: #1f2328; }
+              li { margin: 0.5rem 0; }
+              a { color: #0969da; }
+            </style>
+          </head>
+          <body>
+            <h1>Feature spec mock reports</h1>
+            <p>Generated from the library-owned mock fixtures.</p>
+            <ul>
+              <li><a href="feature-spec-report/">Current feature spec report</a></li>
+              <li><a href="previous-feature-spec-report/">Previous feature spec report</a></li>
+              <li><a href="diff-report/">Mock PR diff report</a></li>
+            </ul>
+          </body>
+          </html>
+          HTML
+
+      - name: Publish mock reports via FTP
+        run: node dist/cli.js github-report --publish ftp --report-dir test-results/mock-reports --name mock-feature-spec-reports
