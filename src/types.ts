@@ -16,8 +16,19 @@ export type ModelReferenceFrontmatter = SpecFrontmatter & {
   models?: string[] | string;
 };
 
+export type ScenarioTestType = "unit" | "integration" | "playwright" | "manual" | "skip";
+export type ScreenshotPolicy = "required" | "optional" | "skip";
+
+export type ScenarioEvidencePolicy = {
+  test: ScenarioTestType;
+  screenshots: ScreenshotPolicy;
+};
+
 /** Frontmatter fields supported by `*.feature.md` files. */
-export type FeatureFrontmatter = ModelReferenceFrontmatter;
+export type FeatureFrontmatter = ModelReferenceFrontmatter & {
+  test?: ScenarioTestType;
+  screenshots?: ScreenshotPolicy;
+};
 
 /** Frontmatter fields supported by `*.design.md` files. */
 export type DesignFrontmatter = ModelReferenceFrontmatter;
@@ -102,6 +113,7 @@ export type FeatureScenario = {
   id: string;
   title: string;
   line: number;
+  evidence: ScenarioEvidencePolicy;
   steps: FeatureStep[];
 };
 
