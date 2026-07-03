@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { html } from "./html.js";
@@ -16,6 +16,19 @@ import {
 import { writeGithubOutput, writeGithubSummary } from "./githubActionOutput.js";
 
 export type GithubActionDiffReportOptions = GithubActionOptions;
+
+export type LocalDiffReportOptions = {
+  previousDir: string;
+  currentDir: string;
+  prNumber?: string;
+  baseBuild?: string;
+  currentBuild?: string;
+  baseBuildUrl?: string;
+  currentBuildUrl?: string;
+  baseLabel?: DiffReport["baseLabel"];
+  previousAssetUrlPrefix?: string;
+  currentAssetUrlPrefix?: string;
+};
 
 type ComparedFile = {
   path: string;
@@ -122,6 +135,38 @@ export async function publishGithubActionDiffReport(
   console.log(`Feature spec PR diff report uploaded to ${reportUrl}`);
 }
 
+export async function renderLocalDiffReport(options: LocalDiffReportOptions) {
+  return renderDiffReport(await compareLocalBuilds(options));
+}
+
+async function compareLocalBuilds(options: LocalDiffReportOptions): Promise<DiffReport> {
+  const baseBuild = options.baseBuild ?? "127";
+  const currentBuild = options.currentBuild ?? "128";
+  const files = await compareLocalFiles(options.previousDir, options.currentDir);
+  const previousIndex = await readFileMaybe(join(options.previousDir, "index.html"));
+  const currentIndex = await readFileMaybe(join(options.currentDir, "index.html"));
+  const previousSpecs = extractSpecSections(previousIndex ?? "");
+  const currentSpecs = extractSpecSections(currentIndex ?? "");
+  const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
+  const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
+  const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, {
+    previousUrl: (filePath) => relativeAssetUrl(options.previousAssetUrlPrefix ?? "previous", filePath),
+    currentUrl: (filePath) => relativeAssetUrl(options.currentAssetUrlPrefix ?? "current", filePath),
+  });
+
+  return {
+    prNumber: options.prNumber ?? "42",
+    baseBuild,
+    currentBuild,
+    baseBuildUrl: options.baseBuildUrl ?? "previous/",
+    currentBuildUrl: options.currentBuildUrl ?? "current/",
+    baseLabel: options.baseLabel ?? "previous",
+    files,
+    specDiffs,
+    screenshotDiffs,
+  };
+}
+
 function emptyReport(config: ReturnType<typeof ftpConfig>, prNumber: string, currentBuild: string): DiffReport {
   return {
     prNumber,
@@ -181,7 +226,10 @@ async function compareBuilds(
   const currentSpecs = extractSpecSections(currentIndex ?? "");
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
   const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
-  const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, config, baseBuild, currentBuild);
+  const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, {
+    previousUrl: (filePath) => publicUrl(config.baseUrl, "build", baseBuild, filePath),
+    currentUrl: (filePath) => publicUrl(config.baseUrl, "build", currentBuild, filePath),
+  });
 
   return {
     prNumber,
@@ -194,6 +242,50 @@ async function compareBuilds(
     specDiffs,
     screenshotDiffs,
   };
+}
+
+async function compareLocalFiles(previousDir: string, currentDir: string): Promise<ComparedFile[]> {
+  const previousFiles = await listLocalFilesRecursive(previousDir);
+  const currentFiles = await listLocalFilesRecursive(currentDir);
+  const previousSet = new Set(previousFiles);
+  const currentSet = new Set(currentFiles);
+  const allPaths = Array.from(new Set([...previousSet, ...currentSet])).sort();
+  const files: ComparedFile[] = [];
+
+  for (const filePath of allPaths) {
+    const previousInfo = previousSet.has(filePath) ? await fileInfo(join(previousDir, filePath)) : undefined;
+    const currentInfo = currentSet.has(filePath) ? await fileInfo(join(currentDir, filePath)) : undefined;
+    const status = !previousInfo ? "added" : !currentInfo ? "removed" : previousInfo.hash === currentInfo.hash ? "unchanged" : "changed";
+    files.push({
+      path: filePath,
+      kind: fileKind(filePath),
+      status,
+      previousHash: previousInfo?.hash,
+      currentHash: currentInfo?.hash,
+      previousSize: previousInfo?.size,
+      currentSize: currentInfo?.size,
+    });
+  }
+
+  return files;
+}
+
+async function listLocalFilesRecursive(root: string) {
+  const files: string[] = [];
+  await visit("");
+  return files.sort();
+
+  async function visit(relativeDir: string) {
+    const dir = relativeDir ? join(root, relativeDir) : root;
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await visit(relativePath);
+      } else if (entry.isFile()) {
+        files.push(relativePath);
+      }
+    }
+  }
 }
 
 function previousBuildNumber(builds: string[], currentBuild: string) {
@@ -225,7 +317,7 @@ function relativeRemotePath(root: string, filePath: string) {
 function fileKind(filePath: string): ComparedFile["kind"] {
   const name = basename(filePath).toLowerCase();
   if (name === "index.html" || name.endsWith(".html") || name.endsWith(".json")) return "report";
-  if (/\.(png|jpe?g|webp|gif)$/i.test(name)) return "screenshot";
+  if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "screenshot";
   return "asset";
 }
 
@@ -354,9 +446,10 @@ function scenarioSpecMap(specs: SpecSection[]) {
 function groupScreenshotDiffs(
   files: ComparedFile[],
   scenarioMap: Map<string, SpecSection>,
-  config: ReturnType<typeof ftpConfig>,
-  baseBuild: string,
-  currentBuild: string,
+  urls: {
+    previousUrl: (filePath: string) => string | undefined;
+    currentUrl: (filePath: string) => string | undefined;
+  },
 ): ScreenshotDiffGroup[] {
   const groups = new Map<string, ScreenshotDiffGroup>();
   for (const file of files.filter((item) => item.kind === "screenshot" && item.status !== "unchanged")) {
@@ -368,8 +461,8 @@ function groupScreenshotDiffs(
       path: file.path,
       title: screenshotTitle(file.path, scenarioId),
       status: file.status,
-      previousUrl: file.status !== "added" ? publicUrl(config.baseUrl, "build", baseBuild, file.path) : undefined,
-      currentUrl: file.status !== "removed" ? publicUrl(config.baseUrl, "build", currentBuild, file.path) : undefined,
+      previousUrl: file.status !== "added" ? urls.previousUrl(file.path) : undefined,
+      currentUrl: file.status !== "removed" ? urls.currentUrl(file.path) : undefined,
       previousSize: file.previousSize,
       currentSize: file.currentSize,
     });
@@ -383,8 +476,14 @@ function scenarioIdFromScreenshotPath(filePath: string) {
 }
 
 function screenshotTitle(filePath: string, scenarioId: string | undefined) {
-  const name = basename(filePath).replace(/\.png$/i, "");
+  const name = basename(filePath).replace(/\.(png|jpe?g|webp|gif|svg)$/i, "");
   return scenarioId ? name.replace(`${scenarioId}-`, `${scenarioId} `) : name;
+}
+
+function relativeAssetUrl(prefix: string, filePath: string) {
+  return [prefix.replace(/\/+$/, ""), ...filePath.split("/").filter(Boolean)]
+    .filter(Boolean)
+    .join("/");
 }
 
 function renderDiffReport(report: DiffReport) {
