@@ -3,8 +3,10 @@
  * Command-line interface for initializing, validating, reporting on, and
  * measuring test coverage for Feature Spec Markdown documents.
  */
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import {
   collectSpecScreenshots,
   insertReportMetadata,
@@ -21,6 +23,8 @@ import {
   buildSpecImplementationReport,
   formatSpecImplementationReport,
 } from "./testImplementationReport.js";
+
+const execFileAsync = promisify(execFile);
 
 const defaultSpecPattern =
   "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
@@ -148,7 +152,7 @@ async function runReport(options: CliOptions) {
     ...githubSourceLinkOptions(),
   });
 
-  await writeTextFile(out, insertReportMetadata(report, await githubReportMetadata()));
+  await writeTextFile(out, insertReportMetadata(report, await reportMetadata()));
   console.log(`Feature spec report written to ${out}`);
 
   printIssues(screenshotIssues);
@@ -253,49 +257,51 @@ function githubRefFromEnv() {
   return ref?.replace(/^refs\/(heads|tags)\//, "");
 }
 
-async function githubReportMetadata(): Promise<ReportMetadataItem[]> {
-  const repository = process.env.GITHUB_REPOSITORY;
-  if (!repository) return [];
-
-  const githubBaseUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${repository}`;
+async function reportMetadata(): Promise<ReportMetadataItem[]> {
   const event = await readGithubEvent();
   const pullRequest = githubPullRequestFromEvent(event);
-  const branch = githubBranchFromEnv(pullRequest);
-  const buildNumber = process.env.FEATURE_SPEC_BUILD_NUMBER ?? process.env.GITHUB_RUN_NUMBER;
+  const repository = process.env.GITHUB_REPOSITORY ?? (await gitRemoteUrl());
+  const githubBaseUrl = repository ? githubBaseUrlFromRepository(repository) : undefined;
+  const branch = githubBranchFromEnv(pullRequest) ?? (await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]));
+  const buildNumber =
+    process.env.FEATURE_SPEC_BUILD_NUMBER ??
+    process.env.GITHUB_RUN_NUMBER ??
+    process.env.BUILD_NUMBER;
   const runId = process.env.GITHUB_RUN_ID;
-  const sha = process.env.GITHUB_SHA;
+  const sha = process.env.GITHUB_SHA ?? (await gitValue(["rev-parse", "HEAD"]));
   const prNumber = process.env.FEATURE_SPEC_PR_NUMBER ?? pullRequest?.number;
 
-  return [
-    branch
-      ? {
-          label: "Branch",
-          value: branch,
-          url: `${githubBaseUrl}/tree/${encodeGithubPath(branch)}`,
-        }
-      : undefined,
-    buildNumber
-      ? {
-          label: "Build",
-          value: buildNumber,
-          url: runId ? `${githubBaseUrl}/actions/runs/${runId}` : undefined,
-        }
-      : undefined,
-    sha
-      ? {
-          label: "Commit",
-          value: shortSha(sha),
-          url: `${githubBaseUrl}/commit/${sha}`,
-        }
-      : undefined,
-    prNumber
-      ? {
-          label: "Pull request",
-          value: `#${prNumber}`,
-          url: pullRequest?.url ?? `${githubBaseUrl}/pull/${prNumber}`,
-        }
-      : undefined,
-  ].filter((item): item is ReportMetadataItem => Boolean(item));
+  const metadata: ReportMetadataItem[] = [];
+  if (branch) {
+    metadata.push({
+      label: "Branch",
+      value: branch,
+      url: githubBaseUrl ? `${githubBaseUrl}/tree/${encodeGithubPath(branch)}` : undefined,
+    });
+  }
+  if (buildNumber) {
+    metadata.push({
+      label: "Build",
+      value: buildNumber,
+      url: githubBaseUrl && runId ? `${githubBaseUrl}/actions/runs/${runId}` : undefined,
+    });
+  }
+  if (sha) {
+    metadata.push({
+      label: "Commit",
+      value: shortSha(sha),
+      url: githubBaseUrl ? `${githubBaseUrl}/commit/${sha}` : undefined,
+    });
+  }
+  if (prNumber) {
+    metadata.push({
+      label: "Pull request",
+      value: `#${prNumber}`,
+      url: pullRequest?.url ?? (githubBaseUrl ? `${githubBaseUrl}/pull/${prNumber}` : undefined),
+    });
+  }
+
+  return metadata;
 }
 
 type GithubPullRequestMetadata = {
@@ -338,6 +344,29 @@ function githubBranchFromEnv(pullRequest: GithubPullRequestMetadata | undefined)
   if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
   const ref = process.env.GITHUB_REF;
   return ref?.replace(/^refs\/(heads|tags)\//, "").replace(/^refs\/pull\/(\d+)\/merge$/, "PR #$1");
+}
+
+function githubBaseUrlFromRepository(repository: string) {
+  const trimmed = repository.trim().replace(/\.git$/, "");
+  if (/^https?:\/\//.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("git@github.com:")) {
+    return `https://github.com/${trimmed.slice("git@github.com:".length)}`;
+  }
+  return `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${trimmed}`;
+}
+
+async function gitRemoteUrl() {
+  return gitValue(["remote", "get-url", "origin"]);
+}
+
+async function gitValue(args: string[]) {
+  try {
+    const { stdout } = await execFileAsync("git", args, { cwd: process.cwd() });
+    const value = stdout.trim();
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function encodeGithubPath(value: string) {
