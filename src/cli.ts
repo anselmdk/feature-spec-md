@@ -122,10 +122,13 @@ async function runReport(options: CliOptions) {
   const screenshots = options.screenshots
     ? await collectSpecScreenshots(optionList(options.screenshots, ""))
     : [];
-  const screenshotIssues =
-    options["require-screenshots"] === "true"
-      ? validateScenarioScreenshots(result.features, screenshots)
-      : [];
+  const enforceEvidence =
+    options["enforce-evidence"] === "true" ||
+    options["require-declared-evidence"] === "true" ||
+    options["require-screenshots"] === "true";
+  const screenshotIssues = enforceEvidence
+    ? validateScenarioScreenshots(result.features, screenshots)
+    : [];
   const validationIssues = [
     ...result.validationIssues,
     ...result.coverageIssues,
@@ -256,7 +259,7 @@ Usage:
   feature-spec-md init [--kind feature|model|stack|design] [--dir specs]
   feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
   feature-spec-md coverage [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
-  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--require-screenshots] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--enforce-evidence] [--out test-results/feature-spec-report/index.html]
   feature-spec-md github-report [--report-dir test-results/spec-report] [--publish artifact|ftp]
   feature-spec-md github-diff-report --publish ftp --pr-number 123
 
@@ -264,7 +267,9 @@ Options:
   --require-model-coverage      Fail when model items have no matching test references.
   --require-rule-coverage       Fail when rules have no matching test references.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
-  --require-screenshots         For report, fail when any scenario step has no screenshot evidence.
+  --enforce-evidence            For report, fail when declared screenshot evidence is missing.
+  --require-declared-evidence   Alias for --enforce-evidence.
+  --require-screenshots         Deprecated alias for --enforce-evidence.
   --fail-on-missing             Exit with status 1 when coverage finds missing model items, rules, or scenarios.
   --screenshots                 Screenshot manifest JSON glob for report evidence.
   --tests ""                   Disable test coverage lookup.
