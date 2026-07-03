@@ -1,145 +1,93 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { collectSpecScreenshots } from "./screenshots.js";
+import { checkSpecDocuments } from "./specDocuments.js";
 import { insertReportMetadata, type ReportMetadataItem } from "./reportMetadata.js";
 import { renderHtmlReport } from "./reportTemplate.js";
 import type {
-  CoverageSummary,
-  FeatureSpec,
-  ModelSpec,
+  SpecDocument,
   SpecScreenshot,
   ValidationIssue,
 } from "./types.js";
 
 export type MockReportVariant = "current" | "previous";
 
-export type MockReportData = {
-  title: string;
-  models: ModelSpec[];
-  features: FeatureSpec[];
-  coverage: CoverageSummary;
-  screenshots: SpecScreenshot[];
-  validationIssues: ValidationIssue[];
-  metadata: ReportMetadataItem[];
-};
+export type MockReportData = Awaited<ReturnType<typeof loadMockReportData>>;
 
 export type WriteMockReportsOptions = {
   outDir?: string;
   generatedAt?: string;
 };
 
+type DiffLine = {
+  kind: "context" | "added" | "removed";
+  previousLine?: number;
+  currentLine?: number;
+  text: string;
+};
+
+type MockSpecDiff = {
+  filePath: string;
+  status: "added" | "removed" | "changed";
+  lines: DiffLine[];
+};
+
+type MockScreenshotDiff = {
+  path: string;
+  status: "added" | "removed" | "changed";
+  previousPath?: string;
+  currentPath?: string;
+};
+
 const defaultGeneratedAt = "2026-01-15T12:30:00.000Z";
 
-export function createMockReportData(
-  variant: MockReportVariant = "current",
-): MockReportData {
-  const isCurrent = variant === "current";
-  const model = supportDeskModel(isCurrent);
-  const features = [ticketInboxFeature(isCurrent), ticketReplyFeature(isCurrent)];
-  const scenarioCoverage = features.flatMap((feature) =>
-    feature.scenarios.map((scenario) => ({
-      id: scenario.id,
-      title: scenario.title,
-      filePath: feature.filePath,
-      line: scenario.line,
-      covered: scenario.id !== "SUPPORT-REPLY-S002",
-      references:
-        scenario.id === "SUPPORT-REPLY-S002"
-          ? []
-          : [testReference(scenario.id, "scenario", "tests/support-desk.spec.ts", 12)],
-    })),
-  );
+export async function loadMockReportData(variant: MockReportVariant = "current") {
+  const fixturesRoot = await mockFixturesRoot();
+  const variantRoot = path.join(fixturesRoot, variant);
+  const result = await checkSpecDocuments({
+    specs: [
+      path.join(variantRoot, "specs/**/*.model.md"),
+      path.join(variantRoot, "specs/**/*.feature.md"),
+      path.join(variantRoot, "specs/**/*.stack.md"),
+      path.join(variantRoot, "specs/**/*.design.md"),
+    ],
+    tests: [path.join(variantRoot, "tests/**/*.ts")],
+    requireModelCoverage: false,
+    requireRuleCoverage: false,
+    requireScenarioCoverage: false,
+  });
+  const screenshots = await collectSpecScreenshots([
+    path.join(variantRoot, "screenshots/screenshots.json"),
+  ]);
 
   return {
     title: "Feature Spec Report for mock-support-desk",
-    models: [model],
-    features,
-    coverage: {
-      modelCoverage: model.modelItems.map((item) => ({
-        id: item.id,
-        title: item.title,
-        filePath: model.filePath,
-        line: item.line,
-        covered: true,
-        references: [testReference(item.id, "model", "tests/support-desk.spec.ts", 4)],
-      })),
-      ruleCoverage: [...model.rules, ...features.flatMap((feature) => feature.rules)].map(
-        (rule) => ({
-          id: rule.id,
-          title: rule.text,
-          filePath: rule.id.startsWith("SUPPORT-M")
-            ? model.filePath
-            : features.find((feature) =>
-                feature.rules.some((candidate) => candidate.id === rule.id),
-              )?.filePath,
-          line: rule.line,
-          covered: rule.id !== "SUPPORT-REPLY-R002",
-          references:
-            rule.id === "SUPPORT-REPLY-R002"
-              ? []
-              : [testReference(rule.id, "rule", "tests/support-desk.spec.ts", 8)],
-        }),
-      ),
-      scenarioCoverage,
-      orphanModelReferences: [],
-      orphanRuleReferences: [
-        testReference("SUPPORT-INBOX-R999", "rule", "tests/legacy.spec.ts", 3),
-      ],
-      orphanScenarioReferences: [],
-    },
-    screenshots: isCurrent
-      ? [
-          screenshot("specs/ticket-inbox.feature.md", 33, "screenshots/SUPPORT-INBOX-S001-line-33-current.svg", "Inbox with priority badges"),
-          screenshot("specs/ticket-reply.feature.md", 31, "screenshots/SUPPORT-REPLY-S001-line-31-current.svg", "Reply composer with suggested answer"),
-        ]
-      : [
-          screenshot("specs/ticket-inbox.feature.md", 33, "screenshots/SUPPORT-INBOX-S001-line-33-previous.svg", "Inbox before priority badges"),
-        ],
-    validationIssues: isCurrent
-      ? [
-          {
-            code: "missing-rule-coverage",
-            severity: "warning",
-            message: "SUPPORT-REPLY-R002 is intentionally uncovered in the mock data so the warning state is visible.",
-            filePath: "specs/ticket-reply.feature.md",
-            line: 18,
-          },
-        ]
-      : [],
-    metadata: [
-      {
-        label: "Branch",
-        value: isCurrent ? "feature/mock-report-ui" : "main",
-        url: "https://github.com/anselmdk/feature-spec-md/tree/main",
-      },
-      {
-        label: "Build",
-        value: isCurrent ? "128" : "127",
-        url: "https://github.com/anselmdk/feature-spec-md/actions/runs/128",
-      },
-      {
-        label: "Commit",
-        value: isCurrent ? "abc1234" : "def5678",
-        url: "https://github.com/anselmdk/feature-spec-md/commit/abc1234",
-      },
-      {
-        label: "Pull request",
-        value: "#42",
-        url: "https://github.com/anselmdk/feature-spec-md/pull/42",
-      },
-    ],
+    fixturesRoot,
+    variantRoot,
+    documents: result.documents,
+    models: result.models,
+    features: result.features,
+    stacks: result.stacks,
+    designs: result.designs,
+    coverage: result.coverage,
+    screenshots,
+    validationIssues: [...result.validationIssues, ...result.coverageIssues],
+    metadata: mockMetadata(variant),
   };
 }
 
-export function renderMockFeatureSpecReport(
+export async function renderMockFeatureSpecReport(
   variant: MockReportVariant = "current",
   generatedAt = defaultGeneratedAt,
 ) {
-  const data = createMockReportData(variant);
+  const data = await loadMockReportData(variant);
   return insertReportMetadata(
     renderHtmlReport(data.features, {
       title: data.title,
       models: data.models,
+      stacks: data.stacks,
+      designs: data.designs,
       coverage: data.coverage,
       screenshots: data.screenshots,
       validationIssues: data.validationIssues,
@@ -152,9 +100,11 @@ export function renderMockFeatureSpecReport(
   );
 }
 
-export function renderMockDiffReport(generatedAt = defaultGeneratedAt) {
-  const previous = createMockReportData("previous");
-  const current = createMockReportData("current");
+export async function renderMockDiffReport(generatedAt = defaultGeneratedAt) {
+  const previous = await loadMockReportData("previous");
+  const current = await loadMockReportData("current");
+  const specDiffs = compareDocuments(previous.documents, current.documents);
+  const screenshotDiffs = compareScreenshots(previous.screenshots, current.screenshots);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -174,61 +124,16 @@ export function renderMockDiffReport(generatedAt = defaultGeneratedAt) {
   </head>
   <body>
     <h1>Feature spec PR diff for PR #42</h1>
-    <p>Generated ${escapeHtml(formatGeneratedAt(generatedAt))}.</p>
+    <p>Generated ${html(formatGeneratedAt(generatedAt))}.</p>
     <section class="panel">
       <h2>Compared builds</h2>
-      <p>Main: <a href="../previous-feature-spec-report/">build ${escapeHtml(previous.metadata.find((item) => item.label === "Build")?.value ?? "127")}</a></p>
-      <p>PR: <a href="../feature-spec-report/">build ${escapeHtml(current.metadata.find((item) => item.label === "Build")?.value ?? "128")}</a></p>
-      <p><span class="badge">2 spec changes</span> <span class="badge">2 screenshot changes</span></p>
+      <p>Main: <a href="../previous-feature-spec-report/">build 127</a></p>
+      <p>PR: <a href="../feature-spec-report/">build 128</a></p>
+      <p><span class="badge">${specDiffs.length} spec change${specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotDiffs.length} screenshot change${screenshotDiffs.length === 1 ? "" : "s"}</span></p>
     </section>
-    <section class="panel">
-      <h2>Spec changes</h2>
-      <details open>
-        <summary><strong>specs/ticket-inbox.feature.md</strong> <span class="badge changed">changed</span></summary>
-        <table class="diff"><tbody>
-          <tr class="diff-context"><td class="line-no">16</td><td class="line-no">16</td><td>  - SUPPORT-INBOX-R001: The inbox MUST show open tickets first.</td></tr>
-          <tr class="diff-added"><td class="line-no"></td><td class="line-no">17</td><td>+ - SUPPORT-INBOX-R002: The inbox SHOULD highlight high priority tickets.</td></tr>
-          <tr class="diff-context"><td class="line-no">27</td><td class="line-no">28</td><td>### SUPPORT-INBOX-S001: Agent reviews the queue</td></tr>
-          <tr class="diff-removed"><td class="line-no">31</td><td class="line-no"></td><td>- Then open tickets are listed by age</td></tr>
-          <tr class="diff-added"><td class="line-no"></td><td class="line-no">32</td><td>+ Then open tickets are listed by age with priority badges</td></tr>
-        </tbody></table>
-      </details>
-      <details open>
-        <summary><strong>specs/ticket-reply.feature.md</strong> <span class="badge added">added</span></summary>
-        <table class="diff"><tbody>
-          <tr class="diff-added"><td class="line-no"></td><td class="line-no">27</td><td>+ ### SUPPORT-REPLY-S002: Agent sends a saved reply</td></tr>
-          <tr class="diff-added"><td class="line-no"></td><td class="line-no">29</td><td>+ Given an agent has selected a ticket</td></tr>
-          <tr class="diff-added"><td class="line-no"></td><td class="line-no">30</td><td>+ When they choose a saved reply</td></tr>
-          <tr class="diff-added"><td class="line-no"></td><td class="line-no">31</td><td>+ Then the composer is filled with reusable text</td></tr>
-        </tbody></table>
-      </details>
-    </section>
-    <section class="panel">
-      <h2>Screenshots</h2>
-      <section>
-        <h3>specs/ticket-inbox.feature.md</h3>
-        <details open>
-          <summary><code>screenshots/SUPPORT-INBOX-S001-line-33.svg</code> <span class="badge changed">changed</span></summary>
-          <div class="image-pair">
-            <div class="image-card"><h4>Before</h4><img src="previous/screenshots/SUPPORT-INBOX-S001-line-33-previous.svg" alt="Before inbox"></div>
-            <div class="image-card"><h4>After</h4><img src="current/screenshots/SUPPORT-INBOX-S001-line-33-current.svg" alt="After inbox"></div>
-          </div>
-        </details>
-      </section>
-      <section>
-        <h3>specs/ticket-reply.feature.md</h3>
-        <details open>
-          <summary><code>screenshots/SUPPORT-REPLY-S001-line-31.svg</code> <span class="badge added">added</span></summary>
-          <div class="image-pair">
-            <div class="image-card"><h4>After</h4><img src="current/screenshots/SUPPORT-REPLY-S001-line-31-current.svg" alt="Reply composer"></div>
-          </div>
-        </details>
-      </section>
-    </section>
-    <section class="panel">
-      <h2>Other assets</h2>
-      <p class="muted">No other asset changes.</p>
-    </section>
+    ${renderSpecDiffs(specDiffs)}
+    ${renderScreenshotDiffs(screenshotDiffs)}
+    <section class="panel"><h2>Other assets</h2><p class="muted">No other asset changes.</p></section>
   </body>
 </html>`;
 }
@@ -239,21 +144,38 @@ export async function writeMockReports(options: WriteMockReportsOptions = {}) {
   const featureDir = path.join(outDir, "feature-spec-report");
   const previousFeatureDir = path.join(outDir, "previous-feature-spec-report");
   const diffDir = path.join(outDir, "diff-report");
+  const fixturesRoot = await mockFixturesRoot();
 
   await writeTextFile(
     path.join(featureDir, "index.html"),
-    renderMockFeatureSpecReport("current", generatedAt),
+    await renderMockFeatureSpecReport("current", generatedAt),
   );
   await writeTextFile(
     path.join(previousFeatureDir, "index.html"),
-    renderMockFeatureSpecReport("previous", generatedAt),
+    await renderMockFeatureSpecReport("previous", generatedAt),
   );
-  await writeTextFile(path.join(diffDir, "index.html"), renderMockDiffReport(generatedAt));
+  await writeTextFile(path.join(diffDir, "index.html"), await renderMockDiffReport(generatedAt));
 
-  await writeMockScreenshots(featureDir, "current");
-  await writeMockScreenshots(previousFeatureDir, "previous");
-  await writeMockScreenshots(path.join(diffDir, "current"), "current");
-  await writeMockScreenshots(path.join(diffDir, "previous"), "previous");
+  await copyDirectory(
+    path.join(fixturesRoot, "current", "screenshots"),
+    path.join(featureDir, "screenshots"),
+    (filePath) => filePath.endsWith(".svg"),
+  );
+  await copyDirectory(
+    path.join(fixturesRoot, "previous", "screenshots"),
+    path.join(previousFeatureDir, "screenshots"),
+    (filePath) => filePath.endsWith(".svg"),
+  );
+  await copyDirectory(
+    path.join(fixturesRoot, "current", "screenshots"),
+    path.join(diffDir, "current", "screenshots"),
+    (filePath) => filePath.endsWith(".svg"),
+  );
+  await copyDirectory(
+    path.join(fixturesRoot, "previous", "screenshots"),
+    path.join(diffDir, "previous", "screenshots"),
+    (filePath) => filePath.endsWith(".svg"),
+  );
 
   return {
     featureReportPath: path.join(featureDir, "index.html"),
@@ -262,150 +184,215 @@ export async function writeMockReports(options: WriteMockReportsOptions = {}) {
   };
 }
 
-function supportDeskModel(isCurrent: boolean): ModelSpec {
-  return {
-    kind: "model",
-    filePath: "specs/support-desk.model.md",
-    frontmatter: { id: "SUPPORT", title: "Support desk", status: "active" },
-    title: "Support desk",
-    purpose: "Define the shared vocabulary for a small customer support workflow.",
-    modelItems: [
-      { id: "SUPPORT-M001", title: "Ticket", body: "A customer request that needs a response from an agent.", line: 14 },
-      { id: "SUPPORT-M002", title: "Agent", body: "A team member who reviews tickets and sends replies.", line: 18 },
-      { id: "SUPPORT-M003", title: "Priority", body: isCurrent ? "A visible urgency label used to sort the queue." : "An internal urgency label.", line: 22 },
-    ],
-    rules: [
-      { id: "SUPPORT-M-R001", text: "Tickets MUST keep a stable public reference.", keyword: "MUST", strength: "required", line: 28 },
-    ],
-    source: "",
-  };
-}
-
-function ticketInboxFeature(isCurrent: boolean): FeatureSpec {
-  return {
-    kind: "feature",
-    filePath: "specs/ticket-inbox.feature.md",
-    frontmatter: {
-      id: "SUPPORT-INBOX",
-      title: "Ticket inbox",
-      status: "active",
-      model: "SUPPORT",
-      test: "playwright",
-      screenshots: "required",
+function mockMetadata(variant: MockReportVariant): ReportMetadataItem[] {
+  const isCurrent = variant === "current";
+  return [
+    {
+      label: "Branch",
+      value: isCurrent ? "feature/mock-report-ui" : "main",
+      url: `https://github.com/anselmdk/feature-spec-md/tree/${isCurrent ? "feature/mock-report-ui" : "main"}`,
     },
-    title: "Ticket inbox",
-    purpose: "Let agents find the next ticket to work on without losing context.",
-    rules: [
-      { id: "SUPPORT-INBOX-R001", text: "The inbox MUST show open tickets first.", keyword: "MUST", strength: "required", line: 16 },
-      ...(isCurrent
-        ? [{ id: "SUPPORT-INBOX-R002", text: "The inbox SHOULD highlight high priority tickets.", keyword: "SHOULD" as const, strength: "recommended" as const, line: 17 }]
-        : []),
-    ],
-    scenarios: [
-      {
-        id: "SUPPORT-INBOX-S001",
-        title: "Agent reviews the queue",
-        line: 28,
-        evidence: { test: "playwright", screenshots: "required" },
-        steps: [
-          { keyword: "Given", text: "an agent has open tickets", line: 30 },
-          { keyword: "When", text: "they open the inbox", line: 31 },
-          { keyword: "Then", text: isCurrent ? "open tickets are listed by age with priority badges" : "open tickets are listed by age", line: 32 },
-        ],
-      },
-    ],
-    source: "",
-  };
-}
-
-function ticketReplyFeature(isCurrent: boolean): FeatureSpec {
-  return {
-    kind: "feature",
-    filePath: "specs/ticket-reply.feature.md",
-    frontmatter: {
-      id: "SUPPORT-REPLY",
-      title: "Ticket replies",
-      status: isCurrent ? "active" : "draft",
-      model: "SUPPORT",
-      test: "playwright",
-      screenshots: "optional",
+    {
+      label: "Build",
+      value: isCurrent ? "128" : "127",
+      url: `https://github.com/anselmdk/feature-spec-md/actions/runs/${isCurrent ? "128" : "127"}`,
     },
-    title: "Ticket replies",
-    purpose: "Help agents answer a customer without leaving the ticket.",
-    rules: [
-      { id: "SUPPORT-REPLY-R001", text: "The reply composer MUST preserve unsent text.", keyword: "MUST", strength: "required", line: 16 },
-      { id: "SUPPORT-REPLY-R002", text: "Saved replies SHOULD be reusable across tickets.", keyword: "SHOULD", strength: "recommended", line: 18 },
-    ],
-    scenarios: [
-      {
-        id: "SUPPORT-REPLY-S001",
-        title: "Agent drafts a reply",
-        line: 24,
-        evidence: { test: "playwright", screenshots: "optional" },
-        steps: [
-          { keyword: "Given", text: "an agent has selected a ticket", line: 26 },
-          { keyword: "When", text: "they write a reply", line: 27 },
-          { keyword: "Then", text: "the draft remains visible", line: 28 },
-        ],
-      },
-      ...(isCurrent
-        ? [
-            {
-              id: "SUPPORT-REPLY-S002",
-              title: "Agent sends a saved reply",
-              line: 32,
-              evidence: { test: "playwright" as const, screenshots: "optional" as const },
-              steps: [
-                { keyword: "Given" as const, text: "an agent has selected a ticket", line: 34 },
-                { keyword: "When" as const, text: "they choose a saved reply", line: 35 },
-                { keyword: "Then" as const, text: "the composer is filled with reusable text", line: 36 },
-              ],
-            },
-          ]
-        : []),
-    ],
-    source: "",
-  };
+    {
+      label: "Commit",
+      value: isCurrent ? "abc1234" : "def5678",
+      url: `https://github.com/anselmdk/feature-spec-md/commit/${isCurrent ? "abc1234" : "def5678"}`,
+    },
+    {
+      label: "Pull request",
+      value: "#42",
+      url: "https://github.com/anselmdk/feature-spec-md/pull/42",
+    },
+  ];
 }
 
-function testReference(
-  id: string,
-  kind: "model" | "rule" | "scenario",
-  filePath: string,
-  line: number,
-) {
-  return { id, kind, filePath, line, source: "free-text" as const };
+async function mockFixturesRoot() {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(moduleDir, "mocks"),
+    path.join(moduleDir, "..", "src", "mocks"),
+  ];
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) return candidate;
+  }
+
+  throw new Error(
+    `Could not find mock report fixtures. Tried: ${candidates.join(", ")}`,
+  );
 }
 
-function screenshot(specPath: string, line: number, filePath: string, title: string): SpecScreenshot {
-  return { specPath, line, path: filePath, title, testPath: "tests/support-desk.spec.ts" };
-}
-
-async function writeMockScreenshots(root: string, variant: MockReportVariant) {
-  const data = createMockReportData(variant);
-  for (const item of data.screenshots) {
-    await writeTextFile(path.join(root, item.path), mockScreenshotSvg(item.title ?? item.path, variant));
+async function pathExists(filePath: string) {
+  try {
+    await stat(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-function mockScreenshotSvg(title: string, variant: MockReportVariant) {
-  const accent = variant === "current" ? "#ddf4ff" : "#fff8c5";
-  const border = variant === "current" ? "#54aeff" : "#d4a72c";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="${escapeHtml(title)}">
-  <rect width="960" height="540" fill="#f6f8fa"/>
-  <rect x="72" y="64" width="816" height="412" rx="24" fill="white" stroke="#d0d7de"/>
-  <rect x="112" y="112" width="736" height="72" rx="14" fill="${accent}" stroke="${border}"/>
-  <text x="144" y="158" font-family="system-ui, sans-serif" font-size="28" font-weight="700" fill="#1f2328">${escapeHtml(title)}</text>
-  <rect x="112" y="224" width="520" height="44" rx="10" fill="#f6f8fa"/>
-  <rect x="112" y="292" width="660" height="44" rx="10" fill="#f6f8fa"/>
-  <rect x="112" y="360" width="420" height="44" rx="10" fill="#f6f8fa"/>
-  <circle cx="812" cy="384" r="34" fill="${accent}" stroke="${border}"/>
-</svg>`;
+function compareDocuments(
+  previousDocuments: SpecDocument[],
+  currentDocuments: SpecDocument[],
+): MockSpecDiff[] {
+  const previousByPath = new Map(
+    previousDocuments.map((document) => [normalizeMockPath(document.filePath), document]),
+  );
+  const currentByPath = new Map(
+    currentDocuments.map((document) => [normalizeMockPath(document.filePath), document]),
+  );
+  const paths = Array.from(new Set([...previousByPath.keys(), ...currentByPath.keys()])).sort();
+
+  return paths.flatMap((filePath) => {
+    const previous = previousByPath.get(filePath);
+    const current = currentByPath.get(filePath);
+    const status = !previous
+      ? "added"
+      : !current
+        ? "removed"
+        : previous.source === current.source
+          ? undefined
+          : "changed";
+    if (!status) return [];
+    return [{ filePath, status, lines: diffLines(previous?.source ?? "", current?.source ?? "") }];
+  });
+}
+
+function compareScreenshots(
+  previousScreenshots: SpecScreenshot[],
+  currentScreenshots: SpecScreenshot[],
+): MockScreenshotDiff[] {
+  const previousByKey = new Map(previousScreenshots.map((item) => [screenshotDiffKey(item), item]));
+  const currentByKey = new Map(currentScreenshots.map((item) => [screenshotDiffKey(item), item]));
+  const keys = Array.from(new Set([...previousByKey.keys(), ...currentByKey.keys()])).sort();
+
+  return keys.flatMap((key) => {
+    const previous = previousByKey.get(key);
+    const current = currentByKey.get(key);
+    const status = !previous
+      ? "added"
+      : !current
+        ? "removed"
+        : previous.path === current.path
+          ? undefined
+          : "changed";
+    if (!status) return [];
+    return [
+      {
+        path: normalizeMockPath(current?.path ?? previous?.path ?? key),
+        status,
+        previousPath: previous ? path.posix.join("previous", normalizeMockPath(previous.path)) : undefined,
+        currentPath: current ? path.posix.join("current", normalizeMockPath(current.path)) : undefined,
+      },
+    ];
+  });
+}
+
+function screenshotDiffKey(item: SpecScreenshot) {
+  return `${normalizeMockPath(item.specPath)}:${item.line}`;
+}
+
+function diffLines(previous: string, current: string): DiffLine[] {
+  const a = previous.split("\n");
+  const b = current.split("\n");
+  const matrix = Array.from({ length: a.length + 1 }, () => Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i -= 1) {
+    for (let j = b.length - 1; j >= 0; j -= 1) {
+      matrix[i][j] = a[i] === b[j] ? matrix[i + 1][j + 1] + 1 : Math.max(matrix[i + 1][j], matrix[i][j + 1]);
+    }
+  }
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      lines.push({ kind: "context", previousLine: i + 1, currentLine: j + 1, text: a[i] });
+      i += 1;
+      j += 1;
+    } else if (j < b.length && (i === a.length || matrix[i][j + 1] >= matrix[i + 1][j])) {
+      lines.push({ kind: "added", currentLine: j + 1, text: b[j] });
+      j += 1;
+    } else if (i < a.length) {
+      lines.push({ kind: "removed", previousLine: i + 1, text: a[i] });
+      i += 1;
+    }
+  }
+  return compactContext(lines);
+}
+
+function compactContext(lines: DiffLine[]) {
+  const keep = new Set<number>();
+  lines.forEach((line, index) => {
+    if (line.kind === "context") return;
+    for (let offset = -3; offset <= 3; offset += 1) {
+      const candidate = index + offset;
+      if (candidate >= 0 && candidate < lines.length) keep.add(candidate);
+    }
+  });
+  return lines.filter((line, index) => line.kind !== "context" || keep.has(index));
+}
+
+function renderSpecDiffs(specDiffs: MockSpecDiff[]) {
+  if (!specDiffs.length) {
+    return `<section class="panel"><h2>Spec changes</h2><p class="muted">No spec text changes detected.</p></section>`;
+  }
+  return `<section class="panel"><h2>Spec changes</h2>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
+}
+
+function renderSpecDiff(diff: MockSpecDiff) {
+  return `<details open><summary><strong>${html(diff.filePath)}</strong> <span class="badge ${diff.status}">${html(diff.status)}</span></summary><table class="diff"><tbody>${diff.lines.map(renderDiffLine).join("")}</tbody></table></details>`;
+}
+
+function renderDiffLine(line: DiffLine) {
+  const marker = line.kind === "added" ? "+" : line.kind === "removed" ? "-" : "";
+  return `<tr class="diff-${line.kind}"><td class="line-no">${line.previousLine ?? ""}</td><td class="line-no">${line.currentLine ?? ""}</td><td>${html(marker)} ${html(line.text)}</td></tr>`;
+}
+
+function renderScreenshotDiffs(items: MockScreenshotDiff[]) {
+  if (!items.length) {
+    return `<section class="panel"><h2>Screenshots</h2><p class="muted">No screenshot changes.</p></section>`;
+  }
+  return `<section class="panel"><h2>Screenshots</h2>${items.map(renderScreenshotDiff).join("\n")}</section>`;
+}
+
+function renderScreenshotDiff(item: MockScreenshotDiff) {
+  const before = item.previousPath
+    ? `<div class="image-card"><h4>Before</h4><img src="${html(item.previousPath)}" alt="Before ${html(item.path)}"></div>`
+    : "";
+  const after = item.currentPath
+    ? `<div class="image-card"><h4>After</h4><img src="${html(item.currentPath)}" alt="After ${html(item.path)}"></div>`
+    : "";
+  return `<details open><summary><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span></summary><div class="image-pair">${before}${after}</div></details>`;
+}
+
+async function copyDirectory(
+  source: string,
+  target: string,
+  include: (filePath: string) => boolean = () => true,
+) {
+  await mkdir(target, { recursive: true });
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const targetPath = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectory(sourcePath, targetPath, include);
+    } else if (include(sourcePath)) {
+      await copyFile(sourcePath, targetPath);
+    }
+  }
 }
 
 async function writeTextFile(filePath: string, content: string) {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content, "utf8");
+}
+
+function normalizeMockPath(filePath: string) {
+  return filePath.split(path.sep).join("/").replace(/^.*src\/mocks\/(current|previous)\//, "");
 }
 
 function formatGeneratedAt(value: string) {
@@ -414,7 +401,7 @@ function formatGeneratedAt(value: string) {
   return date.toISOString();
 }
 
-function escapeHtml(value: string) {
+function html(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
