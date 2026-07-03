@@ -1,0 +1,18 @@
+{
+  "screenshots": [
+    {
+      "specPath": "src/mocks/current/specs/ticket-inbox.feature.md",
+      "line": 27,
+      "path": "screenshots/SUPPORT-INBOX-S001-line-27-current.svg",
+      "title": "Inbox with priority badges",
+      "testPath": "src/mocks/current/tests/supportDesk.spec.ts"
+    },
+    {
+      "specPath": "src/mocks/current/specs/ticket-reply.feature.md",
+      "line": 27,
+      "path": "screenshots/SUPPORT-REPLY-S001-line-27-current.svg",
+      "title": "Reply composer with suggested answer",
+      "testPath": "src/mocks/current/tests/supportDesk.spec.ts"
+    }
+  ]
+}
