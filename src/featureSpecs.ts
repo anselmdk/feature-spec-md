@@ -18,10 +18,22 @@ import type {
   FeatureFrontmatter,
   FeatureScenario,
   FeatureSpec,
+  ScenarioEvidencePolicy,
+  ScenarioTestType,
+  ScreenshotPolicy,
   StepKeyword,
   TestReference,
   ValidationIssue,
 } from "./types.js";
+
+const scenarioTestTypes: ScenarioTestType[] = [
+  "unit",
+  "integration",
+  "playwright",
+  "manual",
+  "skip",
+];
+const screenshotPolicies: ScreenshotPolicy[] = ["required", "optional", "skip"];
 
 /** Parse one feature spec Markdown document into structured metadata, rules, and scenarios. */
 export function parseFeatureSpec(
@@ -30,19 +42,20 @@ export function parseFeatureSpec(
 ): FeatureSpec {
   const filePath = options.filePath ?? "<inline>";
   const parsed = parseMarkdownDocument(source, "Feature spec");
+  const frontmatter = parsed.frontmatter as FeatureFrontmatter;
 
   return {
     filePath,
-    frontmatter: parsed.frontmatter as FeatureFrontmatter,
+    frontmatter,
     title: parsed.title,
     purpose: parsed.purpose,
     rules: parseRuleItems(parsed.lines, parsed.bodyStartLine),
-    scenarios: parseScenarios(parsed.lines, parsed.bodyStartLine),
+    scenarios: parseScenarios(parsed.lines, parsed.bodyStartLine, frontmatter),
     source,
   };
 }
 
-/** Validate spec structure, ID prefixes, duplicate IDs, and required sections. */
+/** Validate spec structure, ID prefixes, duplicate IDs, evidence policy, and required sections. */
 export function validateFeatureSpec(spec: FeatureSpec): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const seen = new Map<string, number>();
@@ -79,6 +92,8 @@ export function validateFeatureSpec(spec: FeatureSpec): ValidationIssue[] {
       ),
     );
   }
+
+  issues.push(...validateEvidencePolicy(spec, spec.frontmatter));
 
   if (spec.scenarios.length === 0) {
     issues.push(
@@ -332,7 +347,11 @@ export async function checkFeatureSpecs(options: {
   };
 }
 
-function parseScenarios(lines: string[], bodyStartLine: number) {
+function parseScenarios(
+  lines: string[],
+  bodyStartLine: number,
+  frontmatter: FeatureFrontmatter,
+) {
   const scenarios: FeatureScenario[] = [];
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -341,9 +360,15 @@ function parseScenarios(lines: string[], bodyStartLine: number) {
     );
     if (!match) continue;
     const steps: FeatureScenario["steps"] = [];
+    const overrides: Partial<ScenarioEvidencePolicy> = {};
 
     for (let j = i + 1; j < lines.length; j += 1) {
       if (/^##?#\s+/.test(lines[j])) break;
+      const testMatch = lines[j].trim().match(/^Test:\s*(.+)$/i);
+      if (testMatch) overrides.test = normalizeTestType(testMatch[1]);
+      const screenshotsMatch = lines[j].trim().match(/^Screenshots:\s*(.+)$/i);
+      if (screenshotsMatch)
+        overrides.screenshots = normalizeScreenshotPolicy(screenshotsMatch[1]);
       const step = lines[j].trim().match(/^(Given|When|Then|And|But)\s+(.+)$/);
       if (step)
         steps.push({
@@ -357,11 +382,65 @@ function parseScenarios(lines: string[], bodyStartLine: number) {
       id: match[1],
       title: match[2].trim(),
       line: bodyStartLine + i,
+      evidence: resolveEvidencePolicy(frontmatter, overrides),
       steps,
     });
   }
 
   return scenarios;
+}
+
+function resolveEvidencePolicy(
+  frontmatter: FeatureFrontmatter,
+  overrides: Partial<ScenarioEvidencePolicy> = {},
+): ScenarioEvidencePolicy {
+  const test = overrides.test ?? normalizeTestType(frontmatter.test) ?? "unit";
+  const screenshots =
+    overrides.screenshots ??
+    normalizeScreenshotPolicy(frontmatter.screenshots) ??
+    (test === "playwright" ? "required" : "skip");
+  return { test, screenshots };
+}
+
+function normalizeTestType(value: unknown): ScenarioTestType | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return scenarioTestTypes.find((candidate) => candidate === normalized);
+}
+
+function normalizeScreenshotPolicy(value: unknown): ScreenshotPolicy | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "none") return "skip";
+  return screenshotPolicies.find((candidate) => candidate === normalized);
+}
+
+function validateEvidencePolicy(
+  spec: FeatureSpec,
+  frontmatter: FeatureFrontmatter,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (frontmatter.test && !normalizeTestType(frontmatter.test)) {
+    issues.push(
+      issue(
+        spec,
+        "invalid-test-type",
+        "error",
+        `Feature test policy must be one of ${scenarioTestTypes.join(", ")}.`,
+      ),
+    );
+  }
+  if (frontmatter.screenshots && !normalizeScreenshotPolicy(frontmatter.screenshots)) {
+    issues.push(
+      issue(
+        spec,
+        "invalid-screenshot-policy",
+        "error",
+        `Feature screenshots policy must be one of ${screenshotPolicies.join(", ")} or none.`,
+      ),
+    );
+  }
+  return issues;
 }
 
 function issue(
@@ -418,14 +497,9 @@ function sourceForMatch(
   offset: number,
 ): TestReference["source"] {
   const before = source.slice(Math.max(0, offset - 80), offset);
-  const context = source.slice(Math.max(0, offset - 80), offset + 80);
-  if (/covers\s*:\s*\[[^\]]*$/.test(before)) return "covers";
-  if (
-    /tag\s*:\s*\[[^\]]*$/.test(before) ||
-    /@/.test(source.slice(Math.max(0, offset - 2), offset + 2))
-  )
-    return "tag";
-  if (/annotation/.test(context)) return "annotation";
-  if (/test|scenario/.test(before.slice(-40))) return "title";
+  if (/covers?\s*:?\s*$/i.test(before)) return "covers";
+  if (/tags?\s*:?\s*\[?[^\]]*$/i.test(before)) return "tag";
+  if (/annotations?\s*:?\s*\[?[^\]]*$/i.test(before)) return "annotation";
+  if (/test\s*\(\s*["'`][^"'`]*$/i.test(before)) return "title";
   return "free-text";
 }
