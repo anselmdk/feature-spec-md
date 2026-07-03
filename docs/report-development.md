@@ -66,22 +66,22 @@ Before publishing, the workflow adds a root `test-results/mock-reports/index.htm
 
 The FTP publisher then uploads the whole `test-results/mock-reports` directory to `build/<github.run_number>/` and updates the build index.
 
-Configure these repository secrets or variables before enabling the workflow:
+Configure these repository settings before enabling the workflow:
 
-```txt
-FEATURE_SPEC_FTP_HOST
-FEATURE_SPEC_FTP_USER
-FEATURE_SPEC_FTP_PASSWORD
-FEATURE_SPEC_MOCK_REPORT_BASE_URL
-FEATURE_SPEC_MOCK_FTP_REMOTE_DIR
-```
+| Name | Recommended source |
+| --- | --- |
+| `FEATURE_SPEC_FTP_HOST` | Repository variable or secret |
+| `FEATURE_SPEC_FTP_USER` | Repository variable or secret |
+| `FEATURE_SPEC_FTP_PASSWORD` | Repository secret |
+| `FEATURE_SPEC_MOCK_REPORT_BASE_URL` | Repository variable or secret |
+| `FEATURE_SPEC_MOCK_FTP_REMOTE_DIR` | Repository variable or secret |
 
-Optional secrets or variables:
+Optional settings:
 
-```txt
-FEATURE_SPEC_FTP_PORT
-FEATURE_SPEC_FTP_SECURE
-```
+| Name | Recommended source |
+| --- | --- |
+| `FEATURE_SPEC_FTP_PORT` | Repository variable or secret |
+| `FEATURE_SPEC_FTP_SECURE` | Repository variable or secret |
 
 Use mock-specific base URL and remote directory values so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 
