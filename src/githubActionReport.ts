@@ -11,10 +11,15 @@ import {
   type GithubActionOptions,
 } from "./githubActionFtp.js";
 import { writeGithubOutput, writeGithubSummary } from "./githubActionOutput.js";
+import { writePublishedFeatureSpecFiles } from "./reportArtifacts.js";
+import { renderHtmlPage } from "./reportHtml.js";
 
 export type GithubActionReportOptions = GithubActionOptions;
 
 type PublishMode = "artifact" | "ftp";
+
+const defaultSpecPattern =
+  "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
 
 export async function publishGithubActionReport(
   options: GithubActionReportOptions,
@@ -25,9 +30,15 @@ export async function publishGithubActionReport(
   const reportName =
     value(options, "name", "FEATURE_SPEC_REPORT_NAME") ??
     "feature-spec-report";
+  const specPatterns = optionList(
+    value(options, "specs", "FEATURE_SPEC_SPECS"),
+    defaultSpecPattern,
+  );
   const mode = publishMode(
     value(options, "publish", "FEATURE_SPEC_REPORT_PUBLISH") ?? "artifact",
   );
+
+  await writePublishedFeatureSpecFiles(reportDir, specPatterns);
 
   if (mode === "ftp") {
     const config = ftpConfig(options);
@@ -36,8 +47,8 @@ export async function publishGithubActionReport(
       [
         "## Feature Spec Report",
         "",
-        `<p><strong>Hosted HTML report:</strong> <a href=\"${escapeHtml(reportUrl)}\">${escapeHtml(reportName)}</a></p>`,
-        `<p><strong>Build report index:</strong> <a href=\"${escapeHtml(buildIndexUrl(config.baseUrl))}\">all builds</a></p>`,
+        `<p><strong>Hosted HTML report:</strong> <a href="${escapeHtml(reportUrl)}">${escapeHtml(reportName)}</a></p>`,
+        `<p><strong>Build report index:</strong> <a href="${escapeHtml(buildIndexUrl(config.baseUrl))}">all builds</a></p>`,
         "",
       ].join("\n"),
     );
@@ -100,34 +111,35 @@ function value(
   return options[key] ?? process.env[envKey];
 }
 
+function optionList(value: string | undefined, fallback: string) {
+  return (value ?? fallback)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function renderBuildIndex(baseUrl: string, builds: string[]) {
   const generatedAt = new Date().toISOString();
   const rows = builds
     .map(
       (build) =>
-        `<li><a href=\"${escapeHtml(buildUrl(baseUrl, build))}\">Build ${escapeHtml(build)}</a></li>`,
+        `<li><a href="${escapeHtml(buildUrl(baseUrl, build))}">Build ${escapeHtml(build)}</a></li>`,
     )
     .join("\n");
-  return `<!doctype html>
-<html lang=\"en\">
-<head>
-  <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-  <title>Feature spec build reports</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
-    li { margin: 0.35rem 0; }
-  </style>
-</head>
-<body>
-  <h1>Feature spec build reports</h1>
-  <p>Generated ${escapeHtml(generatedAt)}.</p>
-  <ol>
+  return renderHtmlPage({
+    title: "Feature spec build reports",
+    maxWidth: "48rem",
+    styles: `
+li { margin: 0.35rem 0; }
+`,
+    body: `
+<h1>Feature spec build reports</h1>
+<p>Generated ${escapeHtml(generatedAt)}.</p>
+<ol>
 ${rows}
-  </ol>
-</body>
-</html>
-`;
+</ol>
+`,
+  });
 }
 
 function buildUrl(baseUrl: string, build: string) {
