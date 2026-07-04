@@ -493,7 +493,7 @@ function renderDiffReport(report: DiffReport) {
 }
 
 function diffReportStyles() {
-  return "body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}.toolbar label{border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font:inherit;padding:6px 10px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}.screenshot-item{border-top:1px solid #d0d7de;padding:10px 0}.screenshot-summary{margin-bottom:8px}.screenshot-toggle:not(:checked)~.screenshot-groups .image-pair{display:none}.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}";
+  return "body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}.toggle-label{border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font:inherit;padding:6px 10px}.screenshot-all-toggle,.screenshot-item-toggle{margin-right:6px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}.screenshot-item{border-top:1px solid #d0d7de;padding:10px 0}.screenshot-summary{display:block;margin-bottom:8px;cursor:pointer}.screenshot-all-toggle:not(:checked)~.screenshot-groups .screenshot-item-toggle:not(:checked)~.image-pair{display:none}.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}";
 }
 
 function renderSpecDiffs(specDiffs: SpecDiff[]) {
@@ -512,7 +512,7 @@ function renderDiffLine(line: DiffLine) {
 
 function renderScreenshotDiffs(groups: ScreenshotDiffGroup[]) {
   if (!groups.length) return `<section class="panel"><h2>Screenshots</h2><p class="muted">No screenshot changes.</p></section>`;
-  return `<section class="panel"><h2>Screenshots</h2><div class="toolbar"><label><input class="screenshot-toggle" type="checkbox"> Show all screenshots</label><div class="screenshot-groups">${groups.map(renderScreenshotGroup).join("\n")}</div></div></section>`;
+  return `<section class="panel"><h2>Screenshots</h2><input id="screenshot-all-toggle" class="screenshot-all-toggle" type="checkbox"><label class="toggle-label" for="screenshot-all-toggle">Show all screenshots</label><div class="screenshot-groups">${groups.map(renderScreenshotGroup).join("\n")}</div></section>`;
 }
 
 function renderScreenshotGroup(group: ScreenshotDiffGroup) {
@@ -522,7 +522,12 @@ function renderScreenshotGroup(group: ScreenshotDiffGroup) {
 function renderScreenshotItem(item: ScreenshotDiffItem) {
   const before = item.previousUrl ? `<div class="image-card"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}"></div>` : "";
   const after = item.currentUrl ? `<div class="image-card"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}"></div>` : "";
-  return `<div class="screenshot-item"><div class="screenshot-summary"><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></div><div class="image-pair">${before}${after}</div></div>`;
+  const toggleId = `screenshot-${htmlId(item.path)}`;
+  return `<div class="screenshot-item"><input id="${toggleId}" class="screenshot-item-toggle" type="checkbox"><label class="screenshot-summary" for="${toggleId}"><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></label><div class="image-pair">${before}${after}</div></div>`;
+}
+
+function htmlId(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
 }
 
 function renderFileSection(title: string, files: ComparedFile[]) {
