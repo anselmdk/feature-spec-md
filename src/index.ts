@@ -20,6 +20,10 @@ export {
   renderLocalDiffReport,
 } from "./githubActionDiffReport.js";
 export {
+  githubReportMetadata,
+  githubReportMetadataFromEnv,
+} from "./githubReportMetadata.js";
+export {
   loadMockReportData,
   renderMockDiffReport,
   renderMockFeatureSpecReport,
@@ -53,6 +57,9 @@ export {
 export type {
   LocalDiffReportOptions,
 } from "./githubActionDiffReport.js";
+export type {
+  GithubReportMetadataOptions,
+} from "./githubReportMetadata.js";
 export type {
   MockReportData,
   MockReportVariant,
