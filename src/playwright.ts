@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFeatureSpec } from "./featureSpecs.js";
 import { expandFilePatterns } from "./filePatterns.js";
@@ -32,7 +32,7 @@ export type PlaywrightSpecEvidenceOptions = {
 };
 
 export type PlaywrightPageLike = {
-  screenshot(options: { fullPage?: boolean; path?: string }): Promise<unknown>;
+  screenshot(options: { fullPage?: boolean; path: string }): Promise<unknown>;
 };
 
 export type PlaywrightTestInfoLike = {
@@ -80,7 +80,7 @@ export function createPlaywrightSpecEvidence(
       await test.step(`${step.keyword} ${step.text}`, async () => {
         const stateKey = screenStateKey(testInfo, scenarioId);
         if (!screenStateByScenario.has(stateKey)) {
-          const baseline = await capturePageBuffer(page);
+          const baseline = await capturePageBuffer(page, reportDir, "baseline");
           screenStateByScenario.set(stateKey, { hash: screenshotHash(baseline) });
         }
 
@@ -163,12 +163,16 @@ async function captureStepEvidence(options: {
   step: SpecEvidenceStep;
   testInfo: PlaywrightTestInfoLike;
 }) {
-  const currentBuffer = await capturePageBuffer(options.page);
+  const currentBuffer = await capturePageBuffer(
+    options.page,
+    options.reportDir,
+    `line-${options.step.line}`,
+  );
   const currentHash = screenshotHash(currentBuffer);
   const previousState = options.screenStateByScenario.get(options.stateKey);
   const title = `${options.step.scenarioId}:${options.step.line} ${options.step.keyword} ${options.step.text}`;
 
-  if (previousState?.hash === currentHash) {
+  if (previousState?.hash === currentHash && previousState.line !== undefined) {
     await recordEvidence(options, {
       specPath: options.step.specPath,
       line: options.step.line,
@@ -221,11 +225,20 @@ async function recordEvidence(
   await writeWorkerManifest(options.reportDir, options.testInfo.workerIndex, entries);
 }
 
-async function capturePageBuffer(page: PlaywrightPageLike) {
-  const result = await page.screenshot({ fullPage: true });
-  if (Buffer.isBuffer(result)) return result;
-  if (result instanceof Uint8Array) return Buffer.from(result);
-  throw new Error("Playwright page.screenshot() must return image bytes when no path is supplied.");
+async function capturePageBuffer(
+  page: PlaywrightPageLike,
+  reportDir: string,
+  label: string,
+) {
+  const tempDir = path.join(reportDir, ".visual-evidence-tmp");
+  await mkdir(tempDir, { recursive: true });
+  const tempPath = path.join(tempDir, `${process.pid}-${Date.now()}-${slug(label)}.png`);
+  try {
+    await page.screenshot({ fullPage: true, path: tempPath });
+    return await readFile(tempPath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
 }
 
 function screenshotHash(buffer: Buffer) {
