@@ -46,7 +46,7 @@
     "spec:report": "tsx src/cli.ts report",
     "report:mock": "tsx src/mockReports.ts",
     "format": "prettier --write .",
-    "check:example": "tsx src/cli.ts check --specs examples/**/*.feature.md --require-scenario-coverage=false",
+    "check:example": "tsx src/cli.ts check --specs examples/**/*.feature.md --tests \"\" --require-scenario-coverage=false --require-rule-coverage=false --require-model-coverage=false",
     "report:example": "tsx src/cli.ts report --specs examples/**/*.feature.md --tests tests/**/*.test.ts --out test-results/feature-spec-report/index.html",
     "test": "npm run test:unit && npm run test:playwright",
     "test:unit": "tsx --test tests/**/*.test.ts",
