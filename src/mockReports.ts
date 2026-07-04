@@ -262,7 +262,7 @@ function normalizeMockCoverage(
       ? normalizeMockCoverageItems(coverage.modelCoverage, variantRoot)
       : coverage.modelCoverage,
     ruleCoverage: normalizeMockCoverageItems(coverage.ruleCoverage, variantRoot),
-    scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage),
+    scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage, variantRoot),
     orphanModelReferences: coverage.orphanModelReferences
       ? normalizeMockReferences(coverage.orphanModelReferences, variantRoot)
       : coverage.orphanModelReferences,
