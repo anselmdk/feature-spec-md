@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expandFilePatterns } from "./filePatterns.js";
 
-export const publishedSpecRoot = "__feature-spec-md/specs";
+export const publishedSpecRoot = "__feature-spec-md";
 
 export type PublishedSpecManifestItem = {
   filePath: string;
