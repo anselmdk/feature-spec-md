@@ -1,5 +1,7 @@
-# Report templates
+Report templates
 
-This folder is the home for human-readable report template modules.
+This folder contains shared helpers for report generation.
 
-The first follow-up keeps the current renderer behavior intact while separating the published report artifact layout from the report rendering code. Subsequent template modules should move the feature report and PR diff report markup here in small reviewable steps.
+Report renderers should keep data preparation near the renderer and route shared page-level layout through this folder.
+
+Current module: shared.ts contains helpers used by the shared page shell.
