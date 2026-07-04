@@ -10,6 +10,21 @@ export type ModelReferenceFrontmatter = SpecFrontmatter & {
   models?: string[] | string;
 };
 
+export type SpecExtensionSections = {
+  /** Known unknowns, unresolved choices, or decisions that need a product answer. */
+  openQuestions?: string;
+  /** Assumptions the spec currently relies on until they are confirmed or replaced. */
+  assumptions?: string;
+  /** API endpoints, request/response contracts, auth requirements, and OpenAPI links. */
+  apiContract?: string;
+  /** Role/group capability matrix, permission rules, and access-control notes. */
+  permissions?: string;
+  /** Entity state machines, state transition rules, and lifecycle examples. */
+  lifecycle?: string;
+  /** Mock adapters, seeded data, fixed-time setup, and CI/e2e environment contracts. */
+  testEnvironment?: string;
+};
+
 export type ScenarioTestType = "unit" | "integration" | "playwright" | "manual" | "skip";
 export type ScreenshotPolicy = "required" | "optional" | "skip";
 
@@ -33,6 +48,7 @@ export type ModelSpec = {
   purpose: string;
   modelItems: ModelItem[];
   rules: FeatureRule[];
+  extensions?: SpecExtensionSections;
   source: string;
 };
 
@@ -44,6 +60,7 @@ export type FeatureSpec = {
   purpose: string;
   rules: FeatureRule[];
   scenarios: FeatureScenario[];
+  extensions?: SpecExtensionSections;
   source: string;
 };
 
@@ -58,6 +75,7 @@ export type StackSpec = {
   rationale: string;
   consequences: string;
   rules: FeatureRule[];
+  extensions?: SpecExtensionSections;
   source: string;
 };
 
@@ -73,6 +91,7 @@ export type DesignSpec = {
   interaction: string;
   visualStyle: string;
   rules: FeatureRule[];
+  extensions?: SpecExtensionSections;
   source: string;
 };
 
