@@ -6,7 +6,11 @@ export async function collectSpecScreenshots(patterns: string[]) {
   const evidence: SpecScreenshot[] = [];
   for (const file of await expandArtifactPatterns(patterns)) {
     const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
-    const entries = isRecord(parsed) && Array.isArray(parsed.evidence) ? parsed.evidence : [];
+    const entries = isRecord(parsed) && Array.isArray(parsed.evidence)
+      ? parsed.evidence
+      : isRecord(parsed) && Array.isArray(parsed.screenshots)
+        ? parsed.screenshots
+        : [];
 
     for (const entry of entries) {
       const normalized = normalizeEvidence(entry);
@@ -31,7 +35,7 @@ export function validateScenarioScreenshots(
         for (const step of scenario.steps) {
           if (!evidenceKeys.has(screenshotKey(spec.filePath, step.line))) {
             issues.push({
-              code: "missing-visual-evidence",
+              code: "missing-screenshot-evidence",
               severity: "error",
               filePath: spec.filePath,
               line: step.line,
@@ -60,18 +64,13 @@ function normalizeEvidence(value: unknown): SpecScreenshot | null {
   const line = value.line;
   const changed = value.changed;
   const imagePath = value.path ?? value.imagePath;
-  if (
-    typeof specPath !== "string" ||
-    typeof line !== "number" ||
-    typeof changed !== "boolean"
-  ) {
-    return null;
-  }
-  if (changed && typeof imagePath !== "string") return null;
+  if (typeof specPath !== "string" || typeof line !== "number") return null;
+  const changedValue = typeof changed === "boolean" ? changed : true;
+  if (changedValue && typeof imagePath !== "string") return null;
   return {
     specPath: normalizeFilePath(specPath),
     line,
-    changed,
+    changed: changedValue,
     path: typeof imagePath === "string" ? imagePath : undefined,
     title: typeof value.title === "string" ? value.title : undefined,
     testPath: typeof value.testPath === "string" ? value.testPath : undefined,
