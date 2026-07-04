@@ -2,6 +2,6 @@
 
 This folder contains shared helpers for report generation.
 
-Report renderers should keep data preparation near the renderer and route shared page-level layout through this folder.
+The feature report now uses the shared page shell from reportHtml.ts. The page shell delegates shared defaults and indentation to shared.ts.
 
-Current module: shared.ts contains helpers used by the shared page shell.
+Report-specific data preparation remains in the renderer while the page-level template concerns live here.
