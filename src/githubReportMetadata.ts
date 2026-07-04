@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import type { ReportMetadataItem } from "./reportMetadata.js";
 
@@ -13,22 +13,55 @@ export async function githubReportMetadata(
   options: GithubReportMetadataOptions = {},
 ): Promise<ReportMetadataItem[]> {
   const event = await readGithubEvent();
+  return buildGithubReportMetadata({
+    event,
+    repository:
+      process.env.GITHUB_REPOSITORY ??
+      (options.includeGitFallbacks ? await gitRemoteUrl() : undefined),
+    fallbackBranch: options.includeGitFallbacks
+      ? await gitValue(["rev-parse", "--abbrev-ref", "HEAD"])
+      : undefined,
+    fallbackSha: options.includeGitFallbacks
+      ? await gitValue(["rev-parse", "HEAD"])
+      : undefined,
+  });
+}
+
+export function githubReportMetadataFromEnv(): ReportMetadataItem[] {
+  return buildGithubReportMetadata({
+    event: readGithubEventSync(),
+    repository: process.env.GITHUB_REPOSITORY,
+  });
+}
+
+type GithubPullRequestMetadata = {
+  number: string;
+  branch?: string;
+  url?: string;
+};
+
+type GithubReportMetadataInput = {
+  event?: unknown;
+  repository?: string;
+  fallbackBranch?: string;
+  fallbackSha?: string;
+};
+
+function buildGithubReportMetadata({
+  event,
+  repository,
+  fallbackBranch,
+  fallbackSha,
+}: GithubReportMetadataInput): ReportMetadataItem[] {
   const pullRequest = githubPullRequestFromEvent(event);
-  const repository =
-    process.env.GITHUB_REPOSITORY ??
-    (options.includeGitFallbacks ? await gitRemoteUrl() : undefined);
   const githubBaseUrl = repository ? githubBaseUrlFromRepository(repository) : undefined;
-  const branch =
-    githubBranchFromEnv(pullRequest) ??
-    (options.includeGitFallbacks ? await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]) : undefined);
+  const branch = githubBranchFromEnv(pullRequest) ?? fallbackBranch;
   const buildNumber =
     process.env.FEATURE_SPEC_BUILD_NUMBER ??
     process.env.GITHUB_RUN_NUMBER ??
     process.env.BUILD_NUMBER;
   const runId = process.env.GITHUB_RUN_ID;
-  const sha =
-    process.env.GITHUB_SHA ??
-    (options.includeGitFallbacks ? await gitValue(["rev-parse", "HEAD"]) : undefined);
+  const sha = process.env.GITHUB_SHA ?? fallbackSha;
   const prNumber = process.env.FEATURE_SPEC_PR_NUMBER ?? pullRequest?.number;
 
   const metadata: ReportMetadataItem[] = [];
@@ -64,18 +97,23 @@ export async function githubReportMetadata(
   return metadata;
 }
 
-type GithubPullRequestMetadata = {
-  number: string;
-  branch?: string;
-  url?: string;
-};
-
 async function readGithubEvent(): Promise<unknown> {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) return undefined;
 
   try {
-    return JSON.parse(await readFile(eventPath, "utf8"));
+    return JSON.parse(await readFileAsync(eventPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function readGithubEventSync(): unknown {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) return undefined;
+
+  try {
+    return JSON.parse(readFileSync(eventPath, "utf8"));
   } catch {
     return undefined;
   }
@@ -127,6 +165,15 @@ async function gitValue(args: string[]) {
   } catch {
     return undefined;
   }
+}
+
+function readFileAsync(path: string, encoding: BufferEncoding) {
+  return new Promise<string>((resolve, reject) => {
+    readFile(path, encoding, (error, data) => {
+      if (error) reject(error);
+      else resolve(data);
+    });
+  });
 }
 
 function encodeGithubPath(value: string) {
