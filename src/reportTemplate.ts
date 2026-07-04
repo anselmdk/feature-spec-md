@@ -234,11 +234,16 @@ function renderScenario(spec: FeatureSpec, scenario: FeatureSpec["scenarios"][nu
 }
 
 function renderEvidenceSummary(changedCount: number, unchangedCount: number) {
-  return `<span class="badge">${html([`${changedCount} changed`, `${unchangedCount} unchanged`].join(" · "))}</span>`;
+  if (changedCount === 0 && unchangedCount === 0) {
+    return `<span class="badge muted">no visual evidence recorded</span>`;
+  }
+  const changedLabel = `${changedCount} visual change${changedCount === 1 ? "" : "s"}`;
+  const unchangedLabel = `${unchangedCount} unchanged screen${unchangedCount === 1 ? "" : "s"}`;
+  return `<span class="badge">${html([changedLabel, unchangedLabel].join(" · "))}</span>`;
 }
 
 function renderScenarioRuleCoverage(ruleIds: string[]) {
-  if (!ruleIds.length) return `<p><strong>Rules covered by this scenario:</strong> <span class="missing">none referenced</span></p>`;
+  if (!ruleIds.length) return `<p><strong>Rules covered by this scenario:</strong> <span class="muted">none referenced</span></p>`;
   return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds.map((ruleId) => `<code>${html(ruleId)}</code>`).join(" ")}</p>`;
 }
 
@@ -309,15 +314,15 @@ function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<st
   const screenshots = evidence.filter((entry) => entry.changed && entry.path);
   const unchanged = evidence.filter((entry) => !entry.changed);
   const evidenceBadge = screenshots.length
-    ? `<span class="badge ok">${screenshots.length} changed screenshot${screenshots.length === 1 ? "" : "s"}</span>`
+    ? `<span class="badge ok">screen changed · screenshot captured</span>`
     : unchanged.length
-      ? `<span class="badge muted">unchanged${renderComparedWith(unchanged[0])}</span>`
-      : `<span class="badge missing">missing screenshot evidence</span>`;
+      ? `<span class="badge muted">same screen${renderComparedWith(unchanged[0])}</span>`
+      : `<span class="badge muted" title="missing screenshot evidence is informational">no screenshot captured</span>`;
   return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} ${renderLineBadge(spec.filePath, step.line, sourceLinks)} ${evidenceBadge}</p>${renderScreenshots(screenshots)}</div>`;
 }
 
 function renderComparedWith(entry: SpecScreenshot) {
-  return entry.comparedWithLine ? ` since line ${html(String(entry.comparedWithLine))}` : " since previous screen";
+  return entry.comparedWithLine ? ` as line ${html(String(entry.comparedWithLine))}` : " as previous screen";
 }
 
 function renderLineBadge(filePath: string, line: number, sourceLinks: SourceLinkOptions) {
