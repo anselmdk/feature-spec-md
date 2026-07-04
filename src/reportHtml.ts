@@ -1,4 +1,5 @@
 import { html } from "./html.js";
+import { githubReportMetadataFromEnv } from "./githubReportMetadata.js";
 import {
   insertReportMetadata,
   type ReportMetadataItem,
@@ -20,7 +21,7 @@ export function renderHtmlPage({
   styles = "",
   scripts = "",
   maxWidth,
-  metadata = [],
+  metadata = githubReportMetadataFromEnv(),
 }: HtmlPageOptions) {
   const defaults = reportPageDefaults(maxWidth, styles);
   const page = `<!doctype html>
