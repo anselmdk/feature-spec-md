@@ -7,8 +7,18 @@ Markdown specs for AI-assisted, testable spec-driven development.
 ```txt
 model + features + stack + design
 -> AI-written executable tests that reference stable spec IDs
--> validation, coverage, screenshots, and reports
+-> validation, coverage, screenshots, reports, and PR diffs
 ```
+
+## See the workflow in action
+
+The clearest example of what this library can deliver is the demo feature PR workflow:
+
+- **Feature PR:** <https://github.com/anselmdk/feature-spec-md-demo/pull/16>
+- **Feature spec report:** <https://feature-spec-md.anselm.dk/demo/build/269/>
+- **Feature spec diff:** <https://feature-spec-md.anselm.dk/demo/pr/16/269/>
+
+PRs like this are the essence of `feature-spec-md`: a feature branch can carry the product/spec/code change, a published feature spec report can show the full implementation state, and a PR diff report can show exactly what changed in the specs, rendered report, and screenshot evidence.
 
 ## What the tool does
 
@@ -21,21 +31,23 @@ It gives you:
 - **Validation** that checks frontmatter, headings, IDs, cross-document references, and test coverage expectations.
 - **Coverage reporting** that shows which model items, rules, and scenarios are implemented by tests.
 - **Scenario evidence policy** so specs can declare whether behavior should be tested by unit, integration, Playwright, manual, or no executable tests.
-- **HTML reports** that are useful for reviews, CI artifacts, or published build reports.
+- **HTML reports** that combine specs, coverage, validation status, source links, GitHub/build metadata, and screenshot evidence.
+- **PR diff reports** that compare a current published build with a base or previous build and highlight changed report files, changed spec sections, and screenshot evidence.
 - **Screenshot evidence** for scenarios when using the Playwright helper.
-- **A library API** for projects that want to parse specs, check coverage, collect screenshots, or render reports from their own tooling.
+- **GitHub Actions publishing helpers** for job summaries, FTP-published build reports, FTP-published PR diff reports, and PR comments.
+- **A library API** for projects that want to parse specs, check coverage, collect screenshots, render reports, or render diff reports from their own tooling.
 
 The specs are meant to be written with an AI before implementation. The tests are meant to be written with an AI from those specs. `feature-spec-md` then checks that the Markdown stays structured and that executable tests still cover the model items, rules, and scenarios the specs define.
 
 ## Demo project
 
-A complete demo app is available in [`anselmdk/feature-spec-md-demo`](https://github.com/anselmdk/feature-spec-md-demo). It shows a small support-ticket desk built from model, feature, stack, and design specs, with unit tests, Playwright tests, generated coverage, and a published report.
+A complete demo app is available in [`anselmdk/feature-spec-md-demo`](https://github.com/anselmdk/feature-spec-md-demo). It shows a small support-ticket desk built from model, feature, stack, and design specs, with unit tests, Playwright tests, generated coverage, screenshot evidence, a published feature spec report, and a published PR diff report.
 
 Demo reports, including scenario screenshots, are available here:
 
 <https://feature-spec-md.anselm.dk/demo/>
 
-Use the demo repository when you want to see the expected project shape, script names, screenshot manifest flow, and report output in a real app.
+Use the demo repository when you want to see the expected project shape, script names, screenshot manifest flow, CI publishing setup, PR comments, and report output in a real app.
 
 ## What you write
 
@@ -155,7 +167,8 @@ npx feature-spec-md init --kind design --dir specs
 4. Ask an AI to write executable tests from the specs, preserving the relevant `-M001`, `-R001`, and `-S001` IDs in the test source.
 5. Run `npx feature-spec-md coverage` to see which scenarios, rules, and model items have tests.
 6. Run `npx feature-spec-md report` to generate an HTML implementation report for review or CI artifacts.
-7. Use `npx feature-spec-md github-report` in GitHub Actions when the report should be linked from the job summary or published.
+7. Use `npx feature-spec-md github-report` in GitHub Actions when the report should be linked from the job summary, uploaded as an artifact, or published by FTP.
+8. Use `npx feature-spec-md github-diff-report` in PR builds when a published diff should compare the current report output and screenshots with a base build and provide a PR comment body.
 
 The longer flow, including AI prompts and CI setup, is in [docs/spec-driven-flow.md](docs/spec-driven-flow.md). The demo repository also shows the flow in practice: <https://github.com/anselmdk/feature-spec-md-demo>.
 
@@ -164,8 +177,9 @@ The longer flow, including AI prompts and CI setup, is in [docs/spec-driven-flow
 ```bash
 npx feature-spec-md check
 npx feature-spec-md coverage --fail-on-missing
-npx feature-spec-md report --out test-results/feature-spec-report/index.html
-npx feature-spec-md github-report --report-dir test-results/spec-report
+npx feature-spec-md report --out test-results/spec-report/index.html
+npx feature-spec-md github-report --report-dir test-results/spec-report --publish ftp
+npx feature-spec-md github-diff-report --publish ftp --pr-number 123
 ```
 
 By default the CLI scans:
@@ -175,7 +189,7 @@ specs/**/*.model.md
 specs/**/*.feature.md
 specs/**/*.stack.md
 specs/**/*.design.md
-tests/**/*.spec.ts
+tests/**/*.ts
 ```
 
 Use explicit patterns when your project uses different paths:
@@ -188,13 +202,13 @@ npx feature-spec-md check \
 
 ### `check`
 
-Validates the spec set and, by default, requires scenario coverage when tests are scanned.
+Validates the spec set and, by default, requires model, rule, and scenario coverage when tests are scanned.
 
 ```bash
 npx feature-spec-md check
 ```
 
-`check` validates spec structure, references between documents, and test coverage. Use `--require-scenario-coverage=false` while drafting. Use `--require-rule-coverage` and `--require-model-coverage` when rules and model items must also fail validation if they have no test references.
+`check` validates spec structure, references between documents, and test coverage. Use `--require-scenario-coverage=false`, `--require-rule-coverage=false`, or `--require-model-coverage=false` while drafting.
 
 ### `coverage`
 
@@ -204,7 +218,7 @@ Prints a terminal implementation report showing covered and missing model items,
 npx feature-spec-md coverage --fail-on-missing
 ```
 
-Use `--fail-on-missing` when missing model item, rule, or scenario coverage should fail CI.
+Use `--fail-on-missing=false` when missing model item, rule, or scenario coverage should not fail CI.
 
 ### `report`
 
@@ -223,7 +237,7 @@ npx feature-spec-md report \
   --screenshots "test-results/spec-report/screenshots-*.json"
 ```
 
-When CI should fail for missing declared screenshot evidence, add `--enforce-evidence`:
+When CI should fail for missing declared screenshot evidence, use `--enforce-evidence`:
 
 ```bash
 npx feature-spec-md report \
@@ -232,7 +246,7 @@ npx feature-spec-md report \
   --out test-results/spec-report/index.html
 ```
 
-This gate only fails for scenarios whose resolved screenshot policy is `required`.
+This gate only fails for scenarios whose resolved screenshot policy is `required`. In GitHub Actions, the report also includes source links and report metadata derived from the repository, ref, SHA, run, build number, and pull request context when available.
 
 ### `github-report`
 
@@ -244,6 +258,20 @@ npx feature-spec-md github-report \
   --publish ftp
 ```
 
+With FTP publishing, build reports are published below a `build/<build-number>/` directory. This keeps immutable build outputs available for later PR diff comparisons.
+
+### `github-diff-report`
+
+Builds and publishes a PR diff report from already-published feature spec report outputs.
+
+```bash
+npx feature-spec-md github-diff-report \
+  --publish ftp \
+  --pr-number 123
+```
+
+The diff report lists changed report assets, extracts changed spec sections, groups screenshot changes by spec/scenario, writes a GitHub Actions summary, and exposes a `diff-comment-body` output that a workflow can add to the PR. PR diff reports are published below `pr/<pr-number>/<build-number>/`.
+
 ## Playwright screenshot evidence
 
 The package exports a Playwright helper from `@anselmdk/feature-spec-md/playwright`. It maps scenario step text back to the spec line, wraps the implementation in a Playwright `test.step`, captures a screenshot after the step, attaches it to the test, and writes a screenshot manifest such as `test-results/spec-report/screenshots-0.json`.
@@ -252,7 +280,7 @@ That manifest can then be passed to `feature-spec-md report` with `--screenshots
 
 ## GitHub Actions report publishing
 
-`feature-spec-md github-report` writes the GitHub Actions job summary and can either prepare outputs for a GitHub artifact upload or publish the generated report to FTP.
+`feature-spec-md github-report` writes the GitHub Actions job summary and can either prepare outputs for a GitHub artifact upload or publish the generated report to FTP. `feature-spec-md github-diff-report` compares published build reports and publishes a PR-specific diff report.
 
 For FTP publishing, configure repository secrets in GitHub under **Settings → Secrets and variables → Actions → Repository secrets**.
 
@@ -271,14 +299,30 @@ Optional values:
 FEATURE_SPEC_FTP_REMOTE_DIR=/public_html/feature-spec-md
 FEATURE_SPEC_FTP_PORT=21
 FEATURE_SPEC_FTP_SECURE=false
+FEATURE_SPEC_BUILD_NUMBER=<build number, defaults to GITHUB_RUN_NUMBER>
+FEATURE_SPEC_PR_NUMBER=<pull request number>
+FEATURE_SPEC_BASE_BUILD_NUMBER=<main/base build number for PR diffs>
 ```
 
-Example GitHub Actions step:
+Example GitHub Actions step for publishing the current report:
 
 ```yaml
 - name: Publish feature spec report
   if: always() && hashFiles('test-results/spec-report/index.html') != ''
   run: npx feature-spec-md github-report --publish ftp --report-dir test-results/spec-report
+  env:
+    FEATURE_SPEC_FTP_HOST: ${{ secrets.FEATURE_SPEC_FTP_HOST }}
+    FEATURE_SPEC_FTP_USER: ${{ secrets.FEATURE_SPEC_FTP_USER }}
+    FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
+    FEATURE_SPEC_REPORT_BASE_URL: ${{ secrets.FEATURE_SPEC_REPORT_BASE_URL }}
+```
+
+Example step for publishing a PR diff after the current report has been published:
+
+```yaml
+- name: Publish feature spec PR diff
+  if: always() && github.event_name == 'pull_request'
+  run: npx feature-spec-md github-diff-report --publish ftp --pr-number "${{ github.event.pull_request.number }}"
   env:
     FEATURE_SPEC_FTP_HOST: ${{ secrets.FEATURE_SPEC_FTP_HOST }}
     FEATURE_SPEC_FTP_USER: ${{ secrets.FEATURE_SPEC_FTP_USER }}
@@ -296,6 +340,7 @@ import {
   collectSpecScreenshots,
   parseSpecDocument,
   renderHtmlReport,
+  renderLocalDiffReport,
   validateScenarioScreenshots,
   validateSpecDocument,
 } from "@anselmdk/feature-spec-md";
@@ -309,6 +354,8 @@ Useful exports include:
 - `buildSpecCoverageSummary` and `collectSpecTestReferences` for custom coverage workflows.
 - `collectSpecScreenshots` and `validateScenarioScreenshots` for loading and enforcing screenshot evidence.
 - `renderHtmlReport` for generating the same report UI from your own integration.
+- `renderLocalDiffReport` for generating the same diff-report UI from local report directories.
+- `insertReportMetadata` and `githubReportMetadata` for adding source/build/PR metadata to reports.
 - `writeTextFile` for small report-writing integrations.
 
 Feature-only helpers such as `parseFeatureSpec` and `checkFeatureSpecs` remain available for compatibility.
