@@ -1,8 +1,3 @@
-/**
- * Shared TypeScript types for parsed spec documents, validation issues,
- * coverage summaries, test references, and screenshot evidence.
- */
-/** Shared frontmatter fields supported by all spec documents. */
 export type SpecFrontmatter = {
   id: string;
   title: string;
@@ -10,7 +5,6 @@ export type SpecFrontmatter = {
   owner?: string;
 };
 
-/** Frontmatter fields supported by documents that may reference models. */
 export type ModelReferenceFrontmatter = SpecFrontmatter & {
   model?: string;
   models?: string[] | string;
@@ -24,16 +18,13 @@ export type ScenarioEvidencePolicy = {
   screenshots: ScreenshotPolicy;
 };
 
-/** Frontmatter fields supported by `*.feature.md` files. */
 export type FeatureFrontmatter = ModelReferenceFrontmatter & {
   test?: ScenarioTestType;
   screenshots?: ScreenshotPolicy;
 };
 
-/** Frontmatter fields supported by `*.design.md` files. */
 export type DesignFrontmatter = ModelReferenceFrontmatter;
 
-/** Parsed contents of one `*.model.md` file. */
 export type ModelSpec = {
   kind: "model";
   filePath: string;
@@ -45,7 +36,6 @@ export type ModelSpec = {
   source: string;
 };
 
-/** Parsed contents of one `*.feature.md` file. */
 export type FeatureSpec = {
   kind?: "feature";
   filePath: string;
@@ -57,7 +47,6 @@ export type FeatureSpec = {
   source: string;
 };
 
-/** Parsed contents of one `*.stack.md` file. */
 export type StackSpec = {
   kind: "stack";
   filePath: string;
@@ -72,7 +61,6 @@ export type StackSpec = {
   source: string;
 };
 
-/** Parsed contents of one `*.design.md` file. */
 export type DesignSpec = {
   kind: "design";
   filePath: string;
@@ -88,10 +76,8 @@ export type DesignSpec = {
   source: string;
 };
 
-/** Any parsed spec document. */
 export type SpecDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
 
-/** A model concept declared in the `## Model` section. */
 export type ModelItem = {
   id: string;
   title: string;
@@ -99,7 +85,6 @@ export type ModelItem = {
   line: number;
 };
 
-/** A rule declared in the `## Rules` section. */
 export type FeatureRule = {
   id: string;
   text: string;
@@ -108,7 +93,6 @@ export type FeatureRule = {
   line: number;
 };
 
-/** A concrete example declared in the `## Scenarios` section. */
 export type FeatureScenario = {
   id: string;
   title: string;
@@ -117,24 +101,15 @@ export type FeatureScenario = {
   steps: FeatureStep[];
 };
 
-/** A single Given / When / Then style step inside a scenario. */
 export type FeatureStep = {
   keyword: StepKeyword;
   text: string;
   line: number;
 };
 
-export type RuleKeyword =
-  | "MUST"
-  | "MUST NOT"
-  | "SHOULD"
-  | "SHOULD NOT"
-  | "MAY"
-  | "OPTIONAL";
-
+export type RuleKeyword = "MUST" | "MUST NOT" | "SHOULD" | "SHOULD NOT" | "MAY" | "OPTIONAL";
 export type StepKeyword = "Given" | "When" | "Then" | "And" | "But";
 
-/** Validation problem found in a spec, test reference, or report input. */
 export type ValidationIssue = {
   code: string;
   severity: "error" | "warning";
@@ -143,7 +118,6 @@ export type ValidationIssue = {
   line?: number;
 };
 
-/** A model item, rule, or scenario ID found in executable tests. */
 export type TestReference = {
   id: string;
   filePath: string;
@@ -152,7 +126,6 @@ export type TestReference = {
   source: "title" | "tag" | "covers" | "annotation" | "free-text";
 };
 
-/** Coverage state for one expected model item, rule, or scenario. */
 export type CoverageItem = {
   id: string;
   title?: string;
@@ -162,7 +135,6 @@ export type CoverageItem = {
   references: TestReference[];
 };
 
-/** Complete test coverage mapping for a set of spec documents. */
 export type CoverageSummary = {
   modelCoverage?: CoverageItem[];
   ruleCoverage: CoverageItem[];
@@ -172,11 +144,12 @@ export type CoverageSummary = {
   orphanScenarioReferences: TestReference[];
 };
 
-/** Screenshot evidence associated with an exact spec line. */
 export type SpecScreenshot = {
   specPath: string;
   line: number;
-  path: string;
+  changed: boolean;
+  path?: string;
   title?: string;
   testPath?: string;
+  comparedWithLine?: number;
 };
