@@ -1,8 +1,5 @@
-/**
- * HTML report renderer for feature specs, models, coverage state, validation
- * issues, and optional screenshot evidence.
- */
 import { html } from "./html.js";
+import { renderHtmlPage } from "./reportHtml.js";
 import { screenshotKey } from "./screenshots.js";
 import type {
   CoverageItem,
@@ -41,80 +38,89 @@ type SourceLinkOptions = {
   githubRef?: string;
 };
 
-/** Render a complete self-contained feature spec report as HTML. */
 export function renderHtmlReport(
   specs: FeatureSpec[],
   options: ReportOptions = {},
 ) {
   const title = options.title ?? "Feature Spec Report";
-  const issues = options.validationIssues ?? [];
   const screenshots = options.screenshots ?? [];
   const sourceLinks: SourceLinkOptions = {
     githubBaseUrl: options.githubBaseUrl,
     githubRef: options.githubRef,
   };
 
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${html(title)}</title>
-    <style>
-      body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}
-      .panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}
-      .ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}
-      .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
-      .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
-      .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
-      .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
-      .scenario-body{padding:0 16px 16px}
-      .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
-      .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
-      .model-item-body{padding:0 16px 16px}
-      .model-item-body p{margin:8px 0}
-      .table-wrap{overflow-x:auto;margin:12px 0}
-      table{border-collapse:collapse;width:100%;font-size:14px}
-      th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
-      th{background:#f6f8fa}
-      h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}
-      h1 a:hover{text-decoration-thickness:2px}
-      .step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}
-      .step p{margin:8px 0}
-      .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
-      .screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
-      .screenshot img{display:block;width:100%;height:auto}
-      .screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
-      .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}
-      .coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
-      .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
-    </style>
-  </head>
-  <body>
-    <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
-    <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
-    ${renderIssues(issues)}
-    ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
-    ${specs.map((spec) => renderSpec(spec, options.coverage, screenshots, sourceLinks)).join("\n")}
-    <script>
-      document.addEventListener("toggle", (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLDetailsElement)) return;
-        if (!target.open || target.dataset.hasImages !== "true") return;
-        const topBefore = target.getBoundingClientRect().top;
-        document
-          .querySelectorAll('details.scenario[data-has-images="true"][open]')
-          .forEach((details) => {
-            if (details !== target) details.removeAttribute("open");
-          });
-        requestAnimationFrame(() => {
-          const topAfter = target.getBoundingClientRect().top;
-          window.scrollBy(0, topAfter - topBefore);
-        });
-      }, true);
-    </script>
-  </body>
-</html>`;
+  return renderHtmlPage({
+    title,
+    styles: featureReportStyles(),
+    scripts: featureReportScripts(),
+    body: featureReportBody({ specs, options, screenshots, sourceLinks, title }),
+  });
+}
+
+function featureReportBody({
+  specs,
+  options,
+  screenshots,
+  sourceLinks,
+  title,
+}: {
+  specs: FeatureSpec[];
+  options: ReportOptions;
+  screenshots: SpecScreenshot[];
+  sourceLinks: SourceLinkOptions;
+  title: string;
+}) {
+  return `
+<h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
+<p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+${renderIssues(options.validationIssues ?? [])}
+${renderModels(options.models ?? [], options.coverage, sourceLinks)}
+${specs.map((spec) => renderSpec(spec, options.coverage, screenshots, sourceLinks)).join("\n")}
+`;
+}
+
+function featureReportStyles() {
+  return `.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}
+.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}
+.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
+.feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
+.scenario-body{padding:0 16px 16px}
+.model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
+.model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
+.table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}
+h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
+.step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
+.screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
+.screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
+.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
+.coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}`;
+}
+
+function featureReportScripts() {
+  const openTag = "<" + "script>";
+  const closeTag = "<" + "/script>";
+  return `${openTag}
+document.addEventListener("toggle", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLDetailsElement)) return;
+  if (!target.open || target.dataset.hasImages !== "true") return;
+  const topBefore = target.getBoundingClientRect().top;
+  document
+    .querySelectorAll('details.scenario[data-has-images="true"][open]')
+    .forEach((details) => {
+      if (details !== target) details.removeAttribute("open");
+    });
+  requestAnimationFrame(() => {
+    const topAfter = target.getBoundingClientRect().top;
+    window.scrollBy(0, topAfter - topBefore);
+  });
+}, true);
+${closeTag}`;
 }
 
 function renderReportTitle(title: string, repositoryUrl: string | undefined) {
@@ -179,6 +185,7 @@ function renderModels(
   sourceLinks: SourceLinkOptions = {},
 ) {
   if (!models.length) return "";
+
   const modelCoverage = coverage?.modelCoverage ?? [];
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
@@ -189,42 +196,51 @@ function renderModels(
 
   return `<section class="panel">
   <h2>Models</h2>
-  ${models
-    .map(
-      (model) => `<section>
-    <div class="feature-header">
-      <h3>${html(model.frontmatter.id)} ${html(model.title)}</h3>
-      <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
-    </div>
-    <p>${html(model.purpose)}</p>
-    <h4>Model</h4>
-    ${model.modelItems
-      .map((item) => {
-        const coverageItem = modelCoverage.find(
-          (candidate) => candidate.id === item.id,
-        );
-        return `<details class="model-item">
-      <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
-      <div class="model-item-body">${renderModelItemBody(item.body)}</div>
-    </details>`;
-      })
-      .join("")}
-    ${
-      model.rules.length
-        ? `<h4>Rules</h4><ul>${model.rules
-            .map((rule) => {
-              const item = ruleCoverage.find(
-                (coverageItem) => coverageItem.id === rule.id,
-              );
-              return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
-            })
-            .join("")}</ul>`
-        : ""
-    }
-  </section>`,
-    )
-    .join("\n")}
+  ${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}
 </section>`;
+}
+
+function renderModel(
+  model: ModelSpec,
+  modelCoverage: CoverageItem[],
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
+  return `<section>
+  <div class="feature-header">
+    <h3>${html(model.frontmatter.id)} ${html(model.title)}</h3>
+    <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
+  </div>
+  <p>${html(model.purpose)}</p>
+  <h4>Model</h4>
+  ${model.modelItems
+    .map((item) => {
+      const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+      return `<details class="model-item">
+    <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
+    <div class="model-item-body">${renderModelItemBody(item.body)}</div>
+  </details>`;
+    })
+    .join("")}
+  ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
+</section>`;
+}
+
+function renderModelRules(
+  model: ModelSpec,
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
+  if (!model.rules.length) return "";
+
+  return `<h4>Rules</h4><ul>${model.rules
+    .map((rule) => {
+      const item = ruleCoverage.find((coverageItem) => coverageItem.id === rule.id);
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
+    })
+    .join("")}</ul>`;
 }
 
 function renderSpec(
@@ -248,39 +264,50 @@ function renderSpec(
   </div>
   <p>${html(spec.purpose)}</p>
   <h3>Rules</h3>
-  <ul>${spec.rules
-    .map((rule) => {
-      const item = ruleCoverage.find(
-        (coverageItem) => coverageItem.id === rule.id,
-      );
-      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
-    })
-    .join("")}</ul>
+  <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
   <h3>Scenarios</h3>
   ${spec.scenarios
-    .map((scenario) => {
-      const screenshotCount = scenario.steps.reduce(
-        (count, step) =>
-          count +
-          (screenshotsByLine.get(screenshotKey(spec.filePath, step.line))
-            ?.length ?? 0),
-        0,
-      );
-      const scenarioRuleIds = ruleIdsForScenario(
-        scenario.id,
-        spec.rules.map((rule) => rule.id),
-        ruleScenarioLinks,
-      );
-      const scenarioCoverageItem = scenarioCoverage.find(
-        (item) => item.id === scenario.id,
-      );
-      return `<details class="scenario" data-has-images="${screenshotCount > 0 ? "true" : "false"}">
-    <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
-    <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine, sourceLinks)).join("")}</div>
-  </details>`;
-    })
+    .map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, screenshotsByLine, sourceLinks))
     .join("\n")}
 </section>`;
+}
+
+function renderFeatureRule(
+  id: string,
+  text: string,
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
+  const item = ruleCoverage.find((coverageItem) => coverageItem.id === id);
+  return `<li><code>${html(id)}</code>: ${html(text)} ${ruleCoverageBadge(item, ruleScenarioIds(id, ruleScenarioLinks), sourceLinks)}</li>`;
+}
+
+function renderScenario(
+  spec: FeatureSpec,
+  scenario: FeatureSpec["scenarios"][number],
+  scenarioCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  screenshotsByLine: Map<string, SpecScreenshot[]>,
+  sourceLinks: SourceLinkOptions,
+) {
+  const screenshotCount = scenario.steps.reduce(
+    (count, step) =>
+      count +
+      (screenshotsByLine.get(screenshotKey(spec.filePath, step.line))?.length ?? 0),
+    0,
+  );
+  const scenarioRuleIds = ruleIdsForScenario(
+    scenario.id,
+    spec.rules.map((rule) => rule.id),
+    ruleScenarioLinks,
+  );
+  const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
+
+  return `<details class="scenario" data-has-images="${screenshotCount > 0 ? "true" : "false"}">
+  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
+  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine, sourceLinks)).join("")}</div>
+</details>`;
 }
 
 function renderScenarioRuleCoverage(ruleIds: string[]) {
