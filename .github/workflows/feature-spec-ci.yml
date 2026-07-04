@@ -1,0 +1,171 @@
+name: Reusable feature spec CI
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to use.
+        required: false
+        type: string
+        default: "24"
+      install-command:
+        description: Dependency install command.
+        required: false
+        type: string
+        default: npm install
+      build-command:
+        description: Build command. Leave empty to skip.
+        required: false
+        type: string
+        default: npm run build
+      unit-test-command:
+        description: Unit test command. Leave empty to skip.
+        required: false
+        type: string
+        default: npm run test:unit
+      e2e-test-command:
+        description: End-to-end test command. Leave empty to skip.
+        required: false
+        type: string
+        default: npm run test:e2e
+      specs:
+        description: Optional comma-separated feature-spec-md --specs value.
+        required: false
+        type: string
+        default: ""
+      tests:
+        description: Optional comma-separated feature-spec-md --tests value.
+        required: false
+        type: string
+        default: "tests/**/*.ts"
+      screenshots:
+        description: Screenshot manifest glob passed to feature-spec-md report.
+        required: false
+        type: string
+        default: "test-results/spec-report/screenshots-*.json"
+      report-dir:
+        description: Directory where the generated feature spec report is written and published.
+        required: false
+        type: string
+        default: test-results/spec-report
+      require-model-coverage:
+        description: Fail check when model items have no matching test references.
+        required: false
+        type: boolean
+        default: true
+      require-rule-coverage:
+        description: Fail check when rules have no matching test references.
+        required: false
+        type: boolean
+        default: true
+      enforce-evidence:
+        description: Fail report generation when declared screenshot evidence is missing.
+        required: false
+        type: boolean
+        default: true
+      publish-report:
+        description: Publish the generated report through feature-spec-md github-report.
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+      - name: Install Playwright browser dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+      - name: Check feature specs
+        env:
+          FEATURE_SPEC_SPECS: ${{ inputs.specs }}
+          FEATURE_SPEC_TESTS: ${{ inputs.tests }}
+          REQUIRE_MODEL_COVERAGE: ${{ inputs.require-model-coverage }}
+          REQUIRE_RULE_COVERAGE: ${{ inputs.require-rule-coverage }}
+        run: |
+          args=()
+          if [ -n "$FEATURE_SPEC_SPECS" ]; then args+=(--specs "$FEATURE_SPEC_SPECS"); fi
+          if [ -n "$FEATURE_SPEC_TESTS" ]; then args+=(--tests "$FEATURE_SPEC_TESTS"); fi
+          if [ "$REQUIRE_MODEL_COVERAGE" = "true" ]; then args+=(--require-model-coverage); fi
+          if [ "$REQUIRE_RULE_COVERAGE" = "true" ]; then args+=(--require-rule-coverage); fi
+          npx feature-spec-md check "${args[@]}"
+      - name: Check feature spec coverage
+        env:
+          FEATURE_SPEC_SPECS: ${{ inputs.specs }}
+          FEATURE_SPEC_TESTS: ${{ inputs.tests }}
+        run: |
+          args=(--fail-on-missing)
+          if [ -n "$FEATURE_SPEC_SPECS" ]; then args+=(--specs "$FEATURE_SPEC_SPECS"); fi
+          if [ -n "$FEATURE_SPEC_TESTS" ]; then args+=(--tests "$FEATURE_SPEC_TESTS"); fi
+          npx feature-spec-md coverage "${args[@]}"
+      - name: Unit tests
+        if: inputs.unit-test-command != ''
+        run: ${{ inputs.unit-test-command }}
+      - name: Clean previous feature spec report evidence
+        if: inputs.e2e-test-command != ''
+        env:
+          REPORT_DIR: ${{ inputs.report-dir }}
+        run: rm -rf "$REPORT_DIR"
+      - name: End-to-end tests
+        if: inputs.e2e-test-command != ''
+        run: ${{ inputs.e2e-test-command }}
+      - name: Generate feature spec report
+        id: spec_report
+        if: always()
+        env:
+          FEATURE_SPEC_SPECS: ${{ inputs.specs }}
+          FEATURE_SPEC_TESTS: ${{ inputs.tests }}
+          FEATURE_SPEC_SCREENSHOTS: ${{ inputs.screenshots }}
+          FEATURE_SPEC_REPORT_DIR: ${{ inputs.report-dir }}
+          ENFORCE_EVIDENCE: ${{ inputs.enforce-evidence }}
+        run: |
+          set +e
+          args=(--out "$FEATURE_SPEC_REPORT_DIR/index.html")
+          if [ -n "$FEATURE_SPEC_SPECS" ]; then args+=(--specs "$FEATURE_SPEC_SPECS"); fi
+          if [ -n "$FEATURE_SPEC_TESTS" ]; then args+=(--tests "$FEATURE_SPEC_TESTS"); fi
+          if [ -n "$FEATURE_SPEC_SCREENSHOTS" ]; then args+=(--screenshots "$FEATURE_SPEC_SCREENSHOTS"); fi
+          if [ "$ENFORCE_EVIDENCE" = "true" ]; then args+=(--enforce-evidence); fi
+          npx feature-spec-md report "${args[@]}"
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -eq 0 ]; then
+            {
+              echo "## Feature Spec Evidence"
+              echo ""
+              echo "✅ Declared screenshot evidence is complete."
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Feature Spec Evidence"
+              echo ""
+              echo "❌ Declared screenshot evidence is incomplete."
+              echo ""
+              echo "The HTML report is still published below for inspection."
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+      - name: Publish feature spec report
+        if: always() && inputs.publish-report && hashFiles(format('{0}/index.html', inputs.report-dir)) != ''
+        env:
+          FEATURE_SPEC_FTP_HOST: ${{ vars.FEATURE_SPEC_FTP_HOST }}
+          FEATURE_SPEC_FTP_USER: ${{ vars.FEATURE_SPEC_FTP_USER }}
+          FEATURE_SPEC_FTP_REMOTE_DIR: ${{ vars.FEATURE_SPEC_FTP_REMOTE_DIR }}
+          FEATURE_SPEC_REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_REPORT_BASE_URL }}
+          FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
+        run: npx feature-spec-md github-report --publish ftp --report-dir "${{ inputs.report-dir }}"
+      - name: Fail on feature spec evidence errors
+        if: always() && steps.spec_report.outputs.status != '0'
+        run: exit 1
