@@ -147,7 +147,7 @@ export type CoverageSummary = {
 export type SpecScreenshot = {
   specPath: string;
   line: number;
-  changed: boolean;
+  changed?: boolean;
   path?: string;
   title?: string;
   testPath?: string;
