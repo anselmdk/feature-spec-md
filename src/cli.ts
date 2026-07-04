@@ -24,7 +24,9 @@ import {
 
 const defaultSpecPattern =
   "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md";
-const defaultTestPattern = "tests/**/*.spec.ts";
+const defaultTestPattern = "tests/**/*.ts";
+const defaultScreenshotPattern = "test-results/spec-report/screenshots-*.json";
+const defaultReportPath = "test-results/spec-report/index.html";
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
@@ -53,9 +55,9 @@ async function runCheck(options: CliOptions) {
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
-    requireModelCoverage: options["require-model-coverage"] === "true",
-    requireRuleCoverage: options["require-rule-coverage"] === "true",
-    requireScenarioCoverage: options["require-scenario-coverage"] !== "false",
+    requireModelCoverage: booleanOption(options, "require-model-coverage", true),
+    requireRuleCoverage: booleanOption(options, "require-rule-coverage", true),
+    requireScenarioCoverage: booleanOption(options, "require-scenario-coverage", true),
   });
 
   printIssues([...result.validationIssues, ...result.coverageIssues]);
@@ -94,7 +96,7 @@ async function runCoverage(options: CliOptions) {
     console.log("Spec test implementation report");
     console.log("");
     console.log(
-      "No tests were scanned. Pass --tests or omit --tests to use the default tests/**/*.spec.ts pattern.",
+      `No tests were scanned. Pass --tests or omit --tests to use the default ${defaultTestPattern} pattern.`,
     );
     return;
   }
@@ -106,7 +108,7 @@ async function runCoverage(options: CliOptions) {
   );
   console.log(formatSpecImplementationReport(report));
 
-  if (options["fail-on-missing"] === "true" && hasMissingCoverage(report)) {
+  if (booleanOption(options, "fail-on-missing", true) && hasMissingCoverage(report)) {
     process.exit(1);
   }
 }
@@ -116,16 +118,19 @@ async function runReport(options: CliOptions) {
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
-    requireRuleCoverage: options["require-rule-coverage"] === "true",
+    requireRuleCoverage: booleanOption(options, "require-rule-coverage", false),
     requireScenarioCoverage: false,
   });
 
-  const out = options.out ?? "test-results/feature-spec-report/index.html";
-  const screenshots = options.screenshots
-    ? await collectSpecScreenshots(optionList(options.screenshots, ""))
-    : [];
+  const out = options.out ?? defaultReportPath;
+  const screenshots =
+    options.screenshots === ""
+      ? []
+      : await collectSpecScreenshots(
+          optionList(options.screenshots, defaultScreenshotPattern),
+        );
   const enforceEvidence =
-    options["enforce-evidence"] === "true" ||
+    booleanOption(options, "enforce-evidence", true) ||
     options["require-declared-evidence"] === "true" ||
     options["require-screenshots"] === "true";
   const screenshotIssues = enforceEvidence
@@ -200,6 +205,16 @@ function optionList(value: string | undefined, fallback: string) {
     .filter(Boolean);
 }
 
+function booleanOption(
+  options: CliOptions,
+  key: string,
+  defaultValue: boolean,
+) {
+  const value = options[key];
+  if (value === undefined) return defaultValue;
+  return value !== "false";
+}
+
 function printIssues(issues: ValidationIssue[]) {
   for (const issue of issues) {
     const location = issue.filePath
@@ -264,21 +279,26 @@ function printHelp() {
 
 Usage:
   feature-spec-md init [--kind feature|model|stack|design] [--dir specs]
-  feature-spec-md check [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"]
-  feature-spec-md coverage [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--fail-on-missing]
-  feature-spec-md report [--specs "specs/**/*.model.md,specs/**/*.feature.md,specs/**/*.stack.md,specs/**/*.design.md"] [--tests "tests/**/*.spec.ts"] [--screenshots "test-results/spec-report/screenshots.json"] [--enforce-evidence] [--out test-results/feature-spec-report/index.html]
+  feature-spec-md check [--specs "${defaultSpecPattern}"] [--tests "${defaultTestPattern}"]
+  feature-spec-md coverage [--specs "${defaultSpecPattern}"] [--tests "${defaultTestPattern}"] [--fail-on-missing=false]
+  feature-spec-md report [--specs "${defaultSpecPattern}"] [--tests "${defaultTestPattern}"] [--screenshots "${defaultScreenshotPattern}"] [--enforce-evidence=false] [--out ${defaultReportPath}]
   feature-spec-md github-report [--report-dir test-results/spec-report] [--publish artifact|ftp]
   feature-spec-md github-diff-report --publish ftp --pr-number 123
 
+Defaults:
+  check                       Requires scenario, rule, and model coverage.
+  coverage                    Fails on missing scenarios, rules, or model items.
+  report                      Collects screenshot evidence and enforces declared evidence.
+
 Options:
-  --require-model-coverage      Fail when model items have no matching test references.
-  --require-rule-coverage       Fail when rules have no matching test references.
+  --require-model-coverage      Defaults to true for check. Use --require-model-coverage=false to disable.
+  --require-rule-coverage       Defaults to true for check. Use --require-rule-coverage=false to disable.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
-  --enforce-evidence            For report, fail when declared screenshot evidence is missing.
+  --enforce-evidence            Defaults to true for report. Use --enforce-evidence=false to disable.
   --require-declared-evidence   Alias for --enforce-evidence.
   --require-screenshots         Deprecated alias for --enforce-evidence.
-  --fail-on-missing             Exit with status 1 when coverage finds missing model items, rules, or scenarios.
-  --screenshots                 Screenshot manifest JSON glob for report evidence.
+  --fail-on-missing             Defaults to true for coverage. Use --fail-on-missing=false to disable.
+  --screenshots                 Screenshot manifest JSON glob for report evidence. Use --screenshots "" to disable screenshot lookup.
   --tests ""                   Disable test coverage lookup.
 
 GitHub report publishing:
