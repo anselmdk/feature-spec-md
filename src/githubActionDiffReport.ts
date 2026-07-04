@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { basename, join, relative } from "node:path";
 import { tmpdir } from "node:os";
+import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
 import {
   downloadRemoteFile,
@@ -489,7 +489,11 @@ function relativeAssetUrl(prefix: string, filePath: string) {
 function renderDiffReport(report: DiffReport) {
   const changed = report.files.filter((file) => file.status !== "unchanged" && file.kind !== "report");
   const assetChanges = changed.filter((file) => file.kind === "asset");
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature spec PR diff</title><style>body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}</style></head><body><h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1><p>Generated ${html(new Date().toISOString())}.</p><section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>${renderSpecDiffs(report.specDiffs)}${renderScreenshotDiffs(report.screenshotDiffs)}${renderFileSection("Other assets", assetChanges)}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature spec PR diff</title><style>${diffReportStyles()}</style></head><body><h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1><p>Generated ${html(new Date().toISOString())}.</p><section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>${renderSpecDiffs(report.specDiffs)}${renderScreenshotDiffs(report.screenshotDiffs)}${renderFileSection("Other assets", assetChanges)}</body></html>`;
+}
+
+function diffReportStyles() {
+  return "body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}.toolbar label{border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font:inherit;padding:6px 10px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}.screenshot-item{border-top:1px solid #d0d7de;padding:10px 0}.screenshot-summary{margin-bottom:8px}.screenshot-toggle:not(:checked)~.screenshot-groups .image-pair{display:none}.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}";
 }
 
 function renderSpecDiffs(specDiffs: SpecDiff[]) {
@@ -508,7 +512,7 @@ function renderDiffLine(line: DiffLine) {
 
 function renderScreenshotDiffs(groups: ScreenshotDiffGroup[]) {
   if (!groups.length) return `<section class="panel"><h2>Screenshots</h2><p class="muted">No screenshot changes.</p></section>`;
-  return `<section class="panel"><h2>Screenshots</h2>${groups.map(renderScreenshotGroup).join("\n")}</section>`;
+  return `<section class="panel"><h2>Screenshots</h2><div class="toolbar"><label><input class="screenshot-toggle" type="checkbox"> Show all screenshots</label><div class="screenshot-groups">${groups.map(renderScreenshotGroup).join("\n")}</div></div></section>`;
 }
 
 function renderScreenshotGroup(group: ScreenshotDiffGroup) {
@@ -518,7 +522,7 @@ function renderScreenshotGroup(group: ScreenshotDiffGroup) {
 function renderScreenshotItem(item: ScreenshotDiffItem) {
   const before = item.previousUrl ? `<div class="image-card"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}"></div>` : "";
   const after = item.currentUrl ? `<div class="image-card"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}"></div>` : "";
-  return `<details open><summary><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair">${before}${after}</div></details>`;
+  return `<div class="screenshot-item"><div class="screenshot-summary"><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></div><div class="image-pair">${before}${after}</div></div>`;
 }
 
 function renderFileSection(title: string, files: ComparedFile[]) {
