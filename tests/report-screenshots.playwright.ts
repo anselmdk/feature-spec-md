@@ -45,6 +45,7 @@ Then account access is granted
         {
           specPath: spec.filePath,
           line: firstStep!.line,
+          changed: true,
           path: transparentPixel,
           title: "ACCOUNT-S001 screenshot",
         },

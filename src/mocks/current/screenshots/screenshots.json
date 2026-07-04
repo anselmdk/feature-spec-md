@@ -1,18 +1,36 @@
 {
-  "screenshots": [
+  "evidence": [
     {
       "specPath": "src/mocks/current/specs/ticket-inbox.feature.md",
       "line": 27,
+      "changed": true,
       "path": "screenshots/SUPPORT-INBOX-S001-line-27-current.svg",
       "title": "Inbox with priority badges",
       "testPath": "src/mocks/current/tests/supportDesk.spec.ts"
     },
     {
+      "specPath": "src/mocks/current/specs/ticket-inbox.feature.md",
+      "line": 28,
+      "changed": false,
+      "title": "Inbox remains visually unchanged after selecting the first ticket",
+      "testPath": "src/mocks/current/tests/supportDesk.spec.ts",
+      "comparedWithLine": 27
+    },
+    {
       "specPath": "src/mocks/current/specs/ticket-reply.feature.md",
       "line": 27,
+      "changed": true,
       "path": "screenshots/SUPPORT-REPLY-S001-line-27-current.svg",
       "title": "Reply composer with suggested answer",
       "testPath": "src/mocks/current/tests/supportDesk.spec.ts"
+    },
+    {
+      "specPath": "src/mocks/current/specs/ticket-reply.feature.md",
+      "line": 28,
+      "changed": false,
+      "title": "Reply composer stays visually unchanged while text is reviewed",
+      "testPath": "src/mocks/current/tests/supportDesk.spec.ts",
+      "comparedWithLine": 27
     }
   ]
 }

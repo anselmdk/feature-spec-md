@@ -38,12 +38,9 @@ type SourceLinkOptions = {
   githubRef?: string;
 };
 
-export function renderHtmlReport(
-  specs: FeatureSpec[],
-  options: ReportOptions = {},
-) {
+export function renderHtmlReport(specs: FeatureSpec[], options: ReportOptions = {}) {
   const title = options.title ?? "Feature Spec Report";
-  const screenshots = options.screenshots ?? [];
+  const evidence = options.screenshots ?? [];
   const sourceLinks: SourceLinkOptions = {
     githubBaseUrl: options.githubBaseUrl,
     githubRef: options.githubRef,
@@ -53,20 +50,20 @@ export function renderHtmlReport(
     title,
     styles: featureReportStyles(),
     scripts: featureReportScripts(),
-    body: featureReportBody({ specs, options, screenshots, sourceLinks, title }),
+    body: featureReportBody({ specs, options, evidence, sourceLinks, title }),
   });
 }
 
 function featureReportBody({
   specs,
   options,
-  screenshots,
+  evidence,
   sourceLinks,
   title,
 }: {
   specs: FeatureSpec[];
   options: ReportOptions;
-  screenshots: SpecScreenshot[];
+  evidence: SpecScreenshot[];
   sourceLinks: SourceLinkOptions;
   title: string;
 }) {
@@ -75,13 +72,13 @@ function featureReportBody({
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
 ${renderIssues(options.validationIssues ?? [])}
 ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
-${specs.map((spec) => renderSpec(spec, options.coverage, screenshots, sourceLinks)).join("\n")}
+${specs.map((spec) => renderSpec(spec, options.coverage, evidence, sourceLinks)).join("\n")}
 `;
 }
 
 function featureReportStyles() {
   return `.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}
-.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}
+.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
@@ -125,38 +122,21 @@ ${closeTag}`;
 
 function renderReportTitle(title: string, repositoryUrl: string | undefined) {
   if (!repositoryUrl) return html(title);
-
   const prefix = "Feature Spec Report for ";
   const attributes = `href="${html(repositoryUrl)}" target="_blank" rel="noopener noreferrer"`;
   if (title.startsWith(prefix) && title.length > prefix.length) {
     return `${html(prefix)}<a ${attributes}>${html(title.slice(prefix.length))}</a>`;
   }
-
   return `<a ${attributes}>${html(title)}</a>`;
 }
 
 function formatGeneratedAt(value: string | undefined) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return value ?? "";
-
   const day = date.getDate();
-  const month = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ][date.getMonth()];
+  const month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][date.getMonth()];
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
-
   return `${day}${ordinalSuffix(day)} ${month} ${date.getFullYear()} at ${hours}:${minutes}`;
 }
 
@@ -170,43 +150,24 @@ function ordinalSuffix(day: number) {
 
 function renderIssues(issues: ValidationIssue[]) {
   if (!issues.length) return "";
-
   return `<section class="panel"><h2>Validation</h2><ul>${issues
-    .map(
-      (issue) =>
-        `<li class="${issue.severity}"><code>${html(`${issue.filePath ?? ""}${issue.line ? `:${issue.line}` : ""}`)}</code> ${html(issue.message)}</li>`,
-    )
+    .map((issue) => `<li class="${issue.severity}"><code>${html(`${issue.filePath ?? ""}${issue.line ? `:${issue.line}` : ""}`)}</code> ${html(issue.message)}</li>`)
     .join("")}</ul></section>`;
 }
 
-function renderModels(
-  models: ModelSpec[],
-  coverage?: CoverageSummary,
-  sourceLinks: SourceLinkOptions = {},
-) {
+function renderModels(models: ModelSpec[], coverage?: CoverageSummary, sourceLinks: SourceLinkOptions = {}) {
   if (!models.length) return "";
-
   const modelCoverage = coverage?.modelCoverage ?? [];
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(
-    ruleCoverage,
-    scenarioCoverage,
-  );
-
+  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
   return `<section class="panel">
   <h2>Models</h2>
   ${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}
 </section>`;
 }
 
-function renderModel(
-  model: ModelSpec,
-  modelCoverage: CoverageItem[],
-  ruleCoverage: CoverageItem[],
-  ruleScenarioLinks: RuleScenarioLink[],
-  sourceLinks: SourceLinkOptions,
-) {
+function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
   return `<section>
   <div class="feature-header">
     <h3>${html(model.frontmatter.id)} ${html(model.title)}</h3>
@@ -227,14 +188,8 @@ function renderModel(
 </section>`;
 }
 
-function renderModelRules(
-  model: ModelSpec,
-  ruleCoverage: CoverageItem[],
-  ruleScenarioLinks: RuleScenarioLink[],
-  sourceLinks: SourceLinkOptions,
-) {
+function renderModelRules(model: ModelSpec, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
   if (!model.rules.length) return "";
-
   return `<h4>Rules</h4><ul>${model.rules
     .map((rule) => {
       const item = ruleCoverage.find((coverageItem) => coverageItem.id === rule.id);
@@ -243,20 +198,11 @@ function renderModelRules(
     .join("")}</ul>`;
 }
 
-function renderSpec(
-  spec: FeatureSpec,
-  coverage?: CoverageSummary,
-  screenshots: SpecScreenshot[] = [],
-  sourceLinks: SourceLinkOptions = {},
-) {
-  const screenshotsByLine = groupScreenshotsByLine(screenshots);
+function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: SpecScreenshot[] = [], sourceLinks: SourceLinkOptions = {}) {
+  const evidenceByLine = groupEvidenceByLine(evidence);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(
-    ruleCoverage,
-    scenarioCoverage,
-  );
-
+  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
   return `<section class="panel">
   <div class="feature-header">
     <h2>${html(spec.title)}</h2>
@@ -266,78 +212,56 @@ function renderSpec(
   <h3>Rules</h3>
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
   <h3>Scenarios</h3>
-  ${spec.scenarios
-    .map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, screenshotsByLine, sourceLinks))
-    .join("\n")}
+  ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
 </section>`;
 }
 
-function renderFeatureRule(
-  id: string,
-  text: string,
-  ruleCoverage: CoverageItem[],
-  ruleScenarioLinks: RuleScenarioLink[],
-  sourceLinks: SourceLinkOptions,
-) {
+function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
   const item = ruleCoverage.find((coverageItem) => coverageItem.id === id);
   return `<li><code>${html(id)}</code>: ${html(text)} ${ruleCoverageBadge(item, ruleScenarioIds(id, ruleScenarioLinks), sourceLinks)}</li>`;
 }
 
-function renderScenario(
-  spec: FeatureSpec,
-  scenario: FeatureSpec["scenarios"][number],
-  scenarioCoverage: CoverageItem[],
-  ruleScenarioLinks: RuleScenarioLink[],
-  screenshotsByLine: Map<string, SpecScreenshot[]>,
-  sourceLinks: SourceLinkOptions,
-) {
-  const screenshotCount = scenario.steps.reduce(
-    (count, step) =>
-      count +
-      (screenshotsByLine.get(screenshotKey(spec.filePath, step.line))?.length ?? 0),
-    0,
-  );
-  const scenarioRuleIds = ruleIdsForScenario(
-    scenario.id,
-    spec.rules.map((rule) => rule.id),
-    ruleScenarioLinks,
-  );
+function renderScenario(spec: FeatureSpec, scenario: FeatureSpec["scenarios"][number], scenarioCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
+  const scenarioEvidence = scenario.steps.flatMap((step) => evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? []);
+  const changedCount = scenarioEvidence.filter((entry) => entry.changed && entry.path).length;
+  const unchangedCount = scenarioEvidence.filter((entry) => !entry.changed).length;
+  const scenarioRuleIds = ruleIdsForScenario(scenario.id, spec.rules.map((rule) => rule.id), ruleScenarioLinks);
   const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
-
-  return `<details class="scenario" data-has-images="${screenshotCount > 0 ? "true" : "false"}">
-  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
-  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine, sourceLinks)).join("")}</div>
+  return `<details class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
+  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} ${renderEvidenceSummary(changedCount, unchangedCount)}</summary>
+  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks)).join("")}</div>
 </details>`;
 }
 
-function renderScenarioRuleCoverage(ruleIds: string[]) {
-  if (!ruleIds.length) {
-    return `<p><strong>Rules covered by this scenario:</strong> <span class="missing">none referenced</span></p>`;
+function renderEvidenceSummary(changedCount: number, unchangedCount: number) {
+  if (changedCount === 0 && unchangedCount === 0) {
+    return `<span class="badge muted">no visual evidence recorded</span>`;
   }
+  const changedLabel = `${changedCount} visual change${changedCount === 1 ? "" : "s"}`;
+  const unchangedLabel = `${unchangedCount} unchanged screen${unchangedCount === 1 ? "" : "s"}`;
+  return `<span class="badge">${html([changedLabel, unchangedLabel].join(" · "))}</span>`;
+}
 
-  return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds
-    .map((ruleId) => `<code>${html(ruleId)}</code>`)
-    .join(" ")}</p>`;
+function renderScenarioRuleCoverage(ruleIds: string[]) {
+  if (!ruleIds.length) return `<p><strong>Rules covered by this scenario:</strong> <span class="muted">none referenced</span></p>`;
+  return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds.map((ruleId) => `<code>${html(ruleId)}</code>`).join(" ")}</p>`;
 }
 
 function renderModelItemBody(body: string) {
   const lines = body.split("\n");
   const blocks: string[] = [];
   let paragraph: string[] = [];
-
   const flushParagraph = () => {
     if (!paragraph.length) return;
     blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
     paragraph = [];
   };
-
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (!line.trim()) {
       flushParagraph();
       continue;
     }
-
     if (isTableStart(lines, i)) {
       flushParagraph();
       const tableLines = [line];
@@ -350,10 +274,8 @@ function renderModelItemBody(body: string) {
       blocks.push(renderTable(tableLines));
       continue;
     }
-
     paragraph.push(line.trim());
   }
-
   flushParagraph();
   return blocks.join("");
 }
@@ -361,20 +283,12 @@ function renderModelItemBody(body: string) {
 function renderInlineMarkdown(source: string) {
   return source
     .split(/(`[^`]+`)/g)
-    .map((part) =>
-      part.startsWith("`") && part.endsWith("`")
-        ? `<code>${html(part.slice(1, -1))}</code>`
-        : html(part),
-    )
+    .map((part) => part.startsWith("`") && part.endsWith("`") ? `<code>${html(part.slice(1, -1))}</code>` : html(part))
     .join("");
 }
 
 function isTableStart(lines: string[], index: number) {
-  return (
-    isPipeTableRow(lines[index]) &&
-    index + 1 < lines.length &&
-    isTableSeparator(lines[index + 1])
-  );
+  return isPipeTableRow(lines[index]) && index + 1 < lines.length && isTableSeparator(lines[index + 1]);
 }
 
 function isPipeTableRow(line: string) {
@@ -382,122 +296,66 @@ function isPipeTableRow(line: string) {
 }
 
 function isTableSeparator(line: string) {
-  return (
-    isPipeTableRow(line) &&
-    splitTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell))
-  );
+  return isPipeTableRow(line) && splitTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
 function splitTableRow(line: string) {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
 }
 
 function renderTable(lines: string[]) {
   const headers = splitTableRow(lines[0]);
   const rows = lines.slice(1).map(splitTableRow);
-
-  return `<div class="table-wrap"><table><thead><tr>${headers
-    .map((header) => `<th>${renderInlineMarkdown(header)}</th>`)
-    .join("")}</tr></thead><tbody>${rows
-    .map(
-      (row) =>
-        `<tr>${row
-          .map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`)
-          .join("")}</tr>`,
-    )
-    .join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${renderInlineMarkdown(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderStep(
-  spec: FeatureSpec,
-  step: FeatureStep,
-  screenshotsByLine: Map<string, SpecScreenshot[]>,
-  sourceLinks: SourceLinkOptions,
-) {
-  const screenshots =
-    screenshotsByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
+function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
+  const evidence = evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
+  const screenshots = evidence.filter((entry) => entry.changed && entry.path);
+  const unchanged = evidence.filter((entry) => !entry.changed);
   const evidenceBadge = screenshots.length
-    ? `<span class="badge ok">${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}</span>`
-    : `<span class="badge missing">missing screenshot</span>`;
-
+    ? `<span class="badge ok">screen changed · screenshot captured</span>`
+    : unchanged.length
+      ? `<span class="badge muted">same screen${renderComparedWith(unchanged[0])}</span>`
+      : `<span class="badge muted" title="missing screenshot evidence is informational">no screenshot captured</span>`;
   return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} ${renderLineBadge(spec.filePath, step.line, sourceLinks)} ${evidenceBadge}</p>${renderScreenshots(screenshots)}</div>`;
 }
 
-function renderLineBadge(
-  filePath: string,
-  line: number,
-  sourceLinks: SourceLinkOptions,
-) {
+function renderComparedWith(entry: SpecScreenshot) {
+  return entry.comparedWithLine ? ` as line ${html(String(entry.comparedWithLine))}` : " as previous screen";
+}
+
+function renderLineBadge(filePath: string, line: number, sourceLinks: SourceLinkOptions) {
   const label = `line ${line}`;
   const url = sourceLineUrl(filePath, line, sourceLinks);
   if (!url) return `<span class="badge">${html(label)}</span>`;
-
   return `<a class="badge line-link" href="${html(url)}" title="${html(`${filePath}:${line}`)}" target="_blank" rel="noopener noreferrer">${html(label)}</a>`;
 }
 
 function renderScreenshots(screenshots: SpecScreenshot[]) {
   if (!screenshots.length) return "";
-  return `<div class="screenshots">${screenshots
-    .map(
-      (screenshot) =>
-        `<figure class="screenshot"><img src="${html(screenshot.path)}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`,
-    )
-    .join("")}</div>`;
+  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
 }
 
-function coverageBadge(
-  covered?: boolean,
-  suffixes: string[] = [],
-  item?: CoverageItem,
-  sourceLinks: SourceLinkOptions = {},
-) {
-  return covered === undefined
-    ? ""
-    : covered
-      ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}${renderCoverageReferenceMarkers(item, sourceLinks)}</span>`
-      : `<span class="badge missing">missing coverage</span>`;
+function coverageBadge(covered?: boolean, suffixes: string[] = [], item?: CoverageItem, sourceLinks: SourceLinkOptions = {}) {
+  return covered === undefined ? "" : covered ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}${renderCoverageReferenceMarkers(item, sourceLinks)}</span>` : `<span class="badge missing">missing coverage</span>`;
 }
 
-function ruleCoverageBadge(
-  ruleCoverage: CoverageItem | undefined,
-  scenarioIds: string[],
-  sourceLinks: SourceLinkOptions,
-) {
-  if (ruleCoverage?.covered && !scenarioIds.length) {
-    return coverageBadge(true, ["direct test"], ruleCoverage, sourceLinks);
-  }
-
+function ruleCoverageBadge(ruleCoverage: CoverageItem | undefined, scenarioIds: string[], sourceLinks: SourceLinkOptions) {
+  if (ruleCoverage?.covered && !scenarioIds.length) return coverageBadge(true, ["direct test"], ruleCoverage, sourceLinks);
   return coverageBadge(ruleCoverage?.covered, scenarioIds, ruleCoverage, sourceLinks);
 }
 
-function renderCoverageReferenceMarkers(
-  item: CoverageItem | undefined,
-  sourceLinks: SourceLinkOptions,
-) {
+function renderCoverageReferenceMarkers(item: CoverageItem | undefined, sourceLinks: SourceLinkOptions) {
   const references = uniqueCoverageReferences(item);
   if (!references.length) return "";
-  return ` <span class="coverage-refs">${references
-    .map((reference, index) =>
-      renderCoverageReferenceMarker(reference, index + 1, sourceLinks),
-    )
-    .join(",")}</span>`;
+  return ` <span class="coverage-refs">${references.map((reference, index) => renderCoverageReferenceMarker(reference, index + 1, sourceLinks)).join(",")}</span>`;
 }
 
-function renderCoverageReferenceMarker(
-  reference: TestReference,
-  index: number,
-  sourceLinks: SourceLinkOptions,
-) {
+function renderCoverageReferenceMarker(reference: TestReference, index: number, sourceLinks: SourceLinkOptions) {
   const label = coverageReferenceLabel(reference);
   const url = coverageReferenceUrl(reference, sourceLinks);
-
   if (!url) return `<span class="coverage-ref" title="${html(label)}">${index}</span>`;
-
   return `<a class="coverage-ref" href="${html(url)}" title="${html(label)}" target="_blank" rel="noopener noreferrer">${index}</a>`;
 }
 
@@ -519,108 +377,58 @@ function coverageReferenceLabel(reference: TestReference) {
   return `${reference.filePath}${line}`;
 }
 
-function coverageReferenceUrl(
-  reference: TestReference,
-  sourceLinks: SourceLinkOptions,
-) {
+function coverageReferenceUrl(reference: TestReference, sourceLinks: SourceLinkOptions) {
   return sourceLineUrl(reference.filePath, reference.line, sourceLinks);
 }
 
-function sourceLineUrl(
-  filePath: string,
-  line: number,
-  sourceLinks: SourceLinkOptions,
-) {
+function sourceLineUrl(filePath: string, line: number, sourceLinks: SourceLinkOptions) {
   if (!sourceLinks.githubBaseUrl || !sourceLinks.githubRef) return undefined;
   const baseUrl = sourceLinks.githubBaseUrl.replace(/\/$/, "");
   const ref = encodeURIComponent(sourceLinks.githubRef);
-  const encodedFilePath = filePath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
+  const encodedFilePath = filePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
   return `${baseUrl}/blob/${ref}/${encodedFilePath}#L${line}`;
 }
 
-function ruleScenarioIds(
-  ruleId: string,
-  ruleScenarioLinks: RuleScenarioLink[],
-) {
-  return Array.from(
-    new Set(
-      ruleScenarioLinks
-        .filter((link) => link.ruleId === ruleId)
-        .map((link) => link.scenarioId),
-    ),
-  ).sort();
+function ruleScenarioIds(ruleId: string, ruleScenarioLinks: RuleScenarioLink[]) {
+  return Array.from(new Set(ruleScenarioLinks.filter((link) => link.ruleId === ruleId).map((link) => link.scenarioId))).sort();
 }
 
-function ruleIdsForScenario(
-  scenarioId: string,
-  specRuleIds: string[],
-  ruleScenarioLinks: RuleScenarioLink[],
-) {
-  const ruleIds = new Set(
-    ruleScenarioLinks
-      .filter((link) => link.scenarioId === scenarioId)
-      .map((link) => link.ruleId),
-  );
+function ruleIdsForScenario(scenarioId: string, specRuleIds: string[], ruleScenarioLinks: RuleScenarioLink[]) {
+  const ruleIds = new Set(ruleScenarioLinks.filter((link) => link.scenarioId === scenarioId).map((link) => link.ruleId));
   return specRuleIds.filter((ruleId) => ruleIds.has(ruleId));
 }
 
-function buildRuleScenarioLinks(
-  ruleCoverage: CoverageItem[],
-  scenarioCoverage: CoverageItem[],
-) {
+function buildRuleScenarioLinks(ruleCoverage: CoverageItem[], scenarioCoverage: CoverageItem[]) {
   const scenarioReferences = scenarioCoverage.flatMap((scenario) =>
-    scenario.references.map((reference) => ({
-      scenarioId: scenario.id,
-      filePath: reference.filePath,
-      line: reference.line,
-    })),
+    scenario.references.map((reference) => ({ scenarioId: scenario.id, filePath: reference.filePath, line: reference.line })),
   );
   const links: RuleScenarioLink[] = [];
   const seen = new Set<string>();
-
   for (const rule of ruleCoverage) {
     for (const ruleReference of rule.references) {
-      const scenarioReference = nearestScenarioReference(
-        ruleReference.filePath,
-        ruleReference.line,
-        scenarioReferences,
-      );
+      const scenarioReference = nearestScenarioReference(ruleReference.filePath, ruleReference.line, scenarioReferences);
       if (!scenarioReference) continue;
-
       const key = `${rule.id}:${scenarioReference.scenarioId}`;
       if (seen.has(key)) continue;
       seen.add(key);
       links.push({ ruleId: rule.id, scenarioId: scenarioReference.scenarioId });
     }
   }
-
   return links;
 }
 
-function nearestScenarioReference(
-  filePath: string,
-  line: number,
-  scenarioReferences: { scenarioId: string; filePath: string; line: number }[],
-) {
+function nearestScenarioReference(filePath: string, line: number, scenarioReferences: { scenarioId: string; filePath: string; line: number }[]) {
   const maxLineDistance = 8;
   return scenarioReferences
-    .filter(
-      (reference) =>
-        reference.filePath === filePath &&
-        reference.line <= line &&
-        line - reference.line <= maxLineDistance,
-    )
+    .filter((reference) => reference.filePath === filePath && reference.line <= line && line - reference.line <= maxLineDistance)
     .sort((left, right) => right.line - left.line)[0];
 }
 
-function groupScreenshotsByLine(screenshots: SpecScreenshot[]) {
+function groupEvidenceByLine(evidence: SpecScreenshot[]) {
   const grouped = new Map<string, SpecScreenshot[]>();
-  for (const screenshot of screenshots) {
-    const key = screenshotKey(screenshot.specPath, screenshot.line);
-    grouped.set(key, [...(grouped.get(key) ?? []), screenshot]);
+  for (const entry of evidence) {
+    const key = screenshotKey(entry.specPath, entry.line);
+    grouped.set(key, [...(grouped.get(key) ?? []), entry]);
   }
   return grouped;
 }

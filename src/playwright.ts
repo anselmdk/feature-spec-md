@@ -1,8 +1,6 @@
-/**
- * Playwright integration helpers for mapping spec scenario steps to test steps
- * and capturing screenshot evidence tied to exact spec lines.
- */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFeatureSpec } from "./featureSpecs.js";
 import { expandFilePatterns } from "./filePatterns.js";
@@ -19,9 +17,11 @@ export type SpecEvidenceStep = {
 export type SpecEvidenceScreenshot = {
   specPath: string;
   line: number;
-  path: string;
+  changed: boolean;
+  path?: string;
   title: string;
   testPath: string;
+  comparedWithLine?: number;
 };
 
 export type PlaywrightSpecEvidenceOptions = {
@@ -48,7 +48,11 @@ export type PlaywrightTestLike = {
   step<T>(title: string, body: () => Promise<T>): Promise<T>;
 };
 
-/** Create a Playwright helper that captures screenshot evidence for spec step lines. */
+type ScreenState = {
+  hash: string;
+  line?: number;
+};
+
 export function createPlaywrightSpecEvidence(
   test: PlaywrightTestLike,
   options: PlaywrightSpecEvidenceOptions,
@@ -62,6 +66,7 @@ export function createPlaywrightSpecEvidence(
   const screenshotDir = path.join(reportDir, screenshotsDirName);
   const stepsPromise = loadSpecSteps(options.specs, cwd);
   const entriesByWorker = new Map<number, SpecEvidenceScreenshot[]>();
+  const screenStateByScenario = new Map<string, ScreenState>();
 
   return {
     async specStep(
@@ -73,13 +78,22 @@ export function createPlaywrightSpecEvidence(
     ) {
       const step = await findSpecStep(stepsPromise, scenarioId, stepText);
       await test.step(`${step.keyword} ${step.text}`, async () => {
+        const stateKey = screenStateKey(testInfo, scenarioId);
+        if (!screenStateByScenario.has(stateKey)) {
+          const baseline = await capturePageBuffer(page, reportDir, "baseline");
+          screenStateByScenario.set(stateKey, { hash: screenshotHash(baseline) });
+        }
+
         await body();
-        await captureStepScreenshot({
+
+        await captureStepEvidence({
           entriesByWorker,
           page,
           reportDir,
           screenshotDir,
           screenshotsDirName,
+          screenStateByScenario,
+          stateKey,
           step,
           testInfo,
         });
@@ -88,7 +102,6 @@ export function createPlaywrightSpecEvidence(
   };
 }
 
-/** Parse spec files and return all scenario step lines addressable by Playwright tests. */
 export async function loadSpecSteps(patterns: string[], cwd = process.cwd()) {
   const previousCwd = process.cwd();
   const steps: SpecEvidenceStep[] = [];
@@ -139,53 +152,112 @@ async function findSpecStep(
   return step;
 }
 
-async function captureStepScreenshot(options: {
+async function captureStepEvidence(options: {
   entriesByWorker: Map<number, SpecEvidenceScreenshot[]>;
   page: PlaywrightPageLike;
   reportDir: string;
   screenshotDir: string;
   screenshotsDirName: string;
+  screenStateByScenario: Map<string, ScreenState>;
+  stateKey: string;
   step: SpecEvidenceStep;
   testInfo: PlaywrightTestInfoLike;
 }) {
+  const currentBuffer = await capturePageBuffer(
+    options.page,
+    options.reportDir,
+    `line-${options.step.line}`,
+  );
+  const currentHash = screenshotHash(currentBuffer);
+  const previousState = options.screenStateByScenario.get(options.stateKey);
+  const title = `${options.step.scenarioId}:${options.step.line} ${options.step.keyword} ${options.step.text}`;
+
+  if (previousState?.hash === currentHash && previousState.line !== undefined) {
+    await recordEvidence(options, {
+      specPath: options.step.specPath,
+      line: options.step.line,
+      changed: false,
+      title: `${title} (unchanged)`,
+      testPath: options.testInfo.file,
+      comparedWithLine: previousState.line,
+    });
+    options.screenStateByScenario.set(options.stateKey, {
+      hash: currentHash,
+      line: options.step.line,
+    });
+    return;
+  }
+
   await mkdir(options.screenshotDir, { recursive: true });
   const fileName = `${options.step.scenarioId}-line-${options.step.line}-${slug(options.step.text)}.png`;
   const screenshotPath = path.join(options.screenshotDir, fileName);
   const relativePath = `${options.screenshotsDirName}/${fileName}`;
-  const title = `${options.step.scenarioId}:${options.step.line} ${options.step.keyword} ${options.step.text}`;
-
-  await options.page.screenshot({ fullPage: true, path: screenshotPath });
+  await writeFile(screenshotPath, currentBuffer);
   await options.testInfo.attach(title, {
     contentType: "image/png",
     path: screenshotPath,
   });
-
-  const entries =
-    options.entriesByWorker.get(options.testInfo.workerIndex) ?? [];
-  entries.push({
+  await recordEvidence(options, {
     specPath: options.step.specPath,
     line: options.step.line,
+    changed: true,
     path: relativePath,
     title,
     testPath: options.testInfo.file,
   });
+  options.screenStateByScenario.set(options.stateKey, {
+    hash: currentHash,
+    line: options.step.line,
+  });
+}
+
+async function recordEvidence(
+  options: {
+    entriesByWorker: Map<number, SpecEvidenceScreenshot[]>;
+    reportDir: string;
+    testInfo: PlaywrightTestInfoLike;
+  },
+  entry: SpecEvidenceScreenshot,
+) {
+  const entries = options.entriesByWorker.get(options.testInfo.workerIndex) ?? [];
+  entries.push(entry);
   options.entriesByWorker.set(options.testInfo.workerIndex, entries);
-  await writeWorkerManifest(
-    options.reportDir,
-    options.testInfo.workerIndex,
-    entries,
-  );
+  await writeWorkerManifest(options.reportDir, options.testInfo.workerIndex, entries);
+}
+
+async function capturePageBuffer(
+  page: PlaywrightPageLike,
+  reportDir: string,
+  label: string,
+) {
+  const tempDir = path.join(reportDir, ".visual-evidence-tmp");
+  await mkdir(tempDir, { recursive: true });
+  const tempPath = path.join(tempDir, `${process.pid}-${Date.now()}-${slug(label)}.png`);
+  try {
+    await page.screenshot({ fullPage: true, path: tempPath });
+    return await readFile(tempPath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
+}
+
+function screenshotHash(buffer: Buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+function screenStateKey(testInfo: PlaywrightTestInfoLike, scenarioId: string) {
+  return `${testInfo.workerIndex}:${testInfo.file}:${scenarioId}`;
 }
 
 async function writeWorkerManifest(
   reportDir: string,
   workerIndex: number,
-  screenshots: SpecEvidenceScreenshot[],
+  evidence: SpecEvidenceScreenshot[],
 ) {
   await mkdir(reportDir, { recursive: true });
   await writeFile(
     path.join(reportDir, `screenshots-${workerIndex}.json`),
-    JSON.stringify({ screenshots }, null, 2),
+    JSON.stringify({ evidence }, null, 2),
     "utf8",
   );
 }
