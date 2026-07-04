@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import type { ReportMetadataItem } from "./reportMetadata.js";
 
 const execFileAsync = promisify(execFile);
+const readFileAsync = promisify(readFile);
 
 export type GithubReportMetadataOptions = {
   includeGitFallbacks?: boolean;
@@ -165,15 +166,6 @@ async function gitValue(args: string[]) {
   } catch {
     return undefined;
   }
-}
-
-function readFileAsync(path: string, encoding: BufferEncoding) {
-  return new Promise<string>((resolve, reject) => {
-    readFile(path, encoding, (error, data) => {
-      if (error) reject(error);
-      else resolve(data);
-    });
-  });
 }
 
 function encodeGithubPath(value: string) {
