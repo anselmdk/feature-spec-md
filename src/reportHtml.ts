@@ -1,4 +1,5 @@
 import { html } from "./html.js";
+import { indentTemplateBlock, reportPageDefaults } from "./reportTemplates/shared.js";
 
 export type HtmlPageOptions = {
   title: string;
@@ -13,8 +14,9 @@ export function renderHtmlPage({
   body,
   styles = "",
   scripts = "",
-  maxWidth = "1180px",
+  maxWidth,
 }: HtmlPageOptions) {
+  const defaults = reportPageDefaults(maxWidth, styles);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -24,28 +26,19 @@ export function renderHtmlPage({
   <style>
     body {
       font-family: system-ui, sans-serif;
-      max-width: ${maxWidth};
+      max-width: ${defaults.maxWidth};
       margin: 0 auto;
       padding: 40px 24px;
       color: #1f2328;
       line-height: 1.5;
     }
-${indent(styles, 4)}
+${indentTemplateBlock(defaults.styleText, 4)}
   </style>
 </head>
 <body>
-${indent(body, 2)}
-${scripts ? indent(scripts, 2) : ""}
+${indentTemplateBlock(body, 2)}
+${scripts ? indentTemplateBlock(scripts, 2) : ""}
 </body>
 </html>
 `;
-}
-
-function indent(value: string, spaces: number) {
-  const prefix = " ".repeat(spaces);
-  return value
-    .trim()
-    .split("\n")
-    .map((line) => (line ? `${prefix}${line}` : line))
-    .join("\n");
 }
