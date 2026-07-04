@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { html } from "./html.js";
 import {
   downloadRemoteFile,
@@ -14,6 +14,8 @@ import {
   type GithubActionOptions,
 } from "./githubActionFtp.js";
 import { writeGithubOutput, writeGithubSummary } from "./githubActionOutput.js";
+import { publishedSpecRoot } from "./reportArtifacts.js";
+import { renderHtmlPage } from "./reportHtml.js";
 
 export type GithubActionDiffReportOptions = GithubActionOptions;
 
@@ -143,10 +145,8 @@ async function compareLocalBuilds(options: LocalDiffReportOptions): Promise<Diff
   const baseBuild = options.baseBuild ?? "127";
   const currentBuild = options.currentBuild ?? "128";
   const files = await compareLocalFiles(options.previousDir, options.currentDir);
-  const previousIndex = await readFileMaybe(join(options.previousDir, "index.html"));
-  const currentIndex = await readFileMaybe(join(options.currentDir, "index.html"));
-  const previousSpecs = extractSpecSections(previousIndex ?? "");
-  const currentSpecs = extractSpecSections(currentIndex ?? "");
+  const previousSpecs = await loadSpecSections(options.previousDir);
+  const currentSpecs = await loadSpecSections(options.currentDir);
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
   const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
   const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, {
@@ -220,10 +220,8 @@ async function compareBuilds(
     });
   }
 
-  const previousIndex = await readFileMaybe(join(localRoot, "base", "index.html"));
-  const currentIndex = await readFileMaybe(join(localRoot, "current", "index.html"));
-  const previousSpecs = extractSpecSections(previousIndex ?? "");
-  const currentSpecs = extractSpecSections(currentIndex ?? "");
+  const previousSpecs = await loadSpecSections(join(localRoot, "base"));
+  const currentSpecs = await loadSpecSections(join(localRoot, "current"));
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
   const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
   const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, {
@@ -277,7 +275,13 @@ async function listLocalFilesRecursive(root: string) {
 
   async function visit(relativeDir: string) {
     const dir = relativeDir ? join(root, relativeDir) : root;
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    let entries: Awaited<ReturnType<typeof readdir>>;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
       const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         await visit(relativePath);
@@ -286,6 +290,28 @@ async function listLocalFilesRecursive(root: string) {
       }
     }
   }
+}
+
+async function loadSpecSections(root: string): Promise<SpecSection[]> {
+  const published = await loadPublishedSpecSections(root);
+  if (published.length) return published;
+
+  const index = await readFileMaybe(join(root, "index.html"));
+  return extractSpecSections(index ?? "");
+}
+
+async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
+  const specRoot = join(root, publishedSpecRoot);
+  const files = (await listLocalFilesRecursive(specRoot)).filter((file) => file.endsWith(".feature.md"));
+  const sections: SpecSection[] = [];
+  for (const file of files) {
+    const source = await readFile(join(specRoot, file), "utf8");
+    const filePath = safeRelativePath(file);
+    const title = source.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? filePath;
+    const scenarioIds = Array.from(source.matchAll(/^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3})\b/gm), (match) => match[1]);
+    sections.push({ key: filePath, title, filePath, scenarioIds, text: source.trimEnd() });
+  }
+  return sections.sort((a, b) => a.key.localeCompare(b.key));
 }
 
 function previousBuildNumber(builds: string[], currentBuild: string) {
@@ -314,8 +340,13 @@ function relativeRemotePath(root: string, filePath: string) {
   return relative(root, filePath).split("\\").join("/");
 }
 
+function safeRelativePath(filePath: string) {
+  return filePath.split("\\").join("/");
+}
+
 function fileKind(filePath: string): ComparedFile["kind"] {
   const name = basename(filePath).toLowerCase();
+  if (filePath.startsWith("__feature-spec-md/")) return "report";
   if (name === "index.html" || name.endsWith(".html") || name.endsWith(".json")) return "report";
   if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "screenshot";
   return "asset";
@@ -489,16 +520,43 @@ function relativeAssetUrl(prefix: string, filePath: string) {
 function renderDiffReport(report: DiffReport) {
   const changed = report.files.filter((file) => file.status !== "unchanged" && file.kind !== "report");
   const assetChanges = changed.filter((file) => file.kind === "asset");
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature spec PR diff</title><style>${diffReportStyles()}</style></head><body><h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1><p>Generated ${html(new Date().toISOString())}.</p><section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>${renderSpecDiffs(report.specDiffs)}${renderScreenshotDiffs(report.screenshotDiffs)}${renderFileSection("Other assets", assetChanges)}${renderScreenshotToggleScript()}</body></html>`;
+  return renderHtmlPage({
+    title: "Feature spec PR diff",
+    styles: diffReportStyles(),
+    scripts: renderScreenshotToggleScript(),
+    body: `
+<h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1>
+<p>Generated ${html(new Date().toISOString())}.</p>
+<section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>
+${renderSpecDiffs(report.specDiffs)}
+${renderScreenshotDiffs(report.screenshotDiffs)}
+${renderFileSection("Other assets", assetChanges)}
+`,
+  });
 }
 
 function diffReportStyles() {
-  return "body{font-family:system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:40px 24px;color:#1f2328}.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}.screenshot-toggle-button{border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font:inherit;padding:6px 10px}.screenshot-toggle-button:hover{background:#eef2f6}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}a{color:#0969da}.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}.screenshot-diff{border-top:1px solid #d0d7de;padding:10px 0}.screenshot-diff summary{cursor:pointer;margin-bottom:8px}.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}";
+  return `.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}
+.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}
+.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
+.screenshot-toggle-button{border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font:inherit;padding:6px 10px}
+.screenshot-toggle-button:hover{background:#eef2f6}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f6f8fa}a{color:#0969da}
+.diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}
+.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}
+.screenshot-diff{border-top:1px solid #d0d7de;padding:10px 0}.screenshot-diff summary{cursor:pointer;margin-bottom:8px}
+.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}
+.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}`;
 }
 
 function renderSpecDiffs(specDiffs: SpecDiff[]) {
-  if (!specDiffs.length) return `<section class="panel"><h2>Spec changes</h2><p class="muted">No spec text changes detected in the published report.</p></section>`;
-  return `<section class="panel"><h2>Spec changes</h2>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
+  if (!specDiffs.length) return `<section class="panel"><h2>Spec changes</h2><p class="muted">No feature spec source changes detected.</p></section>`;
+  return `<section class="panel"><h2>Spec changes</h2><p class="muted">Diffed from published feature spec source files, not from rendered report HTML.</p>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
 }
 
 function renderSpecDiff(diff: SpecDiff) {
