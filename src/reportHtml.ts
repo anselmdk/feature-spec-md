@@ -1,4 +1,8 @@
 import { html } from "./html.js";
+import {
+  insertReportMetadata,
+  type ReportMetadataItem,
+} from "./reportMetadata.js";
 import { indentTemplateBlock, reportPageDefaults } from "./reportTemplates/shared.js";
 
 export type HtmlPageOptions = {
@@ -7,6 +11,7 @@ export type HtmlPageOptions = {
   styles?: string;
   scripts?: string;
   maxWidth?: string;
+  metadata?: ReportMetadataItem[];
 };
 
 export function renderHtmlPage({
@@ -15,9 +20,10 @@ export function renderHtmlPage({
   styles = "",
   scripts = "",
   maxWidth,
+  metadata = [],
 }: HtmlPageOptions) {
   const defaults = reportPageDefaults(maxWidth, styles);
-  return `<!doctype html>
+  const page = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -41,4 +47,6 @@ ${scripts ? indentTemplateBlock(scripts, 2) : ""}
 </body>
 </html>
 `;
+
+  return insertReportMetadata(page, metadata);
 }
