@@ -1,6 +1,6 @@
 {
   "name": "@anselmdk/feature-spec-md",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Markdown specs for AI-assisted, testable spec driven development across model, feature, stack, and design documents.",
   "type": "module",
   "repository": {
