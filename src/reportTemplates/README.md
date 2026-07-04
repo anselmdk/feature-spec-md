@@ -1,4 +1,4 @@
-Report templates
+# Report templates
 
 This folder contains shared helpers for report generation.
 
