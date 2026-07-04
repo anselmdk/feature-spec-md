@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderLocalDiffReport } from "./githubActionDiffReport.js";
+import { publishedSpecRoot } from "./reportArtifacts.js";
 import { collectSpecScreenshots } from "./screenshots.js";
 import { checkSpecDocuments } from "./specDocuments.js";
 import { insertReportMetadata, type ReportMetadataItem } from "./reportMetadata.js";
@@ -156,6 +157,7 @@ async function writeFeatureReportDirectory(
   generatedAt: string,
 ) {
   const fixturesRoot = await mockFixturesRoot();
+  const variantRoot = path.join(fixturesRoot, variant);
   await writeTextFile(
     path.join(reportDir, "index.html"),
     await renderMockFeatureSpecReport(variant, generatedAt),
@@ -164,6 +166,35 @@ async function writeFeatureReportDirectory(
     path.join(fixturesRoot, variant, "screenshots"),
     path.join(reportDir, "screenshots"),
     (filePath) => filePath.endsWith(".svg"),
+  );
+  await writeMockFeatureSpecSourceArtifacts(reportDir, variantRoot, generatedAt);
+}
+
+async function writeMockFeatureSpecSourceArtifacts(
+  reportDir: string,
+  variantRoot: string,
+  generatedAt: string,
+) {
+  const sourceRoot = path.join(variantRoot, "specs");
+  const publishedRoot = path.join(reportDir, publishedSpecRoot, "specs");
+  await copyDirectory(sourceRoot, publishedRoot, (filePath) =>
+    filePath.endsWith(".feature.md"),
+  );
+
+  const files = await listFilesRecursive(sourceRoot, (filePath) =>
+    filePath.endsWith(".feature.md"),
+  );
+  const features = files.map((filePath) => {
+    const relativePath = path.relative(variantRoot, filePath).split("\\").join("/");
+    return {
+      filePath: relativePath,
+      publishedPath: `${publishedSpecRoot}/${relativePath}`,
+    };
+  });
+
+  await writeTextFile(
+    path.join(reportDir, "__feature-spec-md", "manifest.json"),
+    JSON.stringify({ generatedAt, features }, null, 2),
   );
 }
 
@@ -231,7 +262,7 @@ function normalizeMockCoverage(
       ? normalizeMockCoverageItems(coverage.modelCoverage, variantRoot)
       : coverage.modelCoverage,
     ruleCoverage: normalizeMockCoverageItems(coverage.ruleCoverage, variantRoot),
-    scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage, variantRoot),
+    scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage),
     orphanModelReferences: coverage.orphanModelReferences
       ? normalizeMockReferences(coverage.orphanModelReferences, variantRoot)
       : coverage.orphanModelReferences,
@@ -319,6 +350,22 @@ async function copyDirectory(
       await copyFile(sourcePath, targetPath);
     }
   }
+}
+
+async function listFilesRecursive(
+  source: string,
+  include: (filePath: string) => boolean = () => true,
+) {
+  const files: string[] = [];
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listFilesRecursive(sourcePath, include)));
+    } else if (include(sourcePath)) {
+      files.push(sourcePath);
+    }
+  }
+  return files.sort();
 }
 
 async function writeTextFile(filePath: string, content: string) {
