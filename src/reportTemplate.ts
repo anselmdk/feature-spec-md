@@ -38,12 +38,9 @@ type SourceLinkOptions = {
   githubRef?: string;
 };
 
-export function renderHtmlReport(
-  specs: FeatureSpec[],
-  options: ReportOptions = {},
-) {
+export function renderHtmlReport(specs: FeatureSpec[], options: ReportOptions = {}) {
   const title = options.title ?? "Feature Spec Report";
-  const screenshots = options.screenshots ?? [];
+  const evidence = options.screenshots ?? [];
   const sourceLinks: SourceLinkOptions = {
     githubBaseUrl: options.githubBaseUrl,
     githubRef: options.githubRef,
@@ -53,20 +50,20 @@ export function renderHtmlReport(
     title,
     styles: featureReportStyles(),
     scripts: featureReportScripts(),
-    body: featureReportBody({ specs, options, screenshots, sourceLinks, title }),
+    body: featureReportBody({ specs, options, evidence, sourceLinks, title }),
   });
 }
 
 function featureReportBody({
   specs,
   options,
-  screenshots,
+  evidence,
   sourceLinks,
   title,
 }: {
   specs: FeatureSpec[];
   options: ReportOptions;
-  screenshots: SpecScreenshot[];
+  evidence: SpecScreenshot[];
   sourceLinks: SourceLinkOptions;
   title: string;
 }) {
@@ -75,13 +72,13 @@ function featureReportBody({
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
 ${renderIssues(options.validationIssues ?? [])}
 ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
-${specs.map((spec) => renderSpec(spec, options.coverage, screenshots, sourceLinks)).join("\n")}
+${specs.map((spec) => renderSpec(spec, options.coverage, evidence, sourceLinks)).join("\n")}
 `;
 }
 
 function featureReportStyles() {
   return `.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}
-.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}
+.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
@@ -189,10 +186,7 @@ function renderModels(
   const modelCoverage = coverage?.modelCoverage ?? [];
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(
-    ruleCoverage,
-    scenarioCoverage,
-  );
+  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
 
   return `<section class="panel">
   <h2>Models</h2>
@@ -246,16 +240,13 @@ function renderModelRules(
 function renderSpec(
   spec: FeatureSpec,
   coverage?: CoverageSummary,
-  screenshots: SpecScreenshot[] = [],
+  evidence: SpecScreenshot[] = [],
   sourceLinks: SourceLinkOptions = {},
 ) {
-  const screenshotsByLine = groupScreenshotsByLine(screenshots);
+  const evidenceByLine = groupEvidenceByLine(evidence);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(
-    ruleCoverage,
-    scenarioCoverage,
-  );
+  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
 
   return `<section class="panel">
   <div class="feature-header">
@@ -267,7 +258,7 @@ function renderSpec(
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
   <h3>Scenarios</h3>
   ${spec.scenarios
-    .map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, screenshotsByLine, sourceLinks))
+    .map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks))
     .join("\n")}
 </section>`;
 }
@@ -288,15 +279,14 @@ function renderScenario(
   scenario: FeatureSpec["scenarios"][number],
   scenarioCoverage: CoverageItem[],
   ruleScenarioLinks: RuleScenarioLink[],
-  screenshotsByLine: Map<string, SpecScreenshot[]>,
+  evidenceByLine: Map<string, SpecScreenshot[]>,
   sourceLinks: SourceLinkOptions,
 ) {
-  const screenshotCount = scenario.steps.reduce(
-    (count, step) =>
-      count +
-      (screenshotsByLine.get(screenshotKey(spec.filePath, step.line))?.length ?? 0),
-    0,
+  const scenarioEvidence = scenario.steps.flatMap(
+    (step) => evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [],
   );
+  const changedCount = scenarioEvidence.filter((entry) => entry.changed && entry.path).length;
+  const unchangedCount = scenarioEvidence.filter((entry) => !entry.changed).length;
   const scenarioRuleIds = ruleIdsForScenario(
     scenario.id,
     spec.rules.map((rule) => rule.id),
@@ -304,10 +294,18 @@ function renderScenario(
   );
   const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
 
-  return `<details class="scenario" data-has-images="${screenshotCount > 0 ? "true" : "false"}">
-  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} <span class="badge">${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}</span></summary>
-  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, screenshotsByLine, sourceLinks)).join("")}</div>
+  return `<details class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
+  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} ${renderEvidenceSummary(changedCount, unchangedCount)}</summary>
+  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks)).join("")}</div>
 </details>`;
+}
+
+function renderEvidenceSummary(changedCount: number, unchangedCount: number) {
+  const parts = [
+    `${changedCount} changed`,
+    `${unchangedCount} unchanged`,
+  ];
+  return `<span class="badge">${html(parts.join(" · "))}</span>`;
 }
 
 function renderScenarioRuleCoverage(ruleIds: string[]) {
@@ -416,16 +414,23 @@ function renderTable(lines: string[]) {
 function renderStep(
   spec: FeatureSpec,
   step: FeatureStep,
-  screenshotsByLine: Map<string, SpecScreenshot[]>,
+  evidenceByLine: Map<string, SpecScreenshot[]>,
   sourceLinks: SourceLinkOptions,
 ) {
-  const screenshots =
-    screenshotsByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
+  const evidence = evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
+  const screenshots = evidence.filter((entry) => entry.changed && entry.path);
+  const unchanged = evidence.filter((entry) => !entry.changed);
   const evidenceBadge = screenshots.length
-    ? `<span class="badge ok">${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}</span>`
-    : `<span class="badge missing">missing screenshot</span>`;
+    ? `<span class="badge ok">${screenshots.length} changed screenshot${screenshots.length === 1 ? "" : "s"}</span>`
+    : unchanged.length
+      ? `<span class="badge muted">unchanged${renderComparedWith(unchanged[0])}</span>`
+      : `<span class="badge missing">missing visual evidence</span>`;
 
   return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} ${renderLineBadge(spec.filePath, step.line, sourceLinks)} ${evidenceBadge}</p>${renderScreenshots(screenshots)}</div>`;
+}
+
+function renderComparedWith(entry: SpecScreenshot) {
+  return entry.comparedWithLine ? ` since line ${html(String(entry.comparedWithLine))}` : " since previous screen";
 }
 
 function renderLineBadge(
@@ -445,7 +450,7 @@ function renderScreenshots(screenshots: SpecScreenshot[]) {
   return `<div class="screenshots">${screenshots
     .map(
       (screenshot) =>
-        `<figure class="screenshot"><img src="${html(screenshot.path)}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`,
+        `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`,
     )
     .join("")}</div>`;
 }
@@ -541,10 +546,7 @@ function sourceLineUrl(
   return `${baseUrl}/blob/${ref}/${encodedFilePath}#L${line}`;
 }
 
-function ruleScenarioIds(
-  ruleId: string,
-  ruleScenarioLinks: RuleScenarioLink[],
-) {
+function ruleScenarioIds(ruleId: string, ruleScenarioLinks: RuleScenarioLink[]) {
   return Array.from(
     new Set(
       ruleScenarioLinks
@@ -616,11 +618,11 @@ function nearestScenarioReference(
     .sort((left, right) => right.line - left.line)[0];
 }
 
-function groupScreenshotsByLine(screenshots: SpecScreenshot[]) {
+function groupEvidenceByLine(evidence: SpecScreenshot[]) {
   const grouped = new Map<string, SpecScreenshot[]>();
-  for (const screenshot of screenshots) {
-    const key = screenshotKey(screenshot.specPath, screenshot.line);
-    grouped.set(key, [...(grouped.get(key) ?? []), screenshot]);
+  for (const entry of evidence) {
+    const key = screenshotKey(entry.specPath, entry.line);
+    grouped.set(key, [...(grouped.get(key) ?? []), entry]);
   }
   return grouped;
 }
