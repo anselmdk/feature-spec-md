@@ -10,19 +10,25 @@ export type ModelReferenceFrontmatter = SpecFrontmatter & {
   models?: string[] | string;
 };
 
+export type SpecExtensionSection = {
+  title: string;
+  body: string;
+  line: number;
+};
+
 export type SpecExtensionSections = {
   /** Known unknowns, unresolved choices, or decisions that need a product answer. */
-  openQuestions?: string;
+  openQuestions?: SpecExtensionSection;
   /** Assumptions the spec currently relies on until they are confirmed or replaced. */
-  assumptions?: string;
+  assumptions?: SpecExtensionSection;
   /** API endpoints, request/response contracts, auth requirements, and OpenAPI links. */
-  apiContract?: string;
+  apiContract?: SpecExtensionSection;
   /** Role/group capability matrix, permission rules, and access-control notes. */
-  permissions?: string;
+  permissions?: SpecExtensionSection;
   /** Entity state machines, state transition rules, and lifecycle examples. */
-  lifecycle?: string;
+  lifecycle?: SpecExtensionSection;
   /** Mock adapters, seeded data, fixed-time setup, and CI/e2e environment contracts. */
-  testEnvironment?: string;
+  testEnvironment?: SpecExtensionSection;
 };
 
 export type ScenarioTestType = "unit" | "integration" | "playwright" | "manual" | "skip";
