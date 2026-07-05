@@ -49,13 +49,13 @@ type ReportExtensionSection = {
   document: ReportDocument;
 };
 
-const extensionDefinitions: Array<{ kind: ExtensionKind; title: string; summaryLabel: string }> = [
-  { kind: "openQuestions", title: "Open Questions", summaryLabel: "open question" },
-  { kind: "assumptions", title: "Assumptions", summaryLabel: "assumption" },
-  { kind: "apiContract", title: "API Contract", summaryLabel: "API contract" },
-  { kind: "permissions", title: "Permissions", summaryLabel: "permissions" },
-  { kind: "lifecycle", title: "Lifecycle", summaryLabel: "lifecycle" },
-  { kind: "testEnvironment", title: "Test Environment", summaryLabel: "test environment" },
+const extensionDefinitions: Array<{ kind: ExtensionKind; title: string }> = [
+  { kind: "openQuestions", title: "Open Questions" },
+  { kind: "assumptions", title: "Assumptions" },
+  { kind: "apiContract", title: "API Contract" },
+  { kind: "permissions", title: "Permissions" },
+  { kind: "lifecycle", title: "Lifecycle" },
+  { kind: "testEnvironment", title: "Test Environment" },
 ];
 
 export function renderHtmlReport(specs: FeatureSpec[], options: ReportOptions = {}) {
@@ -192,7 +192,6 @@ function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLi
 }
 
 function renderFlaggedSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
-  const definition = extensionDefinitions.find((candidate) => candidate.kind === section.kind);
   return `<article class="flag-card ${html(section.kind)}">
   <h3>${html(section.title)} <span class="badge">${html(documentLabel(section.document))}</span> ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h3>
   ${renderMarkdownBlock(section.body)}
