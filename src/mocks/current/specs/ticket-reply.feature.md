@@ -15,8 +15,8 @@ Help agents answer a customer without leaving the ticket.
 
 ## Rules
 
-- SUPPORT-REPLY-R001: The reply composer preserves unsent text.
-- SUPPORT-REPLY-R002: Saved replies are reusable across tickets.
+- SUPPORT-REPLY-R001: The reply composer MUST preserve unsent text.
+- SUPPORT-REPLY-R002: Saved replies SHOULD be reusable across tickets.
 
 ## Scenarios
 
