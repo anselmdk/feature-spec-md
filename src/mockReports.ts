@@ -177,14 +177,10 @@ async function writeMockFeatureSpecSourceArtifacts(
 ) {
   const sourceRoot = path.join(variantRoot, "specs");
   const publishedRoot = path.join(reportDir, publishedSpecRoot, "specs");
-  await copyDirectory(sourceRoot, publishedRoot, (filePath) =>
-    filePath.endsWith(".feature.md"),
-  );
+  await copyDirectory(sourceRoot, publishedRoot, isSpecMarkdownFile);
 
-  const files = await listFilesRecursive(sourceRoot, (filePath) =>
-    filePath.endsWith(".feature.md"),
-  );
-  const features = files.map((filePath) => {
+  const files = await listFilesRecursive(sourceRoot, isSpecMarkdownFile);
+  const specs = files.map((filePath) => {
     const relativePath = path.relative(variantRoot, filePath).split("\\").join("/");
     return {
       filePath: relativePath,
@@ -194,8 +190,12 @@ async function writeMockFeatureSpecSourceArtifacts(
 
   await writeTextFile(
     path.join(reportDir, "__feature-spec-md", "manifest.json"),
-    JSON.stringify({ generatedAt, features }, null, 2),
+    JSON.stringify({ generatedAt, specs }, null, 2),
   );
+}
+
+function isSpecMarkdownFile(filePath: string) {
+  return filePath.endsWith(".md");
 }
 
 function mockMetadata(variant: MockReportVariant): ReportMetadataItem[] {
