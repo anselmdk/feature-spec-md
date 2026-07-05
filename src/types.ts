@@ -54,7 +54,6 @@ export type ModelSpec = {
   purpose: string;
   modelItems: ModelItem[];
   rules: FeatureRule[];
-  extensions?: SpecExtensionSections;
   source: string;
 };
 
@@ -66,7 +65,6 @@ export type FeatureSpec = {
   purpose: string;
   rules: FeatureRule[];
   scenarios: FeatureScenario[];
-  extensions?: SpecExtensionSections;
   source: string;
 };
 
@@ -81,7 +79,6 @@ export type StackSpec = {
   rationale: string;
   consequences: string;
   rules: FeatureRule[];
-  extensions?: SpecExtensionSections;
   source: string;
 };
 
@@ -97,7 +94,6 @@ export type DesignSpec = {
   interaction: string;
   visualStyle: string;
   rules: FeatureRule[];
-  extensions?: SpecExtensionSections;
   source: string;
 };
 
