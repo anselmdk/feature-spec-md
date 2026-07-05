@@ -38,6 +38,26 @@ type SourceLinkOptions = {
   githubRef?: string;
 };
 
+type ReportDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
+type ExtensionKind = "openQuestions" | "assumptions" | "apiContract" | "permissions" | "lifecycle" | "testEnvironment";
+
+type ReportExtensionSection = {
+  kind: ExtensionKind;
+  title: string;
+  body: string;
+  line: number;
+  document: ReportDocument;
+};
+
+const extensionDefinitions: Array<{ kind: ExtensionKind; title: string; summaryLabel: string }> = [
+  { kind: "openQuestions", title: "Open Questions", summaryLabel: "open question" },
+  { kind: "assumptions", title: "Assumptions", summaryLabel: "assumption" },
+  { kind: "apiContract", title: "API Contract", summaryLabel: "API contract" },
+  { kind: "permissions", title: "Permissions", summaryLabel: "permissions" },
+  { kind: "lifecycle", title: "Lifecycle", summaryLabel: "lifecycle" },
+  { kind: "testEnvironment", title: "Test Environment", summaryLabel: "test environment" },
+];
+
 export function renderHtmlReport(specs: FeatureSpec[], options: ReportOptions = {}) {
   const title = options.title ?? "Feature Spec Report";
   const evidence = options.screenshots ?? [];
@@ -67,9 +87,11 @@ function featureReportBody({
   sourceLinks: SourceLinkOptions;
   title: string;
 }) {
+  const documents = allReportDocuments(specs, options);
   return `
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+${renderOpenQuestionsAndAssumptions(documents, sourceLinks)}
 ${renderIssues(options.validationIssues ?? [])}
 ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
 ${specs.map((spec) => renderSpec(spec, options.coverage, evidence, sourceLinks)).join("\n")}
@@ -95,7 +117,13 @@ h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hove
 .screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
 .screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
-.line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}`;
+.line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.flag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
+.flag-card{border:1px solid #d0d7de;border-left:4px solid #d0d7de;border-radius:8px;padding:14px;background:#fff}
+.flag-card h3{font-size:16px;margin:0 0 8px}.flag-card p{margin:8px 0}
+.flag-card.openQuestions{border-left-color:#9a6700}.flag-card.assumptions{border-left-color:#57606a}
+.extension-section{border:1px solid #d0d7de;border-radius:8px;padding:14px;margin:12px 0;background:#fff}
+.extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}`;
 }
 
 function featureReportScripts() {
@@ -148,6 +176,30 @@ function ordinalSuffix(day: number) {
   return "th";
 }
 
+function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLinks: SourceLinkOptions) {
+  const sections = documents.flatMap((document) => extensionSections(document)).filter((section) => section.kind === "openQuestions" || section.kind === "assumptions");
+  if (!sections.length) return "";
+  const openQuestionCount = sections.filter((section) => section.kind === "openQuestions").length;
+  const assumptionCount = sections.filter((section) => section.kind === "assumptions").length;
+  return `<section class="panel">
+  <div class="feature-header">
+    <h2>Open questions and assumptions</h2>
+    <span class="badge warning">${html(`${openQuestionCount} open question section(s) · ${assumptionCount} assumption section(s)`)}</span>
+  </div>
+  <p class="muted">Informational only: these sections are highlighted for review, but they do not fail validation, coverage, or the build.</p>
+  <div class="flag-grid">${sections.map((section) => renderFlaggedSection(section, sourceLinks)).join("")}</div>
+</section>`;
+}
+
+function renderFlaggedSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+  const definition = extensionDefinitions.find((candidate) => candidate.kind === section.kind);
+  return `<article class="flag-card ${html(section.kind)}">
+  <h3>${html(section.title)} <span class="badge">${html(documentLabel(section.document))}</span> ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h3>
+  ${renderMarkdownBlock(section.body)}
+  <p class="muted">Review and either answer, promote to rules/scenarios, or remove when no longer relevant.</p>
+</article>`;
+}
+
 function renderIssues(issues: ValidationIssue[]) {
   if (!issues.length) return "";
   return `<section class="panel"><h2>Validation</h2><ul>${issues
@@ -185,6 +237,7 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
     })
     .join("")}
   ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
+  ${renderDocumentExtensionSections(model, sourceLinks)}
 </section>`;
 }
 
@@ -213,6 +266,7 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
   <h3>Scenarios</h3>
   ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
+  ${renderDocumentExtensionSections(spec, sourceLinks)}
 </section>`;
 }
 
@@ -247,23 +301,58 @@ function renderScenarioRuleCoverage(ruleIds: string[]) {
   return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds.map((ruleId) => `<code>${html(ruleId)}</code>`).join(" ")}</p>`;
 }
 
+function renderDocumentExtensionSections(document: ReportDocument, sourceLinks: SourceLinkOptions) {
+  const sections = extensionSections(document).filter((section) => section.kind !== "openQuestions" && section.kind !== "assumptions");
+  if (!sections.length) return "";
+  return `<h3>Spec context</h3>${sections.map((section) => renderDocumentExtensionSection(section, sourceLinks)).join("")}`;
+}
+
+function renderDocumentExtensionSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+  const coverageNote = section.kind === "apiContract" || section.kind === "permissions"
+    ? `<p class="muted">Coverage recommendation: enforceable API and permission behavior should also be captured as rules and scenarios so tests can reference stable IDs.</p>`
+    : "";
+  return `<section class="extension-section">
+  <h4>${html(section.title)} ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h4>
+  ${renderMarkdownBlock(section.body)}
+  ${coverageNote}
+</section>`;
+}
+
 function renderModelItemBody(body: string) {
+  return renderMarkdownBlock(body);
+}
+
+function renderMarkdownBlock(body: string) {
   const lines = body.split("\n");
   const blocks: string[] = [];
   let paragraph: string[] = [];
+  let list: string[] = [];
   const flushParagraph = () => {
     if (!paragraph.length) return;
     blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
     paragraph = [];
   };
+  const flushList = () => {
+    if (!list.length) return;
+    blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    list = [];
+  };
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (!line.trim()) {
       flushParagraph();
+      flushList();
+      continue;
+    }
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      list.push(listMatch[1].trim());
       continue;
     }
     if (isTableStart(lines, i)) {
       flushParagraph();
+      flushList();
       const tableLines = [line];
       i += 2;
       while (i < lines.length && isPipeTableRow(lines[i])) {
@@ -274,9 +363,11 @@ function renderModelItemBody(body: string) {
       blocks.push(renderTable(tableLines));
       continue;
     }
+    flushList();
     paragraph.push(line.trim());
   }
   flushParagraph();
+  flushList();
   return blocks.join("");
 }
 
@@ -387,6 +478,51 @@ function sourceLineUrl(filePath: string, line: number, sourceLinks: SourceLinkOp
   const ref = encodeURIComponent(sourceLinks.githubRef);
   const encodedFilePath = filePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
   return `${baseUrl}/blob/${ref}/${encodedFilePath}#L${line}`;
+}
+
+function allReportDocuments(specs: FeatureSpec[], options: ReportOptions): ReportDocument[] {
+  return [
+    ...(options.models ?? []),
+    ...(options.stacks ?? []),
+    ...(options.designs ?? []),
+    ...specs,
+  ];
+}
+
+function documentLabel(document: ReportDocument) {
+  return `${document.frontmatter.id} ${document.title}`;
+}
+
+function extensionSections(document: ReportDocument): ReportExtensionSection[] {
+  const lines = document.source.split(/\r?\n/);
+  return extensionDefinitions.flatMap((definition) => {
+    const section = extensionSection(lines, definition.title);
+    return section ? [{ ...section, kind: definition.kind, document }] : [];
+  });
+}
+
+function extensionSection(lines: string[], title: string) {
+  const headingPattern = /^##\s+(.+?)\s*$/;
+  const start = lines.findIndex((line) => headingPattern.exec(line)?.[1].toLowerCase() === title.toLowerCase());
+  if (start === -1) return undefined;
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (headingPattern.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+  const body = trimSectionLines(lines.slice(start + 1, end)).join("\n");
+  if (!body.trim()) return undefined;
+  return { title, body, line: start + 1 };
+}
+
+function trimSectionLines(lines: string[]) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !lines[start].trim()) start += 1;
+  while (end > start && !lines[end - 1].trim()) end -= 1;
+  return lines.slice(start, end);
 }
 
 function ruleScenarioIds(ruleId: string, ruleScenarioLinks: RuleScenarioLink[]) {
