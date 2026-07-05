@@ -35,3 +35,8 @@ A visible urgency label used to sort the queue.
 ## Assumptions
 
 - SUPPORT-A001: Review notes are shown in reports as informational context.
+
+## Permissions
+
+- Agents can view assigned tickets.
+- Leads can reassign tickets.
