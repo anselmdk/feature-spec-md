@@ -2,7 +2,7 @@
   "evidence": [
     {
       "specPath": "src/mocks/previous/specs/ticket-inbox.feature.md",
-      "line": 27,
+      "line": 28,
       "changed": true,
       "path": "screenshots/SUPPORT-INBOX-S001-line-27-previous.svg",
       "title": "Inbox before priority badges",
@@ -10,11 +10,11 @@
     },
     {
       "specPath": "src/mocks/previous/specs/ticket-inbox.feature.md",
-      "line": 28,
+      "line": 29,
       "changed": false,
       "title": "Inbox remains visually unchanged after selecting the first ticket",
       "testPath": "src/mocks/previous/tests/supportDesk.spec.ts",
-      "comparedWithLine": 27
+      "comparedWithLine": 28
     }
   ]
 }
