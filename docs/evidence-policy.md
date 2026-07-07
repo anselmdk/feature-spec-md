@@ -20,7 +20,7 @@ Use scenario-level overrides directly below a scenario heading when one scenario
 Test: unit
 Screenshots: skip
 
-```gherkin
+```
 Given the raw card title contains leading whitespace
 When the title is normalized
 Then the stored title has no leading whitespace
