@@ -198,7 +198,7 @@ Required sections:
 ## Design
 ```
 
-Optional sections are `## Principles`, `## Layout`, and `## Interaction`, and `## Visual style`.
+Optional sections are `## Principles`, `## Layout`, `## Interaction`, and `## Visual style`.
 
 ## Splitting Guidance
 
