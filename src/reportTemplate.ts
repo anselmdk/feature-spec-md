@@ -181,7 +181,7 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
       .map((item) => {
         const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
         return `<section class="model-entry">
-      <h5><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</h5>
+      <h4><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</h4>
       ${renderModelItemBody(item.body)}
     </section>`;
       })
