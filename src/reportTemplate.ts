@@ -208,12 +208,26 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
     <h2>${html(spec.title)}</h2>
     <span class="badge">${html(spec.frontmatter.status ?? "draft")}</span>
   </div>
+  ${renderSpecFrontmatterTable(spec)}
   <p>${html(spec.purpose)}</p>
   <h3>Rules</h3>
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
   <h3>Scenarios</h3>
   ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
 </section>`;
+}
+
+function renderSpecFrontmatterTable(spec: FeatureSpec) {
+  const rows = [
+    spec.frontmatter.test ? ["Test", spec.frontmatter.test] : undefined,
+    spec.frontmatter.screenshots ? ["Screenshots", spec.frontmatter.screenshots] : undefined,
+  ].filter((row): row is [string, string] => row !== undefined);
+
+  if (!rows.length) return "";
+
+  return `<div class="table-wrap"><table><tbody>${rows
+    .map(([label, value]) => `<tr><th>${html(label)}</th><td><code>${html(value)}</code></td></tr>`)
+    .join("")}</tbody></table></div>`;
 }
 
 function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
