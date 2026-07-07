@@ -111,12 +111,12 @@ Rules use stable `-R001` IDs:
 - KANBAN-CARD-AUTHORING-R001: A new card MUST start in the To do column.
 ```
 
-Scenarios use stable `-S001` IDs and Given / When / Then steps. The scenario body MUST be written inside a fenced `gherkin` code block so Markdown previews preserve line breaks without relying on trailing spaces:
+Scenarios use stable `-S001` IDs and Given / When / Then steps. The scenario body MUST be written inside a fenced code block so Markdown previews preserve line breaks without relying on trailing spaces:
 
 ````md
 ### KANBAN-CARD-AUTHORING-S001: User creates a card
 
-```gherkin
+```
 Given the user is on the board
 When they create a card with the title "Write release notes"
 Then the card "Write release notes" is visible in the To do column
@@ -149,7 +149,7 @@ Scenario-level overrides go directly below a scenario heading. The Given / When 
 Test: unit
 Screenshots: skip
 
-```gherkin
+```
 Given the raw card title contains leading whitespace
 When the title is normalized
 Then the stored title has no leading whitespace
@@ -198,7 +198,7 @@ Required sections:
 ## Design
 ```
 
-Optional sections are `## Principles`, `## Layout`, `## Interaction`, and `## Visual style`.
+Optional sections are `## Principles`, `## Layout`, and `## Interaction`, and `## Visual style`.
 
 ## Splitting Guidance
 
