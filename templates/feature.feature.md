@@ -19,7 +19,7 @@ Describe the outcome this feature provides.
 
 ### FEATURE-S001: Main path
 
-```gherkin
+```
 Given a precondition is true
 When a person performs an action
 Then the expected outcome is visible
