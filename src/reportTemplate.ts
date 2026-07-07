@@ -85,7 +85,7 @@ function featureReportStyles() {
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
 .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
-.model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
+.model-item-header{padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
 .table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}
@@ -178,10 +178,10 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
   ${model.modelItems
     .map((item) => {
       const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
-      return `<details class="model-item">
-    <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
+      return `<section class="model-item">
+    <div class="model-item-header"><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</div>
     <div class="model-item-body">${renderModelItemBody(item.body)}</div>
-  </details>`;
+  </section>`;
     })
     .join("")}
   ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
