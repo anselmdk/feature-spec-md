@@ -81,11 +81,12 @@ function featureReportStyles() {
 .ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
-.models-summary{cursor:pointer;font-size:1.5em;font-weight:600;margin:0}
-.models-body{margin-top:12px}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
+.model-section{margin:12px 0}
+.model-summary{cursor:pointer;font-size:1em;font-weight:600;margin:12px 0}
+.model-body{margin-top:8px}
 .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .model-item-header{padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
@@ -163,10 +164,10 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary, sourceLin
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
   const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
-  return `<details class="panel models-panel" open>
-  <summary class="models-summary">Models</summary>
-  <div class="models-body">${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}</div>
-</details>`;
+  return `<section class="panel">
+  <h2>Models</h2>
+  ${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}
+</section>`;
 }
 
 function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
@@ -176,16 +177,18 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
     <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
   </div>
   <p>${html(model.purpose)}</p>
-  <h4>Model</h4>
-  ${model.modelItems
-    .map((item) => {
-      const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
-      return `<section class="model-item">
-    <div class="model-item-header"><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</div>
-    <div class="model-item-body">${renderModelItemBody(item.body)}</div>
-  </section>`;
-    })
-    .join("")}
+  <details class="model-section" open>
+    <summary class="model-summary">Model</summary>
+    <div class="model-body">${model.modelItems
+      .map((item) => {
+        const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+        return `<section class="model-item">
+      <div class="model-item-header"><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</div>
+      <div class="model-item-body">${renderModelItemBody(item.body)}</div>
+    </section>`;
+      })
+      .join("")}</div>
+  </details>
   ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
 </section>`;
 }
