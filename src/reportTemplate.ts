@@ -84,12 +84,12 @@ function featureReportStyles() {
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
-.model-section{margin:12px 0}
+.model-item{margin:12px 0}
 .model-summary{cursor:pointer;font-size:1em;font-weight:600;margin:12px 0}
 .model-body{margin-top:8px}
-.model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
-.model-item-header{padding:14px 16px;font-weight:600}
-.model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
+.model-entry{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.model-entry-header{padding:14px 16px;font-weight:600}
+.model-entry-body{padding:0 16px 16px}.model-entry-body p{margin:8px 0}
 .table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}
 h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
@@ -177,14 +177,14 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
     <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
   </div>
   <p>${html(model.purpose)}</p>
-  <details class="model-section" open>
+  <details class="model-item">
     <summary class="model-summary">Model</summary>
     <div class="model-body">${model.modelItems
       .map((item) => {
         const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
-        return `<section class="model-item">
-      <div class="model-item-header"><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</div>
-      <div class="model-item-body">${renderModelItemBody(item.body)}</div>
+        return `<section class="model-entry">
+      <div class="model-entry-header"><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</div>
+      <div class="model-entry-body">${renderModelItemBody(item.body)}</div>
     </section>`;
       })
       .join("")}</div>
