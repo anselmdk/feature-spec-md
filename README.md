@@ -74,9 +74,9 @@ A person who has completed registration and can request sign-in links.
 
 ### Feature specs
 
-Feature specs describe user-facing behavior with rules and scenarios. Rules and scenarios get stable IDs that tests can reference.
+Feature specs describe user-facing behavior with rules and scenarios. Rules and scenarios get stable IDs that tests can reference. Scenario steps are fenced so Markdown previews preserve line breaks without relying on trailing spaces.
 
-```md
+````md
 ---
 id: ACCOUNT-ACCESS
 title: Account access
@@ -98,10 +98,12 @@ Allow registered people to access their account securely.
 
 ### ACCOUNT-ACCESS-S001: Registered person signs in
 
+```
 Given a registered person is on the sign-in page
 When they request and open a valid sign-in link
 Then they are signed in
 ```
+````
 
 Feature specs can declare the expected test and evidence policy:
 
@@ -110,17 +112,19 @@ test: unit | integration | playwright | manual | skip
 screenshots: required | optional | skip
 ```
 
-If `screenshots` is omitted, Playwright scenarios default to `required`; non-Playwright scenarios default to `skip`. Scenario-level overrides can be written directly below a scenario heading:
+If `screenshots` is omitted, Playwright scenarios default to `required`; non-Playwright scenarios default to `skip`. Scenario-level overrides can be written directly below a scenario heading, before the fenced scenario block:
 
-```md
+````md
 ### ACCOUNT-ACCESS-S002: Link expiry is calculated
 Test: unit
 Screenshots: skip
 
+```
 Given a sign-in link was created 31 minutes ago
 When expiry is calculated
 Then the link is expired
 ```
+````
 
 See [SPEC_FORMAT.md](SPEC_FORMAT.md) and [docs/evidence-policy.md](docs/evidence-policy.md) for the exact format.
 

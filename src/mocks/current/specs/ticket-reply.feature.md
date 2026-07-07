@@ -22,12 +22,16 @@ Help agents answer a customer without leaving the ticket.
 
 ### SUPPORT-REPLY-S001: Agent drafts a reply
 
+```
 Given an agent has selected a ticket
 When they write a reply
 Then the draft remains visible
+```
 
 ### SUPPORT-REPLY-S002: Agent sends a saved reply
 
+```
 Given an agent has selected a ticket
 When they choose a saved reply
 Then the composer is filled with reusable text
+```
