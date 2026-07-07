@@ -98,7 +98,7 @@ Allow registered people to access their account securely.
 
 ### ACCOUNT-ACCESS-S001: Registered person signs in
 
-```gherkin
+```
 Given a registered person is on the sign-in page
 When they request and open a valid sign-in link
 Then they are signed in
@@ -119,7 +119,7 @@ If `screenshots` is omitted, Playwright scenarios default to `required`; non-Pla
 Test: unit
 Screenshots: skip
 
-```gherkin
+```
 Given a sign-in link was created 31 minutes ago
 When expiry is calculated
 Then the link is expired
