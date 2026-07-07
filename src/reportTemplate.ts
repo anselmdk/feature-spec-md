@@ -81,6 +81,8 @@ function featureReportStyles() {
 .ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.models-summary{cursor:pointer;font-size:1.5em;font-weight:600;margin:0}
+.models-body{margin-top:12px}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
@@ -161,10 +163,10 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary, sourceLin
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
   const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
-  return `<section class="panel">
-  <h2>Models</h2>
-  ${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}
-</section>`;
+  return `<details class="panel models-panel" open>
+  <summary class="models-summary">Models</summary>
+  <div class="models-body">${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}</div>
+</details>`;
 }
 
 function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
