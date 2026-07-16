@@ -432,6 +432,7 @@ An account stores profile access.
     const reportHtml = renderHtmlReport([spec], { models: [model], coverage });
 
     assert.match(reportHtml, /<details class="model-item">/);
+    assert.match(reportHtml, /data-details-selector="details\.model-item"[^>]+>Show all models<\/button>/);
     assert.match(reportHtml, /<code>ACCOUNT-M001<\/code>: Account/);
     assert.match(reportHtml, /An account stores profile access\./);
     assert.match(reportHtml, /<table>/);
@@ -448,6 +449,40 @@ An account stores profile access.
       reportHtml,
       /<span class="coverage-ref" title="tests\/account\.spec\.ts:2">1<\/span>/,
     );
+  });
+
+  it("renders section-scoped show and hide controls for models and scenarios", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define accounts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const reportHtml = renderHtmlReport([spec], { models: [model] });
+
+    assert.match(reportHtml, /<section class="panel" data-details-section>/);
+    assert.match(reportHtml, /data-details-selector="details\.scenario"[^>]+>Show all scenarios<\/button>/);
+    assert.match(reportHtml, /data-hide-label="Hide all models"/);
+    assert.match(reportHtml, /data-hide-label="Hide all scenarios"/);
+    assert.match(reportHtml, /section\.querySelectorAll\(button\.dataset\.detailsSelector\)/);
+    assert.match(reportHtml, /details\.open = shouldOpen/);
+    assert.doesNotMatch(reportHtml, /<details class="(?:model-item|scenario)"[^>]* open/);
   });
 
   it("renders Mermaid model diagrams and preserves escaped source as a fallback", () => {

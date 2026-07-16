@@ -104,6 +104,10 @@ function featureReportStyles() {
 .ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.details-section-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.details-section-header h2,.details-section-header h3{margin-bottom:0}
+.details-toggle-button{appearance:none;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#24292f;cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;white-space:nowrap}
+.details-toggle-button:hover{background:#eef1f4}.details-toggle-button:focus-visible{outline:2px solid #0969da;outline-offset:2px}
 .feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
@@ -140,9 +144,43 @@ function featureReportScripts() {
   const closeTag = "<" + "/script>";
   const mermaidOpenTag = "<" + "script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\" crossorigin=\"anonymous\">";
   return `${openTag}
+const bulkToggledDetails = new WeakSet();
+
+function updateDetailsToggleButton(button) {
+  const section = button.closest("[data-details-section]");
+  if (!section) return;
+  const targets = Array.from(section.querySelectorAll(button.dataset.detailsSelector));
+  const allOpen = targets.length > 0 && targets.every((details) => details.open);
+  button.textContent = allOpen ? button.dataset.hideLabel : button.dataset.showLabel;
+  button.setAttribute("aria-expanded", String(allOpen));
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-details-toggle]");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const section = button.closest("[data-details-section]");
+  if (!section) return;
+  const targets = Array.from(section.querySelectorAll(button.dataset.detailsSelector));
+  const shouldOpen = !targets.every((details) => details.open);
+  targets.forEach((details) => {
+    if (details.open !== shouldOpen) {
+      bulkToggledDetails.add(details);
+      details.open = shouldOpen;
+    }
+  });
+  updateDetailsToggleButton(button);
+});
+
 document.addEventListener("toggle", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLDetailsElement)) return;
+  const section = target.closest("[data-details-section]");
+  const button = section?.querySelector("[data-details-toggle]");
+  if (button instanceof HTMLButtonElement) requestAnimationFrame(() => updateDetailsToggleButton(button));
+  if (bulkToggledDetails.has(target)) {
+    bulkToggledDetails.delete(target);
+    return;
+  }
   if (!target.open || target.dataset.hasImages !== "true") return;
   const topBefore = target.getBoundingClientRect().top;
   document
@@ -266,10 +304,17 @@ function renderModels(models: ModelSpec[], coverage?: CoverageSummary, sourceLin
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
   const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
-  return `<section class="panel">
-  <h2>Models</h2>
+  return `<section class="panel" data-details-section>
+  <div class="details-section-header">
+    <h2>Models</h2>
+    ${renderDetailsToggleButton("details.model-item", "models")}
+  </div>
   ${models.map((model) => renderModel(model, modelCoverage, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("\n")}
 </section>`;
+}
+
+function renderDetailsToggleButton(selector: string, itemLabel: string) {
+  return `<button class="details-toggle-button" type="button" data-details-toggle data-details-selector="${html(selector)}" data-show-label="Show all ${html(itemLabel)}" data-hide-label="Hide all ${html(itemLabel)}" aria-expanded="false">Show all ${html(itemLabel)}</button>`;
 }
 
 function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
@@ -320,8 +365,13 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
   <p>${html(spec.purpose)}</p>
   <h3>Rules</h3>
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
-  <h3>Scenarios</h3>
-  ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
+  <section data-details-section>
+    <div class="details-section-header">
+      <h3>Scenarios</h3>
+      ${renderDetailsToggleButton("details.scenario", "scenarios")}
+    </div>
+    ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
+  </section>
   ${renderDocumentExtensionSections(spec, sourceLinks)}
 </section>`;
 }
