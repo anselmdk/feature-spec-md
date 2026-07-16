@@ -507,6 +507,8 @@ Define the application platform.
 
 ## Stack
 
+### Runtime and language
+
 - TypeScript
 - Express
 
@@ -538,6 +540,10 @@ Define the administration interface.
 
 The interface prioritizes daily studio operations.
 
+### Navigation
+
+Keep primary destinations visible.
+
 ## Principles
 
 - Clear
@@ -564,12 +570,15 @@ Use restrained colors.
     assert.match(reportHtml, /<details class="panel report-section" open>/);
     assert.match(reportHtml, /<h2>Platform architecture<\/h2>/);
     assert.match(reportHtml, /<span class="badge">Stack<\/span>/);
+    assert.match(reportHtml, /<h4>Runtime and language<\/h4>/);
     assert.match(reportHtml, /<h3>Consequences<\/h3>/);
     assert.match(reportHtml, /The React application is compiled before deployment\./);
     assert.match(reportHtml, /<h2>Admin experience<\/h2>/);
     assert.match(reportHtml, /<span class="badge">Design<\/span>/);
+    assert.match(reportHtml, /<h4>Navigation<\/h4>/);
     assert.match(reportHtml, /<h3>Visual style<\/h3>/);
     assert.match(reportHtml, /Use restrained colors\./);
+    assert.doesNotMatch(reportHtml, /### (?:Runtime and language|Navigation)/);
   });
 
   it("renders Mermaid model diagrams and preserves escaped source as a fallback", () => {

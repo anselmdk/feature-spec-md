@@ -12,6 +12,8 @@ Define the minimal technical platform for the support desk mock.
 
 ## Stack
 
+### Runtime
+
 - TypeScript for application and test code
 - Browser-rendered HTML reports
 
