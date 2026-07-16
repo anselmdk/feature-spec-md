@@ -278,6 +278,7 @@ A session represents current browser access.
     );
     assert.match(reportHtml, /Generated 16th June 2026 at 23:26\./);
     assert.doesNotMatch(reportHtml, /<h2>Validation<\/h2>/);
+    assert.match(reportHtml, /<details class="panel report-section" open>\s*<summary class="report-section-summary">\s*<h2>Account access<\/h2>/);
     assert.match(reportHtml, /<h2>Account access<\/h2>/);
     assert.doesNotMatch(reportHtml, /<h2>ACCOUNT Account access<\/h2>/);
     assert.match(reportHtml, /covered by ACCOUNT-S001/);
@@ -432,7 +433,9 @@ An account stores profile access.
     const reportHtml = renderHtmlReport([spec], { models: [model], coverage });
 
     assert.match(reportHtml, /<details class="model-item">/);
-    assert.match(reportHtml, /<code>ACCOUNT-M001<\/code>: Account/);
+    assert.match(reportHtml, /data-details-selector="details\.model-item"[^>]+>Show all models<\/button>/);
+    assert.match(reportHtml, /<summary><code>ACCOUNT-M001<\/code>: Account/);
+    assert.doesNotMatch(reportHtml, /<summary>Model<\/summary>/);
     assert.match(reportHtml, /An account stores profile access\./);
     assert.match(reportHtml, /<table>/);
     assert.match(reportHtml, /<th>Field<\/th>/);
@@ -448,6 +451,125 @@ An account stores profile access.
       reportHtml,
       /<span class="coverage-ref" title="tests\/account\.spec\.ts:2">1<\/span>/,
     );
+  });
+
+  it("renders section-scoped show and hide controls for models and scenarios", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define accounts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account.
+
+### ACCOUNT-M002: Member
+
+An account member.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const reportHtml = renderHtmlReport([spec], { models: [model] });
+
+    assert.match(reportHtml, /<details class="panel report-section" data-details-section open>/);
+    assert.match(reportHtml, /data-details-selector="details\.scenario"[^>]+>Show all scenarios<\/button>/);
+    assert.match(reportHtml, /data-hide-label="Hide all models"/);
+    assert.match(reportHtml, /data-hide-label="Hide all scenarios"/);
+    assert.equal(reportHtml.match(/<details class="model-item">/g)?.length, 2);
+    assert.match(reportHtml, /section\.querySelectorAll\(button\.dataset\.detailsSelector\)/);
+    assert.match(reportHtml, /details\.open = shouldOpen/);
+    assert.doesNotMatch(reportHtml, /<details class="(?:model-item|scenario)"[^>]* open/);
+  });
+
+  it("renders stack and design documents as collapsible report sections", () => {
+    const stack = parseSpecDocument(`---
+id: PLATFORM
+title: Platform architecture
+status: accepted
+---
+
+# Platform architecture
+
+## Purpose
+
+Define the application platform.
+
+## Stack
+
+- TypeScript
+- Express
+
+## Context
+
+The API and admin application share one deployment.
+
+## Rationale
+
+Keep operations simple.
+
+## Consequences
+
+The React application is compiled before deployment.
+`, { filePath: "specs/platform.stack.md" });
+    const design = parseSpecDocument(`---
+id: ADMIN
+title: Admin experience
+status: draft
+---
+
+# Admin experience
+
+## Purpose
+
+Define the administration interface.
+
+## Design
+
+The interface prioritizes daily studio operations.
+
+## Principles
+
+- Clear
+- Calm
+
+## Layout
+
+Use a responsive application shell.
+
+## Interaction
+
+Prefer direct manipulation.
+
+## Visual style
+
+Use restrained colors.
+`, { filePath: "specs/admin.design.md" });
+    assert.equal(stack.kind, "stack");
+    assert.equal(design.kind, "design");
+    if (stack.kind !== "stack" || design.kind !== "design") return;
+
+    const reportHtml = renderHtmlReport([], { stacks: [stack], designs: [design] });
+
+    assert.match(reportHtml, /<details class="panel report-section" open>/);
+    assert.match(reportHtml, /<h2>Platform architecture<\/h2>/);
+    assert.match(reportHtml, /<span class="badge">Stack<\/span>/);
+    assert.match(reportHtml, /<h3>Consequences<\/h3>/);
+    assert.match(reportHtml, /The React application is compiled before deployment\./);
+    assert.match(reportHtml, /<h2>Admin experience<\/h2>/);
+    assert.match(reportHtml, /<span class="badge">Design<\/span>/);
+    assert.match(reportHtml, /<h3>Visual style<\/h3>/);
+    assert.match(reportHtml, /Use restrained colors\./);
   });
 
   it("renders Mermaid model diagrams and preserves escaped source as a fallback", () => {
@@ -529,6 +651,7 @@ An account owns members.
       githubRef: "abc123",
     });
 
+    assert.match(reportHtml, /<details class="panel report-section" open>\s*<summary class="report-section-summary">\s*<h2>Open questions and assumptions<\/h2>/);
     assert.match(
       reportHtml,
       /class="flag-item-link" href="#account-q001">ACCOUNT-Q001: Should members have aliases\?<\/a>/,

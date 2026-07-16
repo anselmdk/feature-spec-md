@@ -63,7 +63,7 @@ Then account access is granted
     page.getByRole("img", { name: "ACCOUNT-S001 screenshot" }),
   ).not.toBeVisible();
 
-  await page.locator("summary").click();
+  await page.locator("details.scenario > summary").click();
 
   await expect(
     page.getByText("Given a returning person is on the access page"),
