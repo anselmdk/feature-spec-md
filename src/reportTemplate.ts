@@ -39,7 +39,7 @@ type SourceLinkOptions = {
 };
 
 type ReportDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
-type ExtensionKind = "openQuestions" | "assumptions" | "apiContract" | "permissions" | "lifecycle" | "testEnvironment";
+type ExtensionKind = "modelDiagram" | "openQuestions" | "assumptions" | "apiContract" | "permissions" | "lifecycle" | "testEnvironment";
 
 type ReportExtensionSection = {
   kind: ExtensionKind;
@@ -50,6 +50,7 @@ type ReportExtensionSection = {
 };
 
 const extensionDefinitions: Array<{ kind: ExtensionKind; title: string }> = [
+  { kind: "modelDiagram", title: "Model Diagram" },
   { kind: "openQuestions", title: "Open Questions" },
   { kind: "assumptions", title: "Assumptions" },
   { kind: "apiContract", title: "API Contract" },
@@ -123,12 +124,16 @@ h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hove
 .flag-card h3{font-size:16px;margin:0 0 8px}.flag-card p{margin:8px 0}
 .flag-card.openQuestions{border-left-color:#9a6700}.flag-card.assumptions{border-left-color:#57606a}
 .extension-section{border:1px solid #d0d7de;border-radius:8px;padding:14px;margin:12px 0;background:#fff}
-.extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}`;
+.extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}
+.mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid #d0d7de;border-radius:8px;background:#fff}
+.mermaid{min-width:max-content;text-align:center}.mermaid svg{display:block;max-width:none;height:auto;margin:0 auto}
+.mermaid-error{color:#cf222e;text-align:left;white-space:pre-wrap}`;
 }
 
 function featureReportScripts() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
+  const mermaidOpenTag = "<" + "script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\" crossorigin=\"anonymous\">";
   return `${openTag}
 document.addEventListener("toggle", (event) => {
   const target = event.target;
@@ -145,6 +150,24 @@ document.addEventListener("toggle", (event) => {
     window.scrollBy(0, topAfter - topBefore);
   });
 }, true);
+${closeTag}
+${mermaidOpenTag}${closeTag}
+${openTag}
+document.addEventListener("DOMContentLoaded", async () => {
+  const diagrams = document.querySelectorAll(".mermaid");
+  if (!diagrams.length) return;
+  if (!window.mermaid) {
+    diagrams.forEach((diagram) => diagram.classList.add("mermaid-error"));
+    return;
+  }
+  try {
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+    await window.mermaid.run({ nodes: diagrams });
+  } catch (error) {
+    diagrams.forEach((diagram) => diagram.classList.add("mermaid-error"));
+    console.error("Unable to render Mermaid diagram", error);
+  }
+});
 ${closeTag}`;
 }
 
@@ -338,6 +361,20 @@ function renderMarkdownBlock(body: string) {
   };
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
+    const fenceMatch = line.match(/^\s*```([A-Za-z0-9_-]*)\s*$/);
+    if (fenceMatch) {
+      flushParagraph();
+      flushList();
+      const language = fenceMatch[1].toLowerCase();
+      const code: string[] = [];
+      i += 1;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) {
+        code.push(lines[i]);
+        i += 1;
+      }
+      blocks.push(renderCodeBlock(language, code.join("\n")));
+      continue;
+    }
     if (!line.trim()) {
       flushParagraph();
       flushList();
@@ -368,6 +405,14 @@ function renderMarkdownBlock(body: string) {
   flushParagraph();
   flushList();
   return blocks.join("");
+}
+
+function renderCodeBlock(language: string, source: string) {
+  if (language === "mermaid") {
+    return `<div class="mermaid-wrap"><pre class="mermaid">${html(source)}</pre></div>`;
+  }
+  const languageClass = language ? ` class="language-${html(language)}"` : "";
+  return `<pre><code${languageClass}>${html(source)}</code></pre>`;
 }
 
 function renderInlineMarkdown(source: string) {

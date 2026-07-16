@@ -17,6 +17,8 @@ export type SpecExtensionSection = {
 };
 
 export type SpecExtensionSections = {
+  /** Mermaid overview diagrams that visualize model relationships. */
+  modelDiagram?: SpecExtensionSection;
   /** Known unknowns, unresolved choices, or decisions that need a product answer. */
   openQuestions?: SpecExtensionSection;
   /** Assumptions the spec currently relies on until they are confirmed or replaced. */

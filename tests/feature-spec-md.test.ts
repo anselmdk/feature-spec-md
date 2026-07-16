@@ -427,6 +427,47 @@ An account stores profile access.
     );
   });
 
+  it("renders Mermaid model diagrams and preserves escaped source as a fallback", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account owns members.
+
+## Model Diagram
+
+\`\`\`mermaid
+erDiagram
+    ACCOUNT ||--o{ MEMBER : owns
+    ACCOUNT }o--|| PLAN : "uses <paid>"
+\`\`\`
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const reportHtml = renderHtmlReport([spec], { models: [model] });
+
+    assert.match(reportHtml, /<h4>Model Diagram <span class="badge">line 19<\/span><\/h4>/);
+    assert.match(reportHtml, /<pre class="mermaid">erDiagram/);
+    assert.match(reportHtml, /ACCOUNT \|\|--o\{ MEMBER : owns/);
+    assert.match(reportHtml, /&quot;uses &lt;paid&gt;&quot;/);
+    assert.match(reportHtml, /mermaid@11\/dist\/mermaid\.min\.js/);
+    assert.match(reportHtml, /window\.mermaid\.run/);
+  });
+
   it("renders spec line screenshots in the HTML report", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
     const cwd = process.cwd();

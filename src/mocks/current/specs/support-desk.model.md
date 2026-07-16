@@ -28,6 +28,14 @@ A visible urgency label used to sort the queue.
 
 - SUPPORT-M-R001: Tickets keep a stable public reference.
 
+## Model Diagram
+
+```mermaid
+erDiagram
+    AGENT ||--o{ TICKET : handles
+    TICKET }o--|| PRIORITY : has
+```
+
 ## Open Questions
 
 - SUPPORT-Q001: Should permission tables have optional coverage checks later?

@@ -75,6 +75,7 @@ Optional sections:
 
 ```md
 ## Rules
+## Model Diagram
 ```
 
 Model items use stable `-M001` IDs:
@@ -90,6 +91,22 @@ Model rules use stable `-R001` IDs and describe global invariants for the domain
 ```md
 - KANBAN-R001: A card MUST have one current workflow state.
 ```
+
+### Model Diagram
+
+Use `## Model Diagram` for one or more Mermaid diagrams that give a visual overview of model relationships. Diagrams supplement the stable model-item catalogue; they do not replace `## Model` items or affect coverage.
+
+````md
+## Model Diagram
+
+```mermaid
+erDiagram
+    BOARD ||--o{ CARD : contains
+    CARD }o--|| COLUMN : belongs_to
+```
+````
+
+Generated reports render `mermaid` fenced code blocks as diagrams. If Mermaid cannot load or a diagram is invalid, the escaped diagram source remains visible in the report. Model nodes SHOULD use recognizable names corresponding to the stable model items.
 
 ## Feature Files
 
@@ -201,6 +218,8 @@ Optional sections are `## Principles`, `## Layout`, `## Interaction`, and `## Vi
 ## Extension Sections
 
 The following optional sections are valid in model, feature, stack, and design files. They are intentionally plain Markdown so teams can adopt them gradually without changing the core scenario coverage model.
+
+Mermaid fenced code blocks are supported inside extension sections. Prefer `## Model Diagram` for domain relationship overviews and `## Lifecycle` for state diagrams.
 
 ### Open Questions
 
