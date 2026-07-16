@@ -38,6 +38,27 @@ type SourceLinkOptions = {
   githubRef?: string;
 };
 
+type ReportDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
+type ExtensionKind = "modelDiagram" | "openQuestions" | "assumptions" | "apiContract" | "permissions" | "lifecycle" | "testEnvironment";
+
+type ReportExtensionSection = {
+  kind: ExtensionKind;
+  title: string;
+  body: string;
+  line: number;
+  document: ReportDocument;
+};
+
+const extensionDefinitions: Array<{ kind: ExtensionKind; title: string }> = [
+  { kind: "modelDiagram", title: "Model Diagram" },
+  { kind: "openQuestions", title: "Open Questions" },
+  { kind: "assumptions", title: "Assumptions" },
+  { kind: "apiContract", title: "API Contract" },
+  { kind: "permissions", title: "Permissions" },
+  { kind: "lifecycle", title: "Lifecycle" },
+  { kind: "testEnvironment", title: "Test Environment" },
+];
+
 export function renderHtmlReport(specs: FeatureSpec[], options: ReportOptions = {}) {
   const title = options.title ?? "Feature Spec Report";
   const evidence = options.screenshots ?? [];
@@ -67,9 +88,11 @@ function featureReportBody({
   sourceLinks: SourceLinkOptions;
   title: string;
 }) {
+  const documents = allReportDocuments(specs, options);
   return `
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+${renderOpenQuestionsAndAssumptions(documents, sourceLinks)}
 ${renderIssues(options.validationIssues ?? [])}
 ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
 ${specs.map((spec) => renderSpec(spec, options.coverage, evidence, sourceLinks)).join("\n")}
@@ -81,9 +104,11 @@ function featureReportStyles() {
 .ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
+.scenario-body.compact-steps .step{margin:4px 0}.scenario-body.compact-steps .step p{margin:2px 0}
 .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
@@ -96,12 +121,24 @@ h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hove
 .screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
 .screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
-.line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}`;
+.line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.flag-card{border:1px solid #d0d7de;border-left:4px solid #d0d7de;border-radius:8px;padding:14px;background:#fff}
+.flag-card h3{font-size:16px;margin:0 0 8px}.flag-card p{margin:8px 0}
+.flag-item-link{color:inherit;text-decoration:underline;text-decoration-color:#8c959f;text-underline-offset:2px}
+.flag-card.openQuestions{border-left-color:#9a6700}.flag-card.assumptions{border-left-color:#57606a}
+.extension-section{border:1px solid #d0d7de;border-radius:8px;padding:14px;margin:12px 0;background:#fff}
+.extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}
+.mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid #d0d7de;border-radius:8px;background:#fff}
+.mermaid{min-width:max-content;text-align:center}.mermaid svg{display:block;max-width:none;height:auto;margin:0 auto}
+.mermaid-error{color:#cf222e;text-align:left;white-space:pre-wrap}
+@media(max-width:720px){.flag-grid{grid-template-columns:1fr}}`;
 }
 
 function featureReportScripts() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
+  const mermaidOpenTag = "<" + "script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\" crossorigin=\"anonymous\">";
   return `${openTag}
 document.addEventListener("toggle", (event) => {
   const target = event.target;
@@ -118,6 +155,24 @@ document.addEventListener("toggle", (event) => {
     window.scrollBy(0, topAfter - topBefore);
   });
 }, true);
+${closeTag}
+${mermaidOpenTag}${closeTag}
+${openTag}
+document.addEventListener("DOMContentLoaded", async () => {
+  const diagrams = document.querySelectorAll(".mermaid");
+  if (!diagrams.length) return;
+  if (!window.mermaid) {
+    diagrams.forEach((diagram) => diagram.classList.add("mermaid-error"));
+    return;
+  }
+  try {
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+    await window.mermaid.run({ nodes: diagrams });
+  } catch (error) {
+    diagrams.forEach((diagram) => diagram.classList.add("mermaid-error"));
+    console.error("Unable to render Mermaid diagram", error);
+  }
+});
 ${closeTag}`;
 }
 
@@ -147,6 +202,55 @@ function ordinalSuffix(day: number) {
   if (day % 10 === 2) return "nd";
   if (day % 10 === 3) return "rd";
   return "th";
+}
+
+function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLinks: SourceLinkOptions) {
+  const sections = documents.flatMap((document) => extensionSections(document)).filter((section) => section.kind === "openQuestions" || section.kind === "assumptions");
+  if (!sections.length) return "";
+  const openQuestionCount = sections.filter((section) => section.kind === "openQuestions").length;
+  const assumptionCount = sections.filter((section) => section.kind === "assumptions").length;
+  return `<section class="panel">
+  <div class="feature-header">
+    <h2>Open questions and assumptions</h2>
+    <span class="badge warning">${html(`${openQuestionCount} open question section(s) · ${assumptionCount} assumption section(s)`)}</span>
+  </div>
+  <p class="muted">Informational only: these sections are highlighted for review, but they do not fail validation, coverage, or the build. Review and either answer, promote to rules/scenarios, or remove when no longer relevant.</p>
+  <div class="flag-grid">${sections.map((section) => renderFlaggedSection(section, sourceLinks)).join("")}</div>
+</section>`;
+}
+
+function renderFlaggedSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+  return `<article class="flag-card ${html(section.kind)}">
+  <h3>${html(section.title)} <span class="badge">${html(documentLabel(section.document))}</span> ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h3>
+  ${renderFlaggedSectionBody(section, sourceLinks)}
+</article>`;
+}
+
+function renderFlaggedSectionBody(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+  const items = flaggedSectionItems(section);
+  if (!items.length) return renderMarkdownBlock(section.body);
+  return `<ul>${items
+    .map((item) => {
+      const content = renderInlineMarkdown(item.text);
+      return `<li><a class="flag-item-link" href="#${html(flaggedItemAnchor(section, item))}">${content}</a></li>`;
+    })
+    .join("")}</ul>`;
+}
+
+function flaggedSectionItems(section: ReportExtensionSection) {
+  const lines = section.document.source.split(/\r?\n/);
+  const items: Array<{ text: string; line: number }> = [];
+  for (let index = section.line; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index])) break;
+    const match = lines[index].match(/^\s*[-*]\s+(.+)$/);
+    if (match) items.push({ text: match[1].trim(), line: index + 1 });
+  }
+  return items;
+}
+
+function flaggedItemAnchor(section: ReportExtensionSection, item: { text: string; line: number }) {
+  const stableId = item.text.match(/^([A-Z][A-Z0-9-]*-(?:Q|A)\d{3}):/)?.[1];
+  return (stableId ?? `${section.document.frontmatter.id}-${section.kind}-${item.line}`).toLowerCase();
 }
 
 function renderIssues(issues: ValidationIssue[]) {
@@ -188,6 +292,7 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
       .join("")}</div>
   </details>
   ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
+  ${renderDocumentExtensionSections(model, sourceLinks)}
 </section>`;
 }
 
@@ -211,12 +316,25 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
     <h2>${html(spec.title)}</h2>
     <span class="badge">${html(spec.frontmatter.status ?? "draft")}</span>
   </div>
+  ${renderFeaturePolicy(spec)}
   <p>${html(spec.purpose)}</p>
   <h3>Rules</h3>
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
   <h3>Scenarios</h3>
   ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
+  ${renderDocumentExtensionSections(spec, sourceLinks)}
 </section>`;
+}
+
+function renderFeaturePolicy(spec: FeatureSpec) {
+  const items = [
+    spec.frontmatter.test ? ["test", spec.frontmatter.test] : undefined,
+    spec.frontmatter.screenshots ? ["screenshots", spec.frontmatter.screenshots] : undefined,
+  ].filter((item): item is [string, string] => Boolean(item));
+  if (!items.length) return "";
+  return `<div class="feature-policy">${items
+    .map(([label, value]) => `<span class="badge"><span class="muted">${html(label)}</span> <code>${html(value)}</code></span>`)
+    .join("")}</div>`;
 }
 
 function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
@@ -227,22 +345,12 @@ function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[
 function renderScenario(spec: FeatureSpec, scenario: FeatureSpec["scenarios"][number], scenarioCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
   const scenarioEvidence = scenario.steps.flatMap((step) => evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? []);
   const changedCount = scenarioEvidence.filter((entry) => entry.changed && entry.path).length;
-  const unchangedCount = scenarioEvidence.filter((entry) => !entry.changed).length;
   const scenarioRuleIds = ruleIdsForScenario(scenario.id, spec.rules.map((rule) => rule.id), ruleScenarioLinks);
   const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
   return `<details class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
-  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} ${renderEvidenceSummary(changedCount, unchangedCount)}</summary>
-  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks)).join("")}</div>
+  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)}</summary>
+  <div class="scenario-body${changedCount === 0 ? " compact-steps" : ""}">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks, scenario.evidence.screenshots)).join("")}</div>
 </details>`;
-}
-
-function renderEvidenceSummary(changedCount: number, unchangedCount: number) {
-  if (changedCount === 0 && unchangedCount === 0) {
-    return `<span class="badge muted">no visual evidence recorded</span>`;
-  }
-  const changedLabel = `${changedCount} visual change${changedCount === 1 ? "" : "s"}`;
-  const unchangedLabel = `${unchangedCount} unchanged screen${unchangedCount === 1 ? "" : "s"}`;
-  return `<span class="badge">${html([changedLabel, unchangedLabel].join(" · "))}</span>`;
 }
 
 function renderScenarioRuleCoverage(ruleIds: string[]) {
@@ -250,23 +358,80 @@ function renderScenarioRuleCoverage(ruleIds: string[]) {
   return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds.map((ruleId) => `<code>${html(ruleId)}</code>`).join(" ")}</p>`;
 }
 
+function renderDocumentExtensionSections(document: ReportDocument, sourceLinks: SourceLinkOptions) {
+  const sections = extensionSections(document);
+  if (!sections.length) return "";
+  return `<h3>Spec context</h3>${sections.map((section) => renderDocumentExtensionSection(section, sourceLinks)).join("")}`;
+}
+
+function renderDocumentExtensionSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+  const coverageNote = section.kind === "apiContract" || section.kind === "permissions"
+    ? `<p class="muted">Coverage recommendation: enforceable API and permission behavior should also be captured as rules and scenarios so tests can reference stable IDs.</p>`
+    : "";
+  return `<section class="extension-section">
+  <h4>${html(section.title)} ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h4>
+  ${section.kind === "openQuestions" || section.kind === "assumptions" ? renderDetailedFlaggedSectionBody(section) : renderMarkdownBlock(section.body)}
+  ${coverageNote}
+</section>`;
+}
+
+function renderDetailedFlaggedSectionBody(section: ReportExtensionSection) {
+  const items = flaggedSectionItems(section);
+  if (!items.length) return renderMarkdownBlock(section.body);
+  return `<ul>${items
+    .map((item) => `<li id="${html(flaggedItemAnchor(section, item))}">${renderInlineMarkdown(item.text)}</li>`)
+    .join("")}</ul>`;
+}
+
 function renderModelItemBody(body: string) {
+  return renderMarkdownBlock(body);
+}
+
+function renderMarkdownBlock(body: string) {
   const lines = body.split("\n");
   const blocks: string[] = [];
   let paragraph: string[] = [];
+  let list: string[] = [];
   const flushParagraph = () => {
     if (!paragraph.length) return;
     blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
     paragraph = [];
   };
+  const flushList = () => {
+    if (!list.length) return;
+    blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    list = [];
+  };
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
+    const fenceMatch = line.match(/^\s*```([A-Za-z0-9_-]*)\s*$/);
+    if (fenceMatch) {
+      flushParagraph();
+      flushList();
+      const language = fenceMatch[1].toLowerCase();
+      const code: string[] = [];
+      i += 1;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) {
+        code.push(lines[i]);
+        i += 1;
+      }
+      blocks.push(renderCodeBlock(language, code.join("\n")));
+      continue;
+    }
     if (!line.trim()) {
       flushParagraph();
+      flushList();
+      continue;
+    }
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      list.push(listMatch[1].trim());
       continue;
     }
     if (isTableStart(lines, i)) {
       flushParagraph();
+      flushList();
       const tableLines = [line];
       i += 2;
       while (i < lines.length && isPipeTableRow(lines[i])) {
@@ -277,10 +442,20 @@ function renderModelItemBody(body: string) {
       blocks.push(renderTable(tableLines));
       continue;
     }
+    flushList();
     paragraph.push(line.trim());
   }
   flushParagraph();
+  flushList();
   return blocks.join("");
+}
+
+function renderCodeBlock(language: string, source: string) {
+  if (language === "mermaid") {
+    return `<div class="mermaid-wrap"><pre class="mermaid">${html(source)}</pre></div>`;
+  }
+  const languageClass = language ? ` class="language-${html(language)}"` : "";
+  return `<pre><code${languageClass}>${html(source)}</code></pre>`;
 }
 
 function renderInlineMarkdown(source: string) {
@@ -312,11 +487,13 @@ function renderTable(lines: string[]) {
   return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${renderInlineMarkdown(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
+function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions, screenshotPolicy: string) {
   const evidence = evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
   const screenshots = evidence.filter((entry) => entry.changed && entry.path);
   const unchanged = evidence.filter((entry) => !entry.changed);
-  const evidenceBadge = screenshots.length
+  const evidenceBadge = screenshotPolicy === "skip"
+    ? ""
+    : screenshots.length
     ? `<span class="badge ok">screen changed · screenshot captured</span>`
     : unchanged.length
       ? `<span class="badge muted">same screen${renderComparedWith(unchanged[0])}</span>`
@@ -390,6 +567,51 @@ function sourceLineUrl(filePath: string, line: number, sourceLinks: SourceLinkOp
   const ref = encodeURIComponent(sourceLinks.githubRef);
   const encodedFilePath = filePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
   return `${baseUrl}/blob/${ref}/${encodedFilePath}#L${line}`;
+}
+
+function allReportDocuments(specs: FeatureSpec[], options: ReportOptions): ReportDocument[] {
+  return [
+    ...(options.models ?? []),
+    ...(options.stacks ?? []),
+    ...(options.designs ?? []),
+    ...specs,
+  ];
+}
+
+function documentLabel(document: ReportDocument) {
+  return `${document.frontmatter.id} ${document.title}`;
+}
+
+function extensionSections(document: ReportDocument): ReportExtensionSection[] {
+  const lines = document.source.split(/\r?\n/);
+  return extensionDefinitions.flatMap((definition) => {
+    const section = extensionSection(lines, definition.title);
+    return section ? [{ ...section, kind: definition.kind, document }] : [];
+  });
+}
+
+function extensionSection(lines: string[], title: string) {
+  const headingPattern = /^##\s+(.+?)\s*$/;
+  const start = lines.findIndex((line) => headingPattern.exec(line)?.[1].toLowerCase() === title.toLowerCase());
+  if (start === -1) return undefined;
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (headingPattern.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+  const body = trimSectionLines(lines.slice(start + 1, end)).join("\n");
+  if (!body.trim()) return undefined;
+  return { title, body, line: start + 1 };
+}
+
+function trimSectionLines(lines: string[]) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !lines[start].trim()) start += 1;
+  while (end > start && !lines[end - 1].trim()) end -= 1;
+  return lines.slice(start, end);
 }
 
 function ruleScenarioIds(ruleId: string, ruleScenarioLinks: RuleScenarioLink[]) {

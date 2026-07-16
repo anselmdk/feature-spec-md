@@ -86,6 +86,8 @@ export type {
   ScenarioTestType,
   ScreenshotPolicy,
   SpecDocument,
+  SpecExtensionSection,
+  SpecExtensionSections,
   SpecFrontmatter,
   SpecScreenshot,
   StackSpec,

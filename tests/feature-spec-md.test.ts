@@ -345,6 +345,29 @@ Then the columns are visible
     );
   });
 
+  it("renders feature evidence policy and compacts scenarios that skip screenshots", () => {
+    const spec = parseFeatureSpec(
+      specSource.replace(
+        "status: draft",
+        "status: draft\ntest: integration\nscreenshots: skip",
+      ),
+      { filePath: "account.feature.md" },
+    );
+    const reportHtml = renderHtmlReport([spec]);
+
+    assert.match(
+      reportHtml,
+      /<div class="feature-policy"><span class="badge"><span class="muted">test<\/span> <code>integration<\/code><\/span><span class="badge"><span class="muted">screenshots<\/span> <code>skip<\/code><\/span><\/div>/,
+    );
+    assert.doesNotMatch(reportHtml, /no visual evidence recorded/);
+    assert.doesNotMatch(reportHtml, /no screenshot captured/);
+    assert.match(reportHtml, /<div class="scenario-body compact-steps">/);
+    assert.match(
+      reportHtml,
+      /\.scenario-body\.compact-steps \.step\{margin:4px 0\}/,
+    );
+  });
+
   it("renders ordinal suffixes in generated timestamps", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",
@@ -427,13 +450,124 @@ An account stores profile access.
     );
   });
 
+  it("renders Mermaid model diagrams and preserves escaped source as a fallback", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account owns members.
+
+## Model Diagram
+
+\`\`\`mermaid
+erDiagram
+    ACCOUNT ||--o{ MEMBER : owns
+    ACCOUNT }o--|| PLAN : "uses <paid>"
+\`\`\`
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const reportHtml = renderHtmlReport([spec], { models: [model] });
+
+    assert.match(reportHtml, /<h4>Model Diagram <span class="badge">line 19<\/span><\/h4>/);
+    assert.match(reportHtml, /<pre class="mermaid">erDiagram/);
+    assert.match(reportHtml, /ACCOUNT \|\|--o\{ MEMBER : owns/);
+    assert.match(reportHtml, /&quot;uses &lt;paid&gt;&quot;/);
+    assert.match(reportHtml, /mermaid@11\/dist\/mermaid\.min\.js/);
+    assert.match(reportHtml, /window\.mermaid\.run/);
+  });
+
+  it("links flagged items to their detailed report sections and renders at most two columns", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account owns members.
+
+## Open Questions
+
+- ACCOUNT-Q001: Should members have aliases?
+- ACCOUNT-Q002: Should aliases be unique?
+
+## Assumptions
+
+- Account email is available.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const reportHtml = renderHtmlReport([spec], {
+      models: [model],
+      githubBaseUrl: "https://github.com/example/repository",
+      githubRef: "abc123",
+    });
+
+    assert.match(
+      reportHtml,
+      /class="flag-item-link" href="#account-q001">ACCOUNT-Q001: Should members have aliases\?<\/a>/,
+    );
+    assert.match(
+      reportHtml,
+      /class="flag-item-link" href="#account-assumptions-26">Account email is available\.<\/a>/,
+    );
+    assert.match(
+      reportHtml,
+      /<li id="account-q001">ACCOUNT-Q001: Should members have aliases\?<\/li>/,
+    );
+    assert.match(
+      reportHtml,
+      /<li id="account-assumptions-26">Account email is available\.<\/li>/,
+    );
+    assert.doesNotMatch(reportHtml, /class="flag-item-link"[^>]+target="_blank"/);
+    assert.match(
+      reportHtml,
+      /Informational only:[^<]+Review and either answer, promote to rules\/scenarios, or remove when no longer relevant\./,
+    );
+    assert.equal(
+      reportHtml.match(/Review and either answer/g)?.length,
+      1,
+    );
+    assert.match(
+      reportHtml,
+      /\.flag-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/,
+    );
+  });
+
   it("renders spec line screenshots in the HTML report", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
     const cwd = process.cwd();
     try {
-      const spec = parseFeatureSpec(specSource, {
-        filePath: "account.feature.md",
-      });
+      const spec = parseFeatureSpec(
+        specSource.replace("status: draft", "status: draft\nscreenshots: optional"),
+        { filePath: "account.feature.md" },
+      );
       const step = spec.scenarios[0]?.steps[0];
       assert.ok(step);
       await mkdir(path.join(root, "test-results"), { recursive: true });
@@ -459,6 +593,8 @@ An account stores profile access.
 
       assert.match(html, /screenshots\/account-s001-line-22\.png/);
       assert.match(html, /data-has-images="true"/);
+      assert.doesNotMatch(html, /visual changes?/);
+      assert.doesNotMatch(html, /unchanged screens?/);
       assert.match(
         html,
         /const topBefore = target\.getBoundingClientRect\(\)\.top/,

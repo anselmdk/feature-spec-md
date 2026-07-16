@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
 import {
   downloadRemoteFile,
@@ -123,7 +123,7 @@ export async function publishGithubActionDiffReport(
   await writeGithubSummary([
     "## Feature Spec PR Diff",
     "",
-    `<p><strong>Diff report:</strong> <a href=\"${html(reportUrl)}\">PR #${html(prNumber)} build ${html(currentBuild)}</a></p>`,
+    `<p><strong>Diff report:</strong> <a href="${html(reportUrl)}">PR #${html(prNumber)} build ${html(currentBuild)}</a></p>`,
     summaryComparisonSentence(report),
     "",
   ].join("\n"));
@@ -248,13 +248,12 @@ async function compareLocalFiles(previousDir: string, currentDir: string): Promi
   const previousSet = new Set(previousFiles);
   const currentSet = new Set(currentFiles);
   const allPaths = Array.from(new Set([...previousSet, ...currentSet])).sort();
-  const files: ComparedFile[] = [];
 
-  for (const filePath of allPaths) {
+  return Promise.all(allPaths.map(async (filePath) => {
     const previousInfo = previousSet.has(filePath) ? await fileInfo(join(previousDir, filePath)) : undefined;
     const currentInfo = currentSet.has(filePath) ? await fileInfo(join(currentDir, filePath)) : undefined;
     const status = !previousInfo ? "added" : !currentInfo ? "removed" : previousInfo.hash === currentInfo.hash ? "unchanged" : "changed";
-    files.push({
+    return {
       path: filePath,
       kind: fileKind(filePath),
       status,
@@ -262,10 +261,8 @@ async function compareLocalFiles(previousDir: string, currentDir: string): Promi
       currentHash: currentInfo?.hash,
       previousSize: previousInfo?.size,
       currentSize: currentInfo?.size,
-    });
-  }
-
-  return files;
+    };
+  }));
 }
 
 async function listLocalFilesRecursive(root: string) {
@@ -283,11 +280,8 @@ async function listLocalFilesRecursive(root: string) {
     }
     for (const entry of entries) {
       const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        await visit(relativePath);
-      } else if (entry.isFile()) {
-        files.push(relativePath);
-      }
+      if (entry.isDirectory()) await visit(relativePath);
+      else if (entry.isFile()) files.push(relativePath);
     }
   }
 }
@@ -295,14 +289,13 @@ async function listLocalFilesRecursive(root: string) {
 async function loadSpecSections(root: string): Promise<SpecSection[]> {
   const published = await loadPublishedSpecSections(root);
   if (published.length) return published;
-
   const index = await readFileMaybe(join(root, "index.html"));
   return extractSpecSections(index ?? "");
 }
 
 async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
   const specRoot = join(root, publishedSpecRoot);
-  const files = (await listLocalFilesRecursive(specRoot)).filter((file) => file.endsWith(".feature.md"));
+  const files = (await listLocalFilesRecursive(specRoot)).filter(isSpecMarkdownFile);
   const sections: SpecSection[] = [];
   for (const file of files) {
     const source = await readFile(join(specRoot, file), "utf8");
@@ -312,6 +305,10 @@ async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
     sections.push({ key: filePath, title, filePath, scenarioIds, text: source.trimEnd() });
   }
   return sections.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function isSpecMarkdownFile(filePath: string) {
+  return filePath.endsWith(".md");
 }
 
 function previousBuildNumber(builds: string[], currentBuild: string) {
@@ -366,13 +363,7 @@ function extractSpecSections(source: string): SpecSection[] {
     const scenarioIds = Array.from(fragment.matchAll(/<summary><code>([^<]+)<\/code>/g), (item) => textContent(item[1] ?? ""));
     const text = specText(fragment);
     const filePath = filePaths[0];
-    sections.push({
-      key: filePath ?? title,
-      title,
-      filePath,
-      scenarioIds,
-      text,
-    });
+    sections.push({ key: filePath ?? title, title, filePath, scenarioIds, text });
   }
   return sections;
 }
@@ -467,9 +458,7 @@ function compactContext(lines: DiffLine[]) {
 function scenarioSpecMap(specs: SpecSection[]) {
   const map = new Map<string, SpecSection>();
   for (const spec of specs) {
-    for (const scenarioId of spec.scenarioIds) {
-      map.set(scenarioId, spec);
-    }
+    for (const scenarioId of spec.scenarioIds) map.set(scenarioId, spec);
   }
   return map;
 }
@@ -512,9 +501,7 @@ function screenshotTitle(filePath: string, scenarioId: string | undefined) {
 }
 
 function relativeAssetUrl(prefix: string, filePath: string) {
-  return [prefix.replace(/\/+$/, ""), ...filePath.split("/").filter(Boolean)]
-    .filter(Boolean)
-    .join("/");
+  return [prefix.replace(/\/+$/, ""), ...filePath.split("/").filter(Boolean)].filter(Boolean).join("/");
 }
 
 function renderDiffReport(report: DiffReport) {
@@ -555,8 +542,8 @@ th{background:#f6f8fa}a{color:#0969da}
 }
 
 function renderSpecDiffs(specDiffs: SpecDiff[]) {
-  if (!specDiffs.length) return `<section class="panel"><h2>Spec changes</h2><p class="muted">No feature spec source changes detected.</p></section>`;
-  return `<section class="panel"><h2>Spec changes</h2><p class="muted">Diffed from published feature spec source files, not from rendered report HTML.</p>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
+  if (!specDiffs.length) return `<section class="panel"><h2>Spec changes</h2><p class="muted">No spec source changes detected.</p></section>`;
+  return `<section class="panel"><h2>Spec changes</h2><p class="muted">Diffed from published Markdown files under the specs directory, not from rendered report HTML.</p>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
 }
 
 function renderSpecDiff(diff: SpecDiff) {

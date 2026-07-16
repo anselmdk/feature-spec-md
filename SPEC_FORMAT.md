@@ -20,6 +20,8 @@ A spec set can contain four document types:
 - `*.stack.md` defines technical platform choices and their rationale.
 - `*.design.md` defines product, UI, layout, visual, and interaction direction.
 
+For larger products, each document type can also use the optional extension sections described below. These sections are designed for API-first products, SaaS authorization models, stateful domain objects, and e2e test environments without adding new required document suffixes.
+
 ## Frontmatter
 
 Every file starts with YAML-like frontmatter:
@@ -73,6 +75,7 @@ Optional sections:
 
 ```md
 ## Rules
+## Model Diagram
 ```
 
 Model items use stable `-M001` IDs:
@@ -88,6 +91,22 @@ Model rules use stable `-R001` IDs and describe global invariants for the domain
 ```md
 - KANBAN-R001: A card MUST have one current workflow state.
 ```
+
+### Model Diagram
+
+Use `## Model Diagram` for one or more Mermaid diagrams that give a visual overview of model relationships. Diagrams supplement the stable model-item catalogue; they do not replace `## Model` items or affect coverage.
+
+````md
+## Model Diagram
+
+```mermaid
+erDiagram
+    BOARD ||--o{ CARD : contains
+    CARD }o--|| COLUMN : belongs_to
+```
+````
+
+Generated reports render `mermaid` fenced code blocks as diagrams. If Mermaid cannot load or a diagram is invalid, the escaped diagram source remains visible in the report. Model nodes SHOULD use recognizable names corresponding to the stable model items.
 
 ## Feature Files
 
@@ -200,6 +219,102 @@ Required sections:
 
 Optional sections are `## Principles`, `## Layout`, `## Interaction`, and `## Visual style`.
 
+## Extension Sections
+
+The following optional sections are valid in model, feature, stack, and design files. They are intentionally plain Markdown so teams can adopt them gradually without changing the core scenario coverage model.
+
+Mermaid fenced code blocks are supported inside extension sections. Prefer `## Model Diagram` for domain relationship overviews and `## Lifecycle` for state diagrams.
+
+### Open Questions
+
+Use `## Open Questions` for unresolved product, technical, or testing choices that block confident implementation.
+
+```md
+## Open Questions
+
+- BOOKING-Q001: Confirm whether attendees can buy individual drop-in classes.
+- BOOKING-Q002: Confirm whether "user" includes public attendees or only staff members.
+```
+
+Open question IDs SHOULD use the document id plus `-Q001`. They are not treated as executable behavior and do not require test coverage.
+
+### Assumptions
+
+Use `## Assumptions` for temporary truths the spec relies on until they are confirmed, replaced, or promoted into rules.
+
+```md
+## Assumptions
+
+- BOOKING-A001: MobilePay is the first live payment provider.
+- BOOKING-A002: All initial recurring events repeat weekly.
+```
+
+Assumption IDs SHOULD use the document id plus `-A001`. When an assumption becomes durable product behavior, rewrite it as a rule with a `-R001` id.
+
+### API Contract
+
+Use `## API Contract` for API-first features and services. This section SHOULD describe endpoints, auth requirements, request/response shapes, status codes, idempotency expectations, pagination, webhooks, and links to generated OpenAPI or Swagger output.
+
+```md
+## API Contract
+
+| Method | Path | Purpose | Auth |
+| --- | --- | --- | --- |
+| POST | /api/events | Create an event | administrator |
+| GET | /api/events | List visible events | account member |
+```
+
+API contract details can be covered by integration tests that reference the relevant scenario and rule IDs.
+
+### Permissions
+
+Use `## Permissions` for role, group, and tenant capability matrices.
+
+```md
+## Permissions
+
+| Capability | Owner | Administrator | Teacher | Attendee |
+| --- | --- | --- | --- | --- |
+| Manage payment connection | yes | no | no | no |
+| Move own class instance | yes | yes | yes | no |
+```
+
+Permissions that must be enforced by the implementation SHOULD also be written as rules so coverage can track them.
+
+### Lifecycle
+
+Use `## Lifecycle` for state machines and transition rules for entities such as bookings, payments, subscriptions, passes, and recurring event instances.
+
+```md
+## Lifecycle
+
+Payment states:
+
+```txt
+pending -> paid
+pending -> failed
+paid -> refunded
+```
+
+Invalid transitions MUST be rejected by the API.
+```
+
+Lifecycle behavior that must be executable SHOULD be represented by rules and scenarios in the same feature file.
+
+### Test Environment
+
+Use `## Test Environment` for mocks, seed data, fixed-time behavior, provider adapters, and CI/e2e setup.
+
+```md
+## Test Environment
+
+- Email delivery is mocked and exposes the latest magic link to tests.
+- MobilePay runs through a deterministic mock in CI.
+- Time is frozen during recurring-event generation tests.
+```
+
+This section is especially useful for SaaS apps with external dependencies such as payment providers, email, calendars, or third-party APIs.
+
 ## Splitting Guidance
 
 Split model files by coherent domain vocabulary, ownership, or lifecycle.
@@ -209,6 +324,8 @@ Split feature files by user capability.
 Use stack files for broad technical choices such as framework, language, testing, persistence, deployment, and runtime constraints.
 
 Use design files for product/UI direction such as layout, interaction, visual style, and design principles.
+
+Use extension sections when the information belongs with a spec but is not itself a model item, durable rule, or executable scenario. If an extension section becomes large enough to hide the core behavior, split the surrounding model or feature document instead of creating a new document type.
 
 Keep each document small enough for an AI to read, revise, and use as test-writing context without extra explanation.
 
