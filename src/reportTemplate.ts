@@ -386,7 +386,7 @@ function renderContextDocument(document: StackSpec | DesignSpec, kindLabel: stri
   </summary>
   <div class="report-section-body">
     <p>${html(document.purpose)}</p>
-    ${sections.filter(([, body]) => body).map(([title, body]) => `<section><h3>${html(title)}</h3>${renderMarkdownBlock(body)}</section>`).join("")}
+    ${sections.filter(([, body]) => body).map(([title, body]) => `<section><h3>${html(title)}</h3>${renderMarkdownBlock(body, 1)}</section>`).join("")}
     ${renderContextRules(document.rules, ruleCoverage, ruleScenarioLinks, sourceLinks)}
     ${renderDocumentExtensionSections(document, sourceLinks)}
   </div>
@@ -489,7 +489,7 @@ function renderModelItemBody(body: string) {
   return renderMarkdownBlock(body);
 }
 
-function renderMarkdownBlock(body: string) {
+function renderMarkdownBlock(body: string, headingOffset = 0) {
   const lines = body.split("\n");
   const blocks: string[] = [];
   let paragraph: string[] = [];
@@ -523,6 +523,14 @@ function renderMarkdownBlock(body: string) {
     if (!line.trim()) {
       flushParagraph();
       flushList();
+      continue;
+    }
+    const headingMatch = line.match(/^\s*(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(6, headingMatch[1].length + headingOffset);
+      blocks.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
       continue;
     }
     const listMatch = line.match(/^\s*[-*]\s+(.+)$/);

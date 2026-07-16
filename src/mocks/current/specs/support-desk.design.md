@@ -14,6 +14,10 @@ Define the visual direction demonstrated by the support desk mock.
 
 The interface keeps ticket context and reply actions close together.
 
+### Navigation
+
+Keep the inbox and active ticket within one interaction context.
+
 ## Principles
 
 - Make ticket status easy to scan
