@@ -468,7 +468,7 @@ erDiagram
     assert.match(reportHtml, /window\.mermaid\.run/);
   });
 
-  it("links flagged items to their exact source lines and renders at most two columns", () => {
+  it("links flagged items to their detailed report sections and renders at most two columns", () => {
     const model = parseModelSpec(
       `---
 id: ACCOUNT
@@ -508,12 +508,21 @@ An account owns members.
 
     assert.match(
       reportHtml,
-      /class="flag-item-link" href="https:\/\/github\.com\/example\/repository\/blob\/abc123\/specs\/account\.model\.md#L21"[^>]*>ACCOUNT-Q001: Should members have aliases\?<\/a>/,
+      /class="flag-item-link" href="#account-q001">ACCOUNT-Q001: Should members have aliases\?<\/a>/,
     );
     assert.match(
       reportHtml,
-      /class="flag-item-link" href="https:\/\/github\.com\/example\/repository\/blob\/abc123\/specs\/account\.model\.md#L26"[^>]*>Account email is available\.<\/a>/,
+      /class="flag-item-link" href="#account-assumptions-26">Account email is available\.<\/a>/,
     );
+    assert.match(
+      reportHtml,
+      /<li id="account-q001">ACCOUNT-Q001: Should members have aliases\?<\/li>/,
+    );
+    assert.match(
+      reportHtml,
+      /<li id="account-assumptions-26">Account email is available\.<\/li>/,
+    );
+    assert.doesNotMatch(reportHtml, /class="flag-item-link"[^>]+target="_blank"/);
     assert.match(
       reportHtml,
       /Informational only:[^<]+Review and either answer, promote to rules\/scenarios, or remove when no longer relevant\./,

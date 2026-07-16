@@ -229,8 +229,7 @@ function renderFlaggedSectionBody(section: ReportExtensionSection, sourceLinks: 
   return `<ul>${items
     .map((item) => {
       const content = renderInlineMarkdown(item.text);
-      const url = sourceLineUrl(section.document.filePath, item.line, sourceLinks);
-      return `<li>${url ? `<a class="flag-item-link" href="${html(url)}" target="_blank" rel="noopener noreferrer">${content}</a>` : content}</li>`;
+      return `<li><a class="flag-item-link" href="#${html(flaggedItemAnchor(section, item))}">${content}</a></li>`;
     })
     .join("")}</ul>`;
 }
@@ -244,6 +243,11 @@ function flaggedSectionItems(section: ReportExtensionSection) {
     if (match) items.push({ text: match[1].trim(), line: index + 1 });
   }
   return items;
+}
+
+function flaggedItemAnchor(section: ReportExtensionSection, item: { text: string; line: number }) {
+  const stableId = item.text.match(/^([A-Z][A-Z0-9-]*-(?:Q|A)\d{3}):/)?.[1];
+  return (stableId ?? `${section.document.frontmatter.id}-${section.kind}-${item.line}`).toLowerCase();
 }
 
 function renderIssues(issues: ValidationIssue[]) {
@@ -348,7 +352,7 @@ function renderScenarioRuleCoverage(ruleIds: string[]) {
 }
 
 function renderDocumentExtensionSections(document: ReportDocument, sourceLinks: SourceLinkOptions) {
-  const sections = extensionSections(document).filter((section) => section.kind !== "openQuestions" && section.kind !== "assumptions");
+  const sections = extensionSections(document);
   if (!sections.length) return "";
   return `<h3>Spec context</h3>${sections.map((section) => renderDocumentExtensionSection(section, sourceLinks)).join("")}`;
 }
@@ -359,9 +363,17 @@ function renderDocumentExtensionSection(section: ReportExtensionSection, sourceL
     : "";
   return `<section class="extension-section">
   <h4>${html(section.title)} ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h4>
-  ${renderMarkdownBlock(section.body)}
+  ${section.kind === "openQuestions" || section.kind === "assumptions" ? renderDetailedFlaggedSectionBody(section) : renderMarkdownBlock(section.body)}
   ${coverageNote}
 </section>`;
+}
+
+function renderDetailedFlaggedSectionBody(section: ReportExtensionSection) {
+  const items = flaggedSectionItems(section);
+  if (!items.length) return renderMarkdownBlock(section.body);
+  return `<ul>${items
+    .map((item) => `<li id="${html(flaggedItemAnchor(section, item))}">${renderInlineMarkdown(item.text)}</li>`)
+    .join("")}</ul>`;
 }
 
 function renderModelItemBody(body: string) {
