@@ -468,6 +468,66 @@ erDiagram
     assert.match(reportHtml, /window\.mermaid\.run/);
   });
 
+  it("links flagged items to their exact source lines and renders at most two columns", () => {
+    const model = parseModelSpec(
+      `---
+id: ACCOUNT
+title: Account model
+status: draft
+---
+
+# Account model
+
+## Purpose
+
+Define account concepts.
+
+## Model
+
+### ACCOUNT-M001: Account
+
+An account owns members.
+
+## Open Questions
+
+- ACCOUNT-Q001: Should members have aliases?
+- ACCOUNT-Q002: Should aliases be unique?
+
+## Assumptions
+
+- Account email is available.
+`,
+      { filePath: "specs/account.model.md" },
+    );
+    const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
+    const reportHtml = renderHtmlReport([spec], {
+      models: [model],
+      githubBaseUrl: "https://github.com/example/repository",
+      githubRef: "abc123",
+    });
+
+    assert.match(
+      reportHtml,
+      /class="flag-item-link" href="https:\/\/github\.com\/example\/repository\/blob\/abc123\/specs\/account\.model\.md#L21"[^>]*>ACCOUNT-Q001: Should members have aliases\?<\/a>/,
+    );
+    assert.match(
+      reportHtml,
+      /class="flag-item-link" href="https:\/\/github\.com\/example\/repository\/blob\/abc123\/specs\/account\.model\.md#L26"[^>]*>Account email is available\.<\/a>/,
+    );
+    assert.match(
+      reportHtml,
+      /Informational only:[^<]+Review and either answer, promote to rules\/scenarios, or remove when no longer relevant\./,
+    );
+    assert.equal(
+      reportHtml.match(/Review and either answer/g)?.length,
+      1,
+    );
+    assert.match(
+      reportHtml,
+      /\.flag-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/,
+    );
+  });
+
   it("renders spec line screenshots in the HTML report", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
     const cwd = process.cwd();

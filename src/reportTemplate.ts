@@ -119,15 +119,17 @@ h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hove
 .screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
-.flag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
+.flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
 .flag-card{border:1px solid #d0d7de;border-left:4px solid #d0d7de;border-radius:8px;padding:14px;background:#fff}
 .flag-card h3{font-size:16px;margin:0 0 8px}.flag-card p{margin:8px 0}
+.flag-item-link{color:inherit;text-decoration:underline;text-decoration-color:#8c959f;text-underline-offset:2px}
 .flag-card.openQuestions{border-left-color:#9a6700}.flag-card.assumptions{border-left-color:#57606a}
 .extension-section{border:1px solid #d0d7de;border-radius:8px;padding:14px;margin:12px 0;background:#fff}
 .extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}
 .mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid #d0d7de;border-radius:8px;background:#fff}
 .mermaid{min-width:max-content;text-align:center}.mermaid svg{display:block;max-width:none;height:auto;margin:0 auto}
-.mermaid-error{color:#cf222e;text-align:left;white-space:pre-wrap}`;
+.mermaid-error{color:#cf222e;text-align:left;white-space:pre-wrap}
+@media(max-width:720px){.flag-grid{grid-template-columns:1fr}}`;
 }
 
 function featureReportScripts() {
@@ -209,7 +211,7 @@ function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLi
     <h2>Open questions and assumptions</h2>
     <span class="badge warning">${html(`${openQuestionCount} open question section(s) · ${assumptionCount} assumption section(s)`)}</span>
   </div>
-  <p class="muted">Informational only: these sections are highlighted for review, but they do not fail validation, coverage, or the build.</p>
+  <p class="muted">Informational only: these sections are highlighted for review, but they do not fail validation, coverage, or the build. Review and either answer, promote to rules/scenarios, or remove when no longer relevant.</p>
   <div class="flag-grid">${sections.map((section) => renderFlaggedSection(section, sourceLinks)).join("")}</div>
 </section>`;
 }
@@ -217,9 +219,31 @@ function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLi
 function renderFlaggedSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
   return `<article class="flag-card ${html(section.kind)}">
   <h3>${html(section.title)} <span class="badge">${html(documentLabel(section.document))}</span> ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h3>
-  ${renderMarkdownBlock(section.body)}
-  <p class="muted">Review and either answer, promote to rules/scenarios, or remove when no longer relevant.</p>
+  ${renderFlaggedSectionBody(section, sourceLinks)}
 </article>`;
+}
+
+function renderFlaggedSectionBody(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+  const items = flaggedSectionItems(section);
+  if (!items.length) return renderMarkdownBlock(section.body);
+  return `<ul>${items
+    .map((item) => {
+      const content = renderInlineMarkdown(item.text);
+      const url = sourceLineUrl(section.document.filePath, item.line, sourceLinks);
+      return `<li>${url ? `<a class="flag-item-link" href="${html(url)}" target="_blank" rel="noopener noreferrer">${content}</a>` : content}</li>`;
+    })
+    .join("")}</ul>`;
+}
+
+function flaggedSectionItems(section: ReportExtensionSection) {
+  const lines = section.document.source.split(/\r?\n/);
+  const items: Array<{ text: string; line: number }> = [];
+  for (let index = section.line; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index])) break;
+    const match = lines[index].match(/^\s*[-*]\s+(.+)$/);
+    if (match) items.push({ text: match[1].trim(), line: index + 1 });
+  }
+  return items;
 }
 
 function renderIssues(issues: ValidationIssue[]) {
