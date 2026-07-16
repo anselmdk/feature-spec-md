@@ -104,9 +104,11 @@ function featureReportStyles() {
 .ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
 .badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
 .scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
+.scenario-body.compact-steps .step{margin:4px 0}.scenario-body.compact-steps .step p{margin:2px 0}
 .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
@@ -311,6 +313,7 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
     <h2>${html(spec.title)}</h2>
     <span class="badge">${html(spec.frontmatter.status ?? "draft")}</span>
   </div>
+  ${renderFeaturePolicy(spec)}
   <p>${html(spec.purpose)}</p>
   <h3>Rules</h3>
   <ul>${spec.rules.map((rule) => renderFeatureRule(rule.id, rule.text, ruleCoverage, ruleScenarioLinks, sourceLinks)).join("")}</ul>
@@ -318,6 +321,17 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
   ${spec.scenarios.map((scenario) => renderScenario(spec, scenario, scenarioCoverage, ruleScenarioLinks, evidenceByLine, sourceLinks)).join("\n")}
   ${renderDocumentExtensionSections(spec, sourceLinks)}
 </section>`;
+}
+
+function renderFeaturePolicy(spec: FeatureSpec) {
+  const items = [
+    spec.frontmatter.test ? ["test", spec.frontmatter.test] : undefined,
+    spec.frontmatter.screenshots ? ["screenshots", spec.frontmatter.screenshots] : undefined,
+  ].filter((item): item is [string, string] => Boolean(item));
+  if (!items.length) return "";
+  return `<div class="feature-policy">${items
+    .map(([label, value]) => `<span class="badge"><span class="muted">${html(label)}</span> <code>${html(value)}</code></span>`)
+    .join("")}</div>`;
 }
 
 function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
@@ -332,12 +346,13 @@ function renderScenario(spec: FeatureSpec, scenario: FeatureSpec["scenarios"][nu
   const scenarioRuleIds = ruleIdsForScenario(scenario.id, spec.rules.map((rule) => rule.id), ruleScenarioLinks);
   const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
   return `<details class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
-  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} ${renderEvidenceSummary(changedCount, unchangedCount)}</summary>
-  <div class="scenario-body">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks)).join("")}</div>
+  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} ${renderEvidenceSummary(changedCount, unchangedCount, scenario.evidence.screenshots)}</summary>
+  <div class="scenario-body${changedCount === 0 ? " compact-steps" : ""}">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks, scenario.evidence.screenshots)).join("")}</div>
 </details>`;
 }
 
-function renderEvidenceSummary(changedCount: number, unchangedCount: number) {
+function renderEvidenceSummary(changedCount: number, unchangedCount: number, screenshotPolicy: string) {
+  if (screenshotPolicy === "skip") return "";
   if (changedCount === 0 && unchangedCount === 0) {
     return `<span class="badge muted">no visual evidence recorded</span>`;
   }
@@ -480,11 +495,13 @@ function renderTable(lines: string[]) {
   return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${renderInlineMarkdown(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
+function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions, screenshotPolicy: string) {
   const evidence = evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
   const screenshots = evidence.filter((entry) => entry.changed && entry.path);
   const unchanged = evidence.filter((entry) => !entry.changed);
-  const evidenceBadge = screenshots.length
+  const evidenceBadge = screenshotPolicy === "skip"
+    ? ""
+    : screenshots.length
     ? `<span class="badge ok">screen changed · screenshot captured</span>`
     : unchanged.length
       ? `<span class="badge muted">same screen${renderComparedWith(unchanged[0])}</span>`

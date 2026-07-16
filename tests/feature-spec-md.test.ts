@@ -345,6 +345,29 @@ Then the columns are visible
     );
   });
 
+  it("renders feature evidence policy and compacts scenarios that skip screenshots", () => {
+    const spec = parseFeatureSpec(
+      specSource.replace(
+        "status: draft",
+        "status: draft\ntest: integration\nscreenshots: skip",
+      ),
+      { filePath: "account.feature.md" },
+    );
+    const reportHtml = renderHtmlReport([spec]);
+
+    assert.match(
+      reportHtml,
+      /<div class="feature-policy"><span class="badge"><span class="muted">test<\/span> <code>integration<\/code><\/span><span class="badge"><span class="muted">screenshots<\/span> <code>skip<\/code><\/span><\/div>/,
+    );
+    assert.doesNotMatch(reportHtml, /no visual evidence recorded/);
+    assert.doesNotMatch(reportHtml, /no screenshot captured/);
+    assert.match(reportHtml, /<div class="scenario-body compact-steps">/);
+    assert.match(
+      reportHtml,
+      /\.scenario-body\.compact-steps \.step\{margin:4px 0\}/,
+    );
+  });
+
   it("renders ordinal suffixes in generated timestamps", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",
@@ -541,9 +564,10 @@ An account owns members.
     const root = await mkdtemp(path.join(os.tmpdir(), "feature-spec-md-"));
     const cwd = process.cwd();
     try {
-      const spec = parseFeatureSpec(specSource, {
-        filePath: "account.feature.md",
-      });
+      const spec = parseFeatureSpec(
+        specSource.replace("status: draft", "status: draft\nscreenshots: optional"),
+        { filePath: "account.feature.md" },
+      );
       const step = spec.scenarios[0]?.steps[0];
       assert.ok(step);
       await mkdir(path.join(root, "test-results"), { recursive: true });
