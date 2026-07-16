@@ -324,18 +324,15 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
     <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
   </div>
   <p>${html(model.purpose)}</p>
-  <details class="model-item">
-    <summary>Model</summary>
-    <div class="model-item-body">${model.modelItems
-      .map((item) => {
-        const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
-        return `<section class="model-entry">
-      <h4><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</h4>
-      ${renderModelItemBody(item.body)}
-    </section>`;
-      })
-      .join("")}</div>
-  </details>
+  ${model.modelItems
+    .map((item) => {
+      const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+      return `<details class="model-item">
+    <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
+    <div class="model-item-body">${renderModelItemBody(item.body)}</div>
+  </details>`;
+    })
+    .join("\n")}
   ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
   ${renderDocumentExtensionSections(model, sourceLinks)}
 </section>`;
