@@ -593,6 +593,8 @@ An account owns members.
 
       assert.match(html, /screenshots\/account-s001-line-22\.png/);
       assert.match(html, /data-has-images="true"/);
+      assert.doesNotMatch(html, /visual changes?/);
+      assert.doesNotMatch(html, /unchanged screens?/);
       assert.match(
         html,
         /const topBefore = target\.getBoundingClientRect\(\)\.top/,

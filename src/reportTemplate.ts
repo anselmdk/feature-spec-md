@@ -345,23 +345,12 @@ function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[
 function renderScenario(spec: FeatureSpec, scenario: FeatureSpec["scenarios"][number], scenarioCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
   const scenarioEvidence = scenario.steps.flatMap((step) => evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? []);
   const changedCount = scenarioEvidence.filter((entry) => entry.changed && entry.path).length;
-  const unchangedCount = scenarioEvidence.filter((entry) => !entry.changed).length;
   const scenarioRuleIds = ruleIdsForScenario(scenario.id, spec.rules.map((rule) => rule.id), ruleScenarioLinks);
   const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
   return `<details class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
-  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)} ${renderEvidenceSummary(changedCount, unchangedCount, scenario.evidence.screenshots)}</summary>
+  <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)}</summary>
   <div class="scenario-body${changedCount === 0 ? " compact-steps" : ""}">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks, scenario.evidence.screenshots)).join("")}</div>
 </details>`;
-}
-
-function renderEvidenceSummary(changedCount: number, unchangedCount: number, screenshotPolicy: string) {
-  if (screenshotPolicy === "skip") return "";
-  if (changedCount === 0 && unchangedCount === 0) {
-    return `<span class="badge muted">no visual evidence recorded</span>`;
-  }
-  const changedLabel = `${changedCount} visual change${changedCount === 1 ? "" : "s"}`;
-  const unchangedLabel = `${unchangedCount} unchanged screen${unchangedCount === 1 ? "" : "s"}`;
-  return `<span class="badge">${html([changedLabel, unchangedLabel].join(" · "))}</span>`;
 }
 
 function renderScenarioRuleCoverage(ruleIds: string[]) {
