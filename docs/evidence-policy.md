@@ -13,17 +13,19 @@ screenshots: required
 ---
 ```
 
-Use scenario-level overrides directly below a scenario heading when one scenario needs different evidence:
+Use scenario-level overrides directly below a scenario heading when one scenario needs different evidence. The Given / When / Then steps remain inside the fenced scenario block:
 
-```md
+````md
 ### KANBAN-CARD-AUTHORING-S002: Card title is normalized
 Test: unit
 Screenshots: skip
 
+```
 Given the raw card title contains leading whitespace
 When the title is normalized
 Then the stored title has no leading whitespace
 ```
+````
 
 ## `test` values
 

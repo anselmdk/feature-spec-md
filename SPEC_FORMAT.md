@@ -130,15 +130,17 @@ Rules use stable `-R001` IDs:
 - KANBAN-CARD-AUTHORING-R001: A new card MUST start in the To do column.
 ```
 
-Scenarios use stable `-S001` IDs and Given / When / Then steps:
+Scenarios use stable `-S001` IDs and Given / When / Then steps. The scenario body MUST be written inside a fenced code block so Markdown previews preserve line breaks without relying on trailing spaces:
 
-```md
+````md
 ### KANBAN-CARD-AUTHORING-S001: User creates a card
 
+```
 Given the user is on the board
 When they create a card with the title "Write release notes"
 Then the card "Write release notes" is visible in the To do column
 ```
+````
 
 Allowed step keywords are `Given`, `When`, `Then`, `And`, and `But`.
 
@@ -159,17 +161,19 @@ screenshots: required
 ---
 ```
 
-Scenario-level overrides go directly below a scenario heading:
+Scenario-level overrides go directly below a scenario heading. The Given / When / Then steps remain inside the fenced scenario block:
 
-```md
+````md
 ### KANBAN-CARD-AUTHORING-S002: Card title is normalized
 Test: unit
 Screenshots: skip
 
+```
 Given the raw card title contains leading whitespace
 When the title is normalized
 Then the stored title has no leading whitespace
 ```
+````
 
 Supported `test` values are `unit`, `integration`, `playwright`, `manual`, and `skip`.
 

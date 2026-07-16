@@ -112,6 +112,7 @@ function featureReportStyles() {
 .model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
 .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
+.model-entry{padding:0 0 12px}.model-entry h4{font-size:14px;margin:14px 0 8px}
 .table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}
 h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
@@ -278,16 +279,18 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
     <span class="badge">${html(model.frontmatter.status ?? "draft")}</span>
   </div>
   <p>${html(model.purpose)}</p>
-  <h4>Model</h4>
-  ${model.modelItems
-    .map((item) => {
-      const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
-      return `<details class="model-item">
-    <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
-    <div class="model-item-body">${renderModelItemBody(item.body)}</div>
-  </details>`;
-    })
-    .join("")}
+  <details class="model-item">
+    <summary>Model</summary>
+    <div class="model-item-body">${model.modelItems
+      .map((item) => {
+        const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+        return `<section class="model-entry">
+      <h4><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</h4>
+      ${renderModelItemBody(item.body)}
+    </section>`;
+      })
+      .join("")}</div>
+  </details>
   ${renderModelRules(model, ruleCoverage, ruleScenarioLinks, sourceLinks)}
   ${renderDocumentExtensionSections(model, sourceLinks)}
 </section>`;
