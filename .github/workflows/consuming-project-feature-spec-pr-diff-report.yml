@@ -47,6 +47,7 @@ on:
         default: "^(src|specs|tests|scripts|public)/|^package(-lock)?\\.json$|^vite\\.config\\.|^playwright\\.config\\.|^tsconfig.*\\.json$|\\.(model|feature|stack|design)\\.md$"
 
 permissions:
+  actions: read
   contents: read
   pull-requests: write
   issues: write
