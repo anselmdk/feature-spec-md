@@ -263,7 +263,14 @@ npx feature-spec-md github-report \
   --publish ftp
 ```
 
-With FTP publishing, build reports are published below a `build/<build-number>/` directory. This keeps immutable build outputs available for later PR diff comparisons.
+With FTP publishing, build reports are published below a
+`build/<build-number>/` directory. This keeps immutable build outputs available
+for later PR diff comparisons. The same report is also published to `latest/`,
+providing a stable URL suitable for README links and bookmarks. The action
+exposes both `report-url` for the immutable build and `latest-report-url` for
+the stable alias. The reusable CI workflow updates this alias only for a push
+to the repository's default branch, so pull requests and other branch builds
+cannot replace the public latest report.
 
 ### `github-diff-report`
 

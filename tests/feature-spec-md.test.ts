@@ -28,6 +28,10 @@ import {
   buildSpecImplementationReport,
   formatSpecImplementationReport,
 } from "../src/testImplementationReport.js";
+import {
+  featureReportUrls,
+  latestReportUrl,
+} from "../src/githubActionReport.js";
 
 const specSource = `---
 id: ACCOUNT
@@ -55,6 +59,20 @@ Then account access is granted
 `;
 
 describe("feature-spec-md", () => {
+  it("provides immutable and stable latest report URLs", () => {
+    assert.deepEqual(
+      featureReportUrls("https://specs.example.test/project/", "42"),
+      {
+        reportUrl: "https://specs.example.test/project/build/42",
+        latestReportUrl: "https://specs.example.test/project/latest",
+      },
+    );
+    assert.equal(
+      latestReportUrl("https://specs.example.test/project"),
+      "https://specs.example.test/project/latest",
+    );
+  });
+
   it("parses and validates a Markdown feature spec", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",
@@ -278,7 +296,10 @@ A session represents current browser access.
     );
     assert.match(reportHtml, /Generated 16th June 2026 at 23:26\./);
     assert.doesNotMatch(reportHtml, /<h2>Validation<\/h2>/);
-    assert.match(reportHtml, /<details class="panel report-section" open>\s*<summary class="report-section-summary">\s*<h2>Account access<\/h2>/);
+    assert.match(
+      reportHtml,
+      /<details class="panel report-section" open>\s*<summary class="report-section-summary">\s*<h2>Account access<\/h2>/,
+    );
     assert.match(reportHtml, /<h2>Account access<\/h2>/);
     assert.doesNotMatch(reportHtml, /<h2>ACCOUNT Account access<\/h2>/);
     assert.match(reportHtml, /covered by ACCOUNT-S001/);
@@ -433,7 +454,10 @@ An account stores profile access.
     const reportHtml = renderHtmlReport([spec], { models: [model], coverage });
 
     assert.match(reportHtml, /<details class="model-item">/);
-    assert.match(reportHtml, /data-details-selector="details\.model-item"[^>]+>Show all models<\/button>/);
+    assert.match(
+      reportHtml,
+      /data-details-selector="details\.model-item"[^>]+>Show all models<\/button>/,
+    );
     assert.match(reportHtml, /<summary><code>ACCOUNT-M001<\/code>: Account/);
     assert.doesNotMatch(reportHtml, /<summary>Model<\/summary>/);
     assert.match(reportHtml, /An account stores profile access\./);
@@ -482,18 +506,31 @@ An account member.
     const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
     const reportHtml = renderHtmlReport([spec], { models: [model] });
 
-    assert.match(reportHtml, /<details class="panel report-section" data-details-section open>/);
-    assert.match(reportHtml, /data-details-selector="details\.scenario"[^>]+>Show all scenarios<\/button>/);
+    assert.match(
+      reportHtml,
+      /<details class="panel report-section" data-details-section open>/,
+    );
+    assert.match(
+      reportHtml,
+      /data-details-selector="details\.scenario"[^>]+>Show all scenarios<\/button>/,
+    );
     assert.match(reportHtml, /data-hide-label="Hide all models"/);
     assert.match(reportHtml, /data-hide-label="Hide all scenarios"/);
     assert.equal(reportHtml.match(/<details class="model-item">/g)?.length, 2);
-    assert.match(reportHtml, /section\.querySelectorAll\(button\.dataset\.detailsSelector\)/);
+    assert.match(
+      reportHtml,
+      /section\.querySelectorAll\(button\.dataset\.detailsSelector\)/,
+    );
     assert.match(reportHtml, /details\.open = shouldOpen/);
-    assert.doesNotMatch(reportHtml, /<details class="(?:model-item|scenario)"[^>]* open/);
+    assert.doesNotMatch(
+      reportHtml,
+      /<details class="(?:model-item|scenario)"[^>]* open/,
+    );
   });
 
   it("renders stack and design documents as collapsible report sections", () => {
-    const stack = parseSpecDocument(`---
+    const stack = parseSpecDocument(
+      `---
 id: PLATFORM
 title: Platform architecture
 status: accepted
@@ -523,8 +560,11 @@ Keep operations simple.
 ## Consequences
 
 The React application is compiled before deployment.
-`, { filePath: "specs/platform.stack.md" });
-    const design = parseSpecDocument(`---
+`,
+      { filePath: "specs/platform.stack.md" },
+    );
+    const design = parseSpecDocument(
+      `---
 id: ADMIN
 title: Admin experience
 status: draft
@@ -560,19 +600,27 @@ Prefer direct manipulation.
 ## Visual style
 
 Use restrained colors.
-`, { filePath: "specs/admin.design.md" });
+`,
+      { filePath: "specs/admin.design.md" },
+    );
     assert.equal(stack.kind, "stack");
     assert.equal(design.kind, "design");
     if (stack.kind !== "stack" || design.kind !== "design") return;
 
-    const reportHtml = renderHtmlReport([], { stacks: [stack], designs: [design] });
+    const reportHtml = renderHtmlReport([], {
+      stacks: [stack],
+      designs: [design],
+    });
 
     assert.match(reportHtml, /<details class="panel report-section" open>/);
     assert.match(reportHtml, /<h2>Platform architecture<\/h2>/);
     assert.match(reportHtml, /<span class="badge">Stack<\/span>/);
     assert.match(reportHtml, /<h4>Runtime and language<\/h4>/);
     assert.match(reportHtml, /<h3>Consequences<\/h3>/);
-    assert.match(reportHtml, /The React application is compiled before deployment\./);
+    assert.match(
+      reportHtml,
+      /The React application is compiled before deployment\./,
+    );
     assert.match(reportHtml, /<h2>Admin experience<\/h2>/);
     assert.match(reportHtml, /<span class="badge">Design<\/span>/);
     assert.match(reportHtml, /<h4>Navigation<\/h4>/);
@@ -614,7 +662,10 @@ erDiagram
     const spec = { ...parseFeatureSpec(specSource), kind: "feature" as const };
     const reportHtml = renderHtmlReport([spec], { models: [model] });
 
-    assert.match(reportHtml, /<h4>Model Diagram <span class="badge">line 19<\/span><\/h4>/);
+    assert.match(
+      reportHtml,
+      /<h4>Model Diagram <span class="badge">line 19<\/span><\/h4>/,
+    );
     assert.match(reportHtml, /<pre class="mermaid">erDiagram/);
     assert.match(reportHtml, /ACCOUNT \|\|--o\{ MEMBER : owns/);
     assert.match(reportHtml, /&quot;uses &lt;paid&gt;&quot;/);
@@ -660,7 +711,10 @@ An account owns members.
       githubRef: "abc123",
     });
 
-    assert.match(reportHtml, /<details class="panel report-section" open>\s*<summary class="report-section-summary">\s*<h2>Open questions and assumptions<\/h2>/);
+    assert.match(
+      reportHtml,
+      /<details class="panel report-section" open>\s*<summary class="report-section-summary">\s*<h2>Open questions and assumptions<\/h2>/,
+    );
     assert.match(
       reportHtml,
       /class="flag-item-link" href="#account-q001">ACCOUNT-Q001: Should members have aliases\?<\/a>/,
@@ -677,15 +731,15 @@ An account owns members.
       reportHtml,
       /<li id="account-assumptions-26">Account email is available\.<\/li>/,
     );
-    assert.doesNotMatch(reportHtml, /class="flag-item-link"[^>]+target="_blank"/);
+    assert.doesNotMatch(
+      reportHtml,
+      /class="flag-item-link"[^>]+target="_blank"/,
+    );
     assert.match(
       reportHtml,
       /Informational only:[^<]+Review and either answer, promote to rules\/scenarios, or remove when no longer relevant\./,
     );
-    assert.equal(
-      reportHtml.match(/Review and either answer/g)?.length,
-      1,
-    );
+    assert.equal(reportHtml.match(/Review and either answer/g)?.length, 1);
     assert.match(
       reportHtml,
       /\.flag-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/,
@@ -697,7 +751,10 @@ An account owns members.
     const cwd = process.cwd();
     try {
       const spec = parseFeatureSpec(
-        specSource.replace("status: draft", "status: draft\nscreenshots: optional"),
+        specSource.replace(
+          "status: draft",
+          "status: draft\nscreenshots: optional",
+        ),
         { filePath: "account.feature.md" },
       );
       const step = spec.scenarios[0]?.steps[0];
