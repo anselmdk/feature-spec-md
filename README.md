@@ -116,6 +116,7 @@ If `screenshots` is omitted, Playwright scenarios default to `required`; non-Pla
 
 ````md
 ### ACCOUNT-ACCESS-S002: Link expiry is calculated
+
 Test: unit
 Screenshots: skip
 
@@ -274,7 +275,12 @@ npx feature-spec-md github-diff-report \
   --pr-number 123
 ```
 
-The diff report lists changed report assets, extracts changed spec sections, groups screenshot changes by spec/scenario, writes a GitHub Actions summary, and exposes a `diff-comment-body` output that a workflow can add to the PR. PR diff reports are published below `pr/<pr-number>/<build-number>/`.
+The diff report lists changed report assets, extracts changed spec sections,
+groups screenshot changes by spec/scenario, writes a GitHub Actions summary,
+and exposes a `diff-comment-body` output. The reusable PR workflow maintains
+one compact PR comment linking to the latest full spec report and diff report.
+Earlier build links remain available in a collapsed history below the current
+links. PR diff reports are published below `pr/<pr-number>/<build-number>/`.
 
 ## Playwright screenshot evidence
 
