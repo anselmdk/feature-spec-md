@@ -19,6 +19,7 @@ import type {
   FeatureScenario,
   FeatureSpec,
   ScenarioEvidencePolicy,
+  ScenarioJourneyMetadata,
   ScenarioTestType,
   ScreenshotPolicy,
   StepKeyword,
@@ -34,6 +35,7 @@ const scenarioTestTypes: ScenarioTestType[] = [
   "skip",
 ];
 const screenshotPolicies: ScreenshotPolicy[] = ["required", "optional", "skip"];
+const journeyPaths: ScenarioJourneyMetadata["path"][] = ["happy", "failure"];
 
 /** Parse one feature spec Markdown document into structured metadata, rules, and scenarios. */
 export function parseFeatureSpec(
@@ -253,6 +255,7 @@ export function validateCoverage(
   options: {
     requireRuleCoverage?: boolean;
     requireScenarioCoverage?: boolean;
+    criticalJourneyIds?: string[];
   } = {},
 ) {
   const issues: ValidationIssue[] = [];
@@ -277,6 +280,21 @@ export function validateCoverage(
         code: "missing-rule-coverage",
         severity: "error",
         message: `Rule "${item.id}" has no matching test reference.`,
+        filePath: item.filePath,
+        line: item.line,
+      });
+    }
+  }
+
+  for (const id of options.criticalJourneyIds ?? []) {
+    const item = coverage.scenarioCoverage.find(
+      (candidate) => candidate.id === id,
+    );
+    if (item && !item.covered) {
+      issues.push({
+        code: "missing-critical-journey-coverage",
+        severity: "error",
+        message: `Critical end-to-end journey "${item.id}" has no matching test reference.`,
         filePath: item.filePath,
         line: item.line,
       });
@@ -323,6 +341,7 @@ export async function checkFeatureSpecs(options: {
   tests?: string[];
   requireRuleCoverage?: boolean;
   requireScenarioCoverage?: boolean;
+  requireCriticalJourneyCoverage?: boolean;
 }) {
   const specs = await loadFeatureSpecs(options.specs);
   const validationIssues = specs.flatMap(validateFeatureSpec);
@@ -333,6 +352,12 @@ export async function checkFeatureSpecs(options: {
     ? validateCoverage(coverage, {
         requireRuleCoverage: options.requireRuleCoverage,
         requireScenarioCoverage: options.requireScenarioCoverage,
+        criticalJourneyIds: options.requireCriticalJourneyCoverage
+          ? specs
+              .flatMap((spec) => spec.scenarios)
+              .filter((scenario) => scenario.journey?.critical)
+              .map((scenario) => scenario.id)
+          : [],
       })
     : [];
 
@@ -361,6 +386,11 @@ function parseScenarios(
     if (!match) continue;
     const steps: FeatureScenario["steps"] = [];
     const overrides: Partial<ScenarioEvidencePolicy> = {};
+    const journey: Partial<ScenarioJourneyMetadata> = {
+      scope: normalizeJourneyScope(frontmatter.journey),
+      path: normalizeJourneyPath(frontmatter.path),
+      critical: normalizeBoolean(frontmatter.critical),
+    };
 
     for (let j = i + 1; j < lines.length; j += 1) {
       if (/^##?#\s+/.test(lines[j])) break;
@@ -369,6 +399,19 @@ function parseScenarios(
       const screenshotsMatch = lines[j].trim().match(/^Screenshots:\s*(.+)$/i);
       if (screenshotsMatch)
         overrides.screenshots = normalizeScreenshotPolicy(screenshotsMatch[1]);
+      const journeyMatch = lines[j].trim().match(/^Journey:\s*(.+)$/i);
+      if (journeyMatch && journeyMatch[1].trim().toLowerCase() === "end-to-end")
+        journey.scope = "end-to-end";
+      const pathMatch = lines[j].trim().match(/^Path:\s*(.+)$/i);
+      if (pathMatch) journey.path = normalizeJourneyPath(pathMatch[1]);
+      const criticalMatch = lines[j].trim().match(/^Critical:\s*(.+)$/i);
+      if (criticalMatch) journey.critical = normalizeBoolean(criticalMatch[1]);
+      const systemsMatch = lines[j].trim().match(/^Systems:\s*(.+)$/i);
+      if (systemsMatch)
+        journey.systems = systemsMatch[1]
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
       const step = lines[j].trim().match(/^(Given|When|Then|And|But)\s+(.+)$/);
       if (step)
         steps.push({
@@ -383,6 +426,15 @@ function parseScenarios(
       title: match[2].trim(),
       line: bodyStartLine + i,
       evidence: resolveEvidencePolicy(frontmatter, overrides),
+      journey:
+        journey.scope === "end-to-end"
+          ? {
+              scope: journey.scope,
+              path: journey.path ?? "happy",
+              critical: journey.critical ?? false,
+              systems: journey.systems ?? [],
+            }
+          : undefined,
       steps,
     });
   }
@@ -408,11 +460,37 @@ function normalizeTestType(value: unknown): ScenarioTestType | undefined {
   return scenarioTestTypes.find((candidate) => candidate === normalized);
 }
 
-function normalizeScreenshotPolicy(value: unknown): ScreenshotPolicy | undefined {
+function normalizeScreenshotPolicy(
+  value: unknown,
+): ScreenshotPolicy | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().toLowerCase();
   if (normalized === "none") return "skip";
   return screenshotPolicies.find((candidate) => candidate === normalized);
+}
+
+function normalizeJourneyScope(
+  value: unknown,
+): ScenarioJourneyMetadata["scope"] | undefined {
+  if (typeof value !== "string") return undefined;
+  return value.trim().toLowerCase() === "end-to-end" ? "end-to-end" : undefined;
+}
+
+function normalizeJourneyPath(
+  value: unknown,
+): ScenarioJourneyMetadata["path"] | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  return journeyPaths.find((candidate) => candidate === normalized);
+}
+
+function normalizeBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return undefined;
 }
 
 function validateEvidencePolicy(
@@ -430,13 +508,62 @@ function validateEvidencePolicy(
       ),
     );
   }
-  if (frontmatter.screenshots && !normalizeScreenshotPolicy(frontmatter.screenshots)) {
+  if (
+    frontmatter.screenshots &&
+    !normalizeScreenshotPolicy(frontmatter.screenshots)
+  ) {
     issues.push(
       issue(
         spec,
         "invalid-screenshot-policy",
         "error",
         `Feature screenshots policy must be one of ${screenshotPolicies.join(", ")} or none.`,
+      ),
+    );
+  }
+  if (frontmatter.journey && !normalizeJourneyScope(frontmatter.journey)) {
+    issues.push(
+      issue(
+        spec,
+        "invalid-journey-scope",
+        "error",
+        'Feature journey policy must be "end-to-end".',
+      ),
+    );
+  }
+  if (frontmatter.path && !normalizeJourneyPath(frontmatter.path)) {
+    issues.push(
+      issue(
+        spec,
+        "invalid-journey-path",
+        "error",
+        `Feature journey path must be one of ${journeyPaths.join(", ")}.`,
+      ),
+    );
+  }
+  if (
+    frontmatter.critical !== undefined &&
+    normalizeBoolean(frontmatter.critical) === undefined
+  ) {
+    issues.push(
+      issue(
+        spec,
+        "invalid-journey-criticality",
+        "error",
+        "Feature journey critical policy must be true or false.",
+      ),
+    );
+  }
+  if (
+    !normalizeJourneyScope(frontmatter.journey) &&
+    (frontmatter.path !== undefined || frontmatter.critical !== undefined)
+  ) {
+    issues.push(
+      issue(
+        spec,
+        "journey-default-without-scope",
+        "error",
+        "Feature path and critical defaults require journey: end-to-end.",
       ),
     );
   }

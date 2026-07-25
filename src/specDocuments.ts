@@ -330,6 +330,7 @@ export async function checkSpecDocuments(options: {
   requireModelCoverage?: boolean;
   requireRuleCoverage?: boolean;
   requireScenarioCoverage?: boolean;
+  requireCriticalJourneyCoverage?: boolean;
 }) {
   const documents = await loadSpecDocuments(options.specs);
   const references = options.tests?.length
@@ -344,7 +345,16 @@ export async function checkSpecDocuments(options: {
   ];
   const coverageIssues: ValidationIssue[] = coverage
     ? [
-        ...validateCoverage(coverage, options),
+        ...validateCoverage(coverage, {
+          ...options,
+          criticalJourneyIds: options.requireCriticalJourneyCoverage
+            ? documents
+                .filter(isFeatureSpec)
+                .flatMap((spec) => spec.scenarios)
+                .filter((scenario) => scenario.journey?.critical)
+                .map((scenario) => scenario.id)
+            : [],
+        }),
         ...validateModelCoverage(coverage, options.requireModelCoverage),
       ]
     : [];

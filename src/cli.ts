@@ -41,7 +41,8 @@ async function main() {
   if (command === "report") return runReport(options);
   if (command === "coverage") return runCoverage(options);
   if (command === "github-report") return publishGithubActionReport(options);
-  if (command === "github-diff-report") return publishGithubActionDiffReport(options);
+  if (command === "github-diff-report")
+    return publishGithubActionDiffReport(options);
   if (command === "init") return runInit(options);
 
   printHelp();
@@ -55,9 +56,22 @@ async function runCheck(options: CliOptions) {
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
-    requireModelCoverage: booleanOption(options, "require-model-coverage", true),
+    requireModelCoverage: booleanOption(
+      options,
+      "require-model-coverage",
+      true,
+    ),
     requireRuleCoverage: booleanOption(options, "require-rule-coverage", true),
-    requireScenarioCoverage: booleanOption(options, "require-scenario-coverage", true),
+    requireScenarioCoverage: booleanOption(
+      options,
+      "require-scenario-coverage",
+      true,
+    ),
+    requireCriticalJourneyCoverage: booleanOption(
+      options,
+      "require-critical-journey-coverage",
+      false,
+    ),
   });
 
   printIssues([...result.validationIssues, ...result.coverageIssues]);
@@ -108,7 +122,10 @@ async function runCoverage(options: CliOptions) {
   );
   console.log(formatSpecImplementationReport(report));
 
-  if (booleanOption(options, "fail-on-missing", true) && hasMissingCoverage(report)) {
+  if (
+    booleanOption(options, "fail-on-missing", true) &&
+    hasMissingCoverage(report)
+  ) {
     process.exit(1);
   }
 }
@@ -226,7 +243,9 @@ function printIssues(issues: ValidationIssue[]) {
   }
 }
 
-function hasMissingCoverage(report: ReturnType<typeof buildSpecImplementationReport>) {
+function hasMissingCoverage(
+  report: ReturnType<typeof buildSpecImplementationReport>,
+) {
   return (
     report.missingScenarios > 0 ||
     report.missingRules > 0 ||
@@ -294,6 +313,7 @@ Options:
   --require-model-coverage      Defaults to true for check. Use --require-model-coverage=false to disable.
   --require-rule-coverage       Defaults to true for check. Use --require-rule-coverage=false to disable.
   --require-scenario-coverage   Defaults to true for check. Use --require-scenario-coverage=false to disable.
+  --require-critical-journey-coverage  Require every critical end-to-end journey to have a test reference.
   --enforce-evidence            Defaults to true for report. Use --enforce-evidence=false to disable.
   --require-declared-evidence   Alias for --enforce-evidence.
   --require-screenshots         Deprecated alias for --enforce-evidence.

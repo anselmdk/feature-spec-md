@@ -40,7 +40,14 @@ type SourceLinkOptions = {
 };
 
 type ReportDocument = ModelSpec | FeatureSpec | StackSpec | DesignSpec;
-type ExtensionKind = "modelDiagram" | "openQuestions" | "assumptions" | "apiContract" | "permissions" | "lifecycle" | "testEnvironment";
+type ExtensionKind =
+  | "modelDiagram"
+  | "openQuestions"
+  | "assumptions"
+  | "apiContract"
+  | "permissions"
+  | "lifecycle"
+  | "testEnvironment";
 
 type ReportExtensionSection = {
   kind: ExtensionKind;
@@ -60,7 +67,10 @@ const extensionDefinitions: Array<{ kind: ExtensionKind; title: string }> = [
   { kind: "testEnvironment", title: "Test Environment" },
 ];
 
-export function renderHtmlReport(specs: FeatureSpec[], options: ReportOptions = {}) {
+export function renderHtmlReport(
+  specs: FeatureSpec[],
+  options: ReportOptions = {},
+) {
   const title = options.title ?? "Feature Spec Report";
   const evidence = options.screenshots ?? [];
   const sourceLinks: SourceLinkOptions = {
@@ -94,12 +104,41 @@ function featureReportBody({
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
 ${renderOpenQuestionsAndAssumptions(documents, sourceLinks)}
+${renderJourneyOverview(specs, options.coverage, sourceLinks)}
 ${renderIssues(options.validationIssues ?? [])}
 ${renderModels(options.models ?? [], options.coverage, sourceLinks)}
 ${renderStacks(options.stacks ?? [], options.coverage, sourceLinks)}
 ${renderDesigns(options.designs ?? [], options.coverage, sourceLinks)}
 ${specs.map((spec) => renderSpec(spec, options.coverage, evidence, sourceLinks)).join("\n")}
 `;
+}
+
+function renderJourneyOverview(
+  specs: FeatureSpec[],
+  coverage: CoverageSummary | undefined,
+  sourceLinks: SourceLinkOptions,
+) {
+  const journeys = specs.flatMap((spec) =>
+    spec.scenarios
+      .filter((scenario) => scenario.journey)
+      .map((scenario) => ({ spec, scenario })),
+  );
+  if (!journeys.length) return "";
+  return `<details class="panel report-section" open>
+  <summary class="report-section-summary"><h2>End-to-end journeys</h2><span class="badge">${journeys.length}</span></summary>
+  <div class="report-section-body"><ul>${journeys
+    .map(({ scenario }) => {
+      const item = coverage?.scenarioCoverage.find(
+        (candidate) => candidate.id === scenario.id,
+      );
+      const metadata = scenario.journey!;
+      const systems = metadata.systems.length
+        ? ` <span class="muted">${html(metadata.systems.join(" → "))}</span>`
+        : "";
+      return `<li><a href="#${html(scenario.id.toLowerCase())}"><code>${html(scenario.id)}</code>: ${html(scenario.title)}</a> <span class="badge">${html(metadata.path)}</span>${metadata.critical ? ' <span class="badge">critical</span>' : ""}${systems} ${coverageBadge(item?.covered, [], item, sourceLinks)}</li>`;
+    })
+    .join("")}</ul></div>
+</details>`;
 }
 
 function featureReportStyles() {
@@ -148,7 +187,9 @@ h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hove
 function featureReportScripts() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
-  const mermaidOpenTag = "<" + "script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\" crossorigin=\"anonymous\">";
+  const mermaidOpenTag =
+    "<" +
+    'script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js" crossorigin="anonymous">';
   return `${openTag}
 const bulkToggledDetails = new WeakSet();
 
@@ -234,7 +275,20 @@ function formatGeneratedAt(value: string | undefined) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return value ?? "";
   const day = date.getDate();
-  const month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][date.getMonth()];
+  const month = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ][date.getMonth()];
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${day}${ordinalSuffix(day)} ${month} ${date.getFullYear()} at ${hours}:${minutes}`;
@@ -248,11 +302,23 @@ function ordinalSuffix(day: number) {
   return "th";
 }
 
-function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLinks: SourceLinkOptions) {
-  const sections = documents.flatMap((document) => extensionSections(document)).filter((section) => section.kind === "openQuestions" || section.kind === "assumptions");
+function renderOpenQuestionsAndAssumptions(
+  documents: ReportDocument[],
+  sourceLinks: SourceLinkOptions,
+) {
+  const sections = documents
+    .flatMap((document) => extensionSections(document))
+    .filter(
+      (section) =>
+        section.kind === "openQuestions" || section.kind === "assumptions",
+    );
   if (!sections.length) return "";
-  const openQuestionCount = sections.filter((section) => section.kind === "openQuestions").length;
-  const assumptionCount = sections.filter((section) => section.kind === "assumptions").length;
+  const openQuestionCount = sections.filter(
+    (section) => section.kind === "openQuestions",
+  ).length;
+  const assumptionCount = sections.filter(
+    (section) => section.kind === "assumptions",
+  ).length;
   return `<details class="panel report-section" open>
   <summary class="report-section-summary">
     <h2>Open questions and assumptions</h2>
@@ -265,14 +331,20 @@ function renderOpenQuestionsAndAssumptions(documents: ReportDocument[], sourceLi
 </details>`;
 }
 
-function renderFlaggedSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+function renderFlaggedSection(
+  section: ReportExtensionSection,
+  sourceLinks: SourceLinkOptions,
+) {
   return `<article class="flag-card ${html(section.kind)}">
   <h3>${html(section.title)} <span class="badge">${html(documentLabel(section.document))}</span> ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h3>
   ${renderFlaggedSectionBody(section, sourceLinks)}
 </article>`;
 }
 
-function renderFlaggedSectionBody(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
+function renderFlaggedSectionBody(
+  section: ReportExtensionSection,
+  sourceLinks: SourceLinkOptions,
+) {
   const items = flaggedSectionItems(section);
   if (!items.length) return renderMarkdownBlock(section.body);
   return `<ul>${items
@@ -294,24 +366,40 @@ function flaggedSectionItems(section: ReportExtensionSection) {
   return items;
 }
 
-function flaggedItemAnchor(section: ReportExtensionSection, item: { text: string; line: number }) {
+function flaggedItemAnchor(
+  section: ReportExtensionSection,
+  item: { text: string; line: number },
+) {
   const stableId = item.text.match(/^([A-Z][A-Z0-9-]*-(?:Q|A)\d{3}):/)?.[1];
-  return (stableId ?? `${section.document.frontmatter.id}-${section.kind}-${item.line}`).toLowerCase();
+  return (
+    stableId ??
+    `${section.document.frontmatter.id}-${section.kind}-${item.line}`
+  ).toLowerCase();
 }
 
 function renderIssues(issues: ValidationIssue[]) {
   if (!issues.length) return "";
   return `<details class="panel report-section" open><summary class="report-section-summary"><h2>Validation</h2></summary><div class="report-section-body"><ul>${issues
-    .map((issue) => `<li class="${issue.severity}"><code>${html(`${issue.filePath ?? ""}${issue.line ? `:${issue.line}` : ""}`)}</code> ${html(issue.message)}</li>`)
+    .map(
+      (issue) =>
+        `<li class="${issue.severity}"><code>${html(`${issue.filePath ?? ""}${issue.line ? `:${issue.line}` : ""}`)}</code> ${html(issue.message)}</li>`,
+    )
     .join("")}</ul></div></details>`;
 }
 
-function renderModels(models: ModelSpec[], coverage?: CoverageSummary, sourceLinks: SourceLinkOptions = {}) {
+function renderModels(
+  models: ModelSpec[],
+  coverage?: CoverageSummary,
+  sourceLinks: SourceLinkOptions = {},
+) {
   if (!models.length) return "";
   const modelCoverage = coverage?.modelCoverage ?? [];
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
+  const ruleScenarioLinks = buildRuleScenarioLinks(
+    ruleCoverage,
+    scenarioCoverage,
+  );
   return `<details class="panel report-section" data-details-section open>
   <summary class="report-section-summary"><h2>Models</h2></summary>
   <div class="report-section-body">
@@ -325,7 +413,13 @@ function renderDetailsToggleButton(selector: string, itemLabel: string) {
   return `<button class="details-toggle-button" type="button" data-details-toggle data-details-selector="${html(selector)}" data-show-label="Show all ${html(itemLabel)}" data-hide-label="Hide all ${html(itemLabel)}" aria-expanded="false">Show all ${html(itemLabel)}</button>`;
 }
 
-function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
+function renderModel(
+  model: ModelSpec,
+  modelCoverage: CoverageItem[],
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
   return `<section>
   <div class="feature-header">
     <h3>${html(model.frontmatter.id)} ${html(model.title)}</h3>
@@ -334,7 +428,9 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
   <p>${html(model.purpose)}</p>
   ${model.modelItems
     .map((item) => {
-      const coverageItem = modelCoverage.find((candidate) => candidate.id === item.id);
+      const coverageItem = modelCoverage.find(
+        (candidate) => candidate.id === item.id,
+      );
       return `<details class="model-item">
     <summary><code>${html(item.id)}</code>: ${html(item.title)} ${coverageBadge(coverageItem?.covered, [], coverageItem, sourceLinks)}</summary>
     <div class="model-item-body">${renderModelItemBody(item.body)}</div>
@@ -346,38 +442,82 @@ function renderModel(model: ModelSpec, modelCoverage: CoverageItem[], ruleCovera
 </section>`;
 }
 
-function renderModelRules(model: ModelSpec, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
+function renderModelRules(
+  model: ModelSpec,
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
   if (!model.rules.length) return "";
   return `<h4>Rules</h4><ul>${model.rules
     .map((rule) => {
-      const item = ruleCoverage.find((coverageItem) => coverageItem.id === rule.id);
+      const item = ruleCoverage.find(
+        (coverageItem) => coverageItem.id === rule.id,
+      );
       return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
     })
     .join("")}</ul>`;
 }
 
-function renderStacks(stacks: StackSpec[], coverage?: CoverageSummary, sourceLinks: SourceLinkOptions = {}) {
-  return stacks.map((stack) => renderContextDocument(stack, "Stack", [
-    ["Stack", stack.stack],
-    ["Context", stack.context],
-    ["Rationale", stack.rationale],
-    ["Consequences", stack.consequences],
-  ], coverage, sourceLinks)).join("\n");
+function renderStacks(
+  stacks: StackSpec[],
+  coverage?: CoverageSummary,
+  sourceLinks: SourceLinkOptions = {},
+) {
+  return stacks
+    .map((stack) =>
+      renderContextDocument(
+        stack,
+        "Stack",
+        [
+          ["Stack", stack.stack],
+          ["Context", stack.context],
+          ["Rationale", stack.rationale],
+          ["Consequences", stack.consequences],
+        ],
+        coverage,
+        sourceLinks,
+      ),
+    )
+    .join("\n");
 }
 
-function renderDesigns(designs: DesignSpec[], coverage?: CoverageSummary, sourceLinks: SourceLinkOptions = {}) {
-  return designs.map((design) => renderContextDocument(design, "Design", [
-    ["Design", design.design],
-    ["Principles", design.principles],
-    ["Layout", design.layout],
-    ["Interaction", design.interaction],
-    ["Visual style", design.visualStyle],
-  ], coverage, sourceLinks)).join("\n");
+function renderDesigns(
+  designs: DesignSpec[],
+  coverage?: CoverageSummary,
+  sourceLinks: SourceLinkOptions = {},
+) {
+  return designs
+    .map((design) =>
+      renderContextDocument(
+        design,
+        "Design",
+        [
+          ["Design", design.design],
+          ["Principles", design.principles],
+          ["Layout", design.layout],
+          ["Interaction", design.interaction],
+          ["Visual style", design.visualStyle],
+        ],
+        coverage,
+        sourceLinks,
+      ),
+    )
+    .join("\n");
 }
 
-function renderContextDocument(document: StackSpec | DesignSpec, kindLabel: string, sections: Array<[string, string]>, coverage: CoverageSummary | undefined, sourceLinks: SourceLinkOptions) {
+function renderContextDocument(
+  document: StackSpec | DesignSpec,
+  kindLabel: string,
+  sections: Array<[string, string]>,
+  coverage: CoverageSummary | undefined,
+  sourceLinks: SourceLinkOptions,
+) {
   const ruleCoverage = coverage?.ruleCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, coverage?.scenarioCoverage ?? []);
+  const ruleScenarioLinks = buildRuleScenarioLinks(
+    ruleCoverage,
+    coverage?.scenarioCoverage ?? [],
+  );
   return `<details class="panel report-section" open>
   <summary class="report-section-summary">
     <h2>${html(document.title)}</h2>
@@ -386,26 +526,49 @@ function renderContextDocument(document: StackSpec | DesignSpec, kindLabel: stri
   </summary>
   <div class="report-section-body">
     <p>${html(document.purpose)}</p>
-    ${sections.filter(([, body]) => body).map(([title, body]) => `<section><h3>${html(title)}</h3>${renderMarkdownBlock(body, 1)}</section>`).join("")}
+    ${sections
+      .filter(([, body]) => body)
+      .map(
+        ([title, body]) =>
+          `<section><h3>${html(title)}</h3>${renderMarkdownBlock(body, 1)}</section>`,
+      )
+      .join("")}
     ${renderContextRules(document.rules, ruleCoverage, ruleScenarioLinks, sourceLinks)}
     ${renderDocumentExtensionSections(document, sourceLinks)}
   </div>
 </details>`;
 }
 
-function renderContextRules(rules: FeatureRule[], ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
+function renderContextRules(
+  rules: FeatureRule[],
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
   if (!rules.length) return "";
-  return `<h3>Rules</h3><ul>${rules.map((rule) => {
-    const item = ruleCoverage.find((coverageItem) => coverageItem.id === rule.id);
-    return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
-  }).join("")}</ul>`;
+  return `<h3>Rules</h3><ul>${rules
+    .map((rule) => {
+      const item = ruleCoverage.find(
+        (coverageItem) => coverageItem.id === rule.id,
+      );
+      return `<li><code>${html(rule.id)}</code>: ${html(rule.text)} ${ruleCoverageBadge(item, ruleScenarioIds(rule.id, ruleScenarioLinks), sourceLinks)}</li>`;
+    })
+    .join("")}</ul>`;
 }
 
-function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: SpecScreenshot[] = [], sourceLinks: SourceLinkOptions = {}) {
+function renderSpec(
+  spec: FeatureSpec,
+  coverage?: CoverageSummary,
+  evidence: SpecScreenshot[] = [],
+  sourceLinks: SourceLinkOptions = {},
+) {
   const evidenceByLine = groupEvidenceByLine(evidence);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const scenarioCoverage = coverage?.scenarioCoverage ?? [];
-  const ruleScenarioLinks = buildRuleScenarioLinks(ruleCoverage, scenarioCoverage);
+  const ruleScenarioLinks = buildRuleScenarioLinks(
+    ruleCoverage,
+    scenarioCoverage,
+  );
   return `<details class="panel report-section" open>
   <summary class="report-section-summary">
     <h2>${html(spec.title)}</h2>
@@ -431,45 +594,101 @@ function renderSpec(spec: FeatureSpec, coverage?: CoverageSummary, evidence: Spe
 function renderFeaturePolicy(spec: FeatureSpec) {
   const items = [
     spec.frontmatter.test ? ["test", spec.frontmatter.test] : undefined,
-    spec.frontmatter.screenshots ? ["screenshots", spec.frontmatter.screenshots] : undefined,
+    spec.frontmatter.screenshots
+      ? ["screenshots", spec.frontmatter.screenshots]
+      : undefined,
+    spec.frontmatter.journey
+      ? ["journey", spec.frontmatter.journey]
+      : undefined,
+    spec.frontmatter.path ? ["path", spec.frontmatter.path] : undefined,
+    spec.frontmatter.critical !== undefined
+      ? ["critical", String(spec.frontmatter.critical)]
+      : undefined,
   ].filter((item): item is [string, string] => Boolean(item));
   if (!items.length) return "";
   return `<div class="feature-policy">${items
-    .map(([label, value]) => `<span class="badge"><span class="muted">${html(label)}</span> <code>${html(value)}</code></span>`)
+    .map(
+      ([label, value]) =>
+        `<span class="badge"><span class="muted">${html(label)}</span> <code>${html(value)}</code></span>`,
+    )
     .join("")}</div>`;
 }
 
-function renderFeatureRule(id: string, text: string, ruleCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], sourceLinks: SourceLinkOptions) {
+function renderFeatureRule(
+  id: string,
+  text: string,
+  ruleCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  sourceLinks: SourceLinkOptions,
+) {
   const item = ruleCoverage.find((coverageItem) => coverageItem.id === id);
   return `<li><code>${html(id)}</code>: ${html(text)} ${ruleCoverageBadge(item, ruleScenarioIds(id, ruleScenarioLinks), sourceLinks)}</li>`;
 }
 
-function renderScenario(spec: FeatureSpec, scenario: FeatureSpec["scenarios"][number], scenarioCoverage: CoverageItem[], ruleScenarioLinks: RuleScenarioLink[], evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions) {
-  const scenarioEvidence = scenario.steps.flatMap((step) => evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? []);
-  const changedCount = scenarioEvidence.filter((entry) => entry.changed && entry.path).length;
-  const scenarioRuleIds = ruleIdsForScenario(scenario.id, spec.rules.map((rule) => rule.id), ruleScenarioLinks);
-  const scenarioCoverageItem = scenarioCoverage.find((item) => item.id === scenario.id);
-  return `<details class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
+function renderScenario(
+  spec: FeatureSpec,
+  scenario: FeatureSpec["scenarios"][number],
+  scenarioCoverage: CoverageItem[],
+  ruleScenarioLinks: RuleScenarioLink[],
+  evidenceByLine: Map<string, SpecScreenshot[]>,
+  sourceLinks: SourceLinkOptions,
+) {
+  const scenarioEvidence = scenario.steps.flatMap(
+    (step) => evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [],
+  );
+  const changedCount = scenarioEvidence.filter(
+    (entry) => entry.changed && entry.path,
+  ).length;
+  const scenarioRuleIds = ruleIdsForScenario(
+    scenario.id,
+    spec.rules.map((rule) => rule.id),
+    ruleScenarioLinks,
+  );
+  const scenarioCoverageItem = scenarioCoverage.find(
+    (item) => item.id === scenario.id,
+  );
+  return `<details id="${html(scenario.id.toLowerCase())}" class="scenario" data-has-images="${changedCount > 0 ? "true" : "false"}">
   <summary><code>${html(scenario.id)}</code>: ${html(scenario.title)} ${coverageBadge(scenarioCoverageItem?.covered, [], scenarioCoverageItem, sourceLinks)}</summary>
-  <div class="scenario-body${changedCount === 0 ? " compact-steps" : ""}">${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks, scenario.evidence.screenshots)).join("")}</div>
+  <div class="scenario-body${changedCount === 0 ? " compact-steps" : ""}">${renderJourneyMetadata(scenario)}${renderScenarioRuleCoverage(scenarioRuleIds)}${scenario.steps.map((step) => renderStep(spec, step, evidenceByLine, sourceLinks, scenario.evidence.screenshots)).join("")}</div>
 </details>`;
 }
 
+function renderJourneyMetadata(scenario: FeatureSpec["scenarios"][number]) {
+  if (!scenario.journey) return "";
+  const items = [
+    ["journey", scenario.journey.scope],
+    ["path", scenario.journey.path],
+    scenario.journey.critical ? ["critical", "true"] : undefined,
+    scenario.journey.systems.length
+      ? ["systems", scenario.journey.systems.join(", ")]
+      : undefined,
+  ].filter((item): item is [string, string] => Boolean(item));
+  return `<div class="feature-policy">${items.map(([label, value]) => `<span class="badge"><span class="muted">${html(label)}</span> <code>${html(value)}</code></span>`).join("")}</div>`;
+}
+
 function renderScenarioRuleCoverage(ruleIds: string[]) {
-  if (!ruleIds.length) return `<p><strong>Rules covered by this scenario:</strong> <span class="muted">none referenced</span></p>`;
+  if (!ruleIds.length)
+    return `<p><strong>Rules covered by this scenario:</strong> <span class="muted">none referenced</span></p>`;
   return `<p><strong>Rules covered by this scenario:</strong> ${ruleIds.map((ruleId) => `<code>${html(ruleId)}</code>`).join(" ")}</p>`;
 }
 
-function renderDocumentExtensionSections(document: ReportDocument, sourceLinks: SourceLinkOptions) {
+function renderDocumentExtensionSections(
+  document: ReportDocument,
+  sourceLinks: SourceLinkOptions,
+) {
   const sections = extensionSections(document);
   if (!sections.length) return "";
   return `<h3>Spec context</h3>${sections.map((section) => renderDocumentExtensionSection(section, sourceLinks)).join("")}`;
 }
 
-function renderDocumentExtensionSection(section: ReportExtensionSection, sourceLinks: SourceLinkOptions) {
-  const coverageNote = section.kind === "apiContract" || section.kind === "permissions"
-    ? `<p class="muted">Coverage recommendation: enforceable API and permission behavior should also be captured as rules and scenarios so tests can reference stable IDs.</p>`
-    : "";
+function renderDocumentExtensionSection(
+  section: ReportExtensionSection,
+  sourceLinks: SourceLinkOptions,
+) {
+  const coverageNote =
+    section.kind === "apiContract" || section.kind === "permissions"
+      ? `<p class="muted">Coverage recommendation: enforceable API and permission behavior should also be captured as rules and scenarios so tests can reference stable IDs.</p>`
+      : "";
   return `<section class="extension-section">
   <h4>${html(section.title)} ${renderLineBadge(section.document.filePath, section.line, sourceLinks)}</h4>
   ${section.kind === "openQuestions" || section.kind === "assumptions" ? renderDetailedFlaggedSectionBody(section) : renderMarkdownBlock(section.body)}
@@ -481,7 +700,10 @@ function renderDetailedFlaggedSectionBody(section: ReportExtensionSection) {
   const items = flaggedSectionItems(section);
   if (!items.length) return renderMarkdownBlock(section.body);
   return `<ul>${items
-    .map((item) => `<li id="${html(flaggedItemAnchor(section, item))}">${renderInlineMarkdown(item.text)}</li>`)
+    .map(
+      (item) =>
+        `<li id="${html(flaggedItemAnchor(section, item))}">${renderInlineMarkdown(item.text)}</li>`,
+    )
     .join("")}</ul>`;
 }
 
@@ -501,7 +723,9 @@ function renderMarkdownBlock(body: string, headingOffset = 0) {
   };
   const flushList = () => {
     if (!list.length) return;
-    blocks.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    blocks.push(
+      `<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`,
+    );
     list = [];
   };
   for (let i = 0; i < lines.length; i += 1) {
@@ -530,7 +754,9 @@ function renderMarkdownBlock(body: string, headingOffset = 0) {
       flushParagraph();
       flushList();
       const level = Math.min(6, headingMatch[1].length + headingOffset);
-      blocks.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      blocks.push(
+        `<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`,
+      );
       continue;
     }
     const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
@@ -571,12 +797,20 @@ function renderCodeBlock(language: string, source: string) {
 function renderInlineMarkdown(source: string) {
   return source
     .split(/(`[^`]+`)/g)
-    .map((part) => part.startsWith("`") && part.endsWith("`") ? `<code>${html(part.slice(1, -1))}</code>` : html(part))
+    .map((part) =>
+      part.startsWith("`") && part.endsWith("`")
+        ? `<code>${html(part.slice(1, -1))}</code>`
+        : html(part),
+    )
     .join("");
 }
 
 function isTableStart(lines: string[], index: number) {
-  return isPipeTableRow(lines[index]) && index + 1 < lines.length && isTableSeparator(lines[index + 1]);
+  return (
+    isPipeTableRow(lines[index]) &&
+    index + 1 < lines.length &&
+    isTableSeparator(lines[index + 1])
+  );
 }
 
 function isPipeTableRow(line: string) {
@@ -584,11 +818,19 @@ function isPipeTableRow(line: string) {
 }
 
 function isTableSeparator(line: string) {
-  return isPipeTableRow(line) && splitTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell));
+  return (
+    isPipeTableRow(line) &&
+    splitTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell))
+  );
 }
 
 function splitTableRow(line: string) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
 }
 
 function renderTable(lines: string[]) {
@@ -597,25 +839,39 @@ function renderTable(lines: string[]) {
   return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${renderInlineMarkdown(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
-function renderStep(spec: FeatureSpec, step: FeatureStep, evidenceByLine: Map<string, SpecScreenshot[]>, sourceLinks: SourceLinkOptions, screenshotPolicy: string) {
-  const evidence = evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
+function renderStep(
+  spec: FeatureSpec,
+  step: FeatureStep,
+  evidenceByLine: Map<string, SpecScreenshot[]>,
+  sourceLinks: SourceLinkOptions,
+  screenshotPolicy: string,
+) {
+  const evidence =
+    evidenceByLine.get(screenshotKey(spec.filePath, step.line)) ?? [];
   const screenshots = evidence.filter((entry) => entry.changed && entry.path);
   const unchanged = evidence.filter((entry) => !entry.changed);
-  const evidenceBadge = screenshotPolicy === "skip"
-    ? ""
-    : screenshots.length
-    ? `<span class="badge ok">screen changed · screenshot captured</span>`
-    : unchanged.length
-      ? `<span class="badge muted">same screen${renderComparedWith(unchanged[0])}</span>`
-      : `<span class="badge muted" title="missing screenshot evidence is informational">no screenshot captured</span>`;
+  const evidenceBadge =
+    screenshotPolicy === "skip"
+      ? ""
+      : screenshots.length
+        ? `<span class="badge ok">screen changed · screenshot captured</span>`
+        : unchanged.length
+          ? `<span class="badge muted">same screen${renderComparedWith(unchanged[0])}</span>`
+          : `<span class="badge muted" title="missing screenshot evidence is informational">no screenshot captured</span>`;
   return `<div class="step"><p><strong>${html(step.keyword)}</strong> ${html(step.text)} ${renderLineBadge(spec.filePath, step.line, sourceLinks)} ${evidenceBadge}</p>${renderScreenshots(screenshots)}</div>`;
 }
 
 function renderComparedWith(entry: SpecScreenshot) {
-  return entry.comparedWithLine ? ` as line ${html(String(entry.comparedWithLine))}` : " as previous screen";
+  return entry.comparedWithLine
+    ? ` as line ${html(String(entry.comparedWithLine))}`
+    : " as previous screen";
 }
 
-function renderLineBadge(filePath: string, line: number, sourceLinks: SourceLinkOptions) {
+function renderLineBadge(
+  filePath: string,
+  line: number,
+  sourceLinks: SourceLinkOptions,
+) {
   const label = `line ${line}`;
   const url = sourceLineUrl(filePath, line, sourceLinks);
   if (!url) return `<span class="badge">${html(label)}</span>`;
@@ -627,25 +883,52 @@ function renderScreenshots(screenshots: SpecScreenshot[]) {
   return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
 }
 
-function coverageBadge(covered?: boolean, suffixes: string[] = [], item?: CoverageItem, sourceLinks: SourceLinkOptions = {}) {
-  return covered === undefined ? "" : covered ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}${renderCoverageReferenceMarkers(item, sourceLinks)}</span>` : `<span class="badge missing">missing coverage</span>`;
+function coverageBadge(
+  covered?: boolean,
+  suffixes: string[] = [],
+  item?: CoverageItem,
+  sourceLinks: SourceLinkOptions = {},
+) {
+  return covered === undefined
+    ? ""
+    : covered
+      ? `<span class="badge ok">covered${suffixes.length ? ` by ${suffixes.map(html).join(" ")}` : ""}${renderCoverageReferenceMarkers(item, sourceLinks)}</span>`
+      : `<span class="badge missing">missing coverage</span>`;
 }
 
-function ruleCoverageBadge(ruleCoverage: CoverageItem | undefined, scenarioIds: string[], sourceLinks: SourceLinkOptions) {
-  if (ruleCoverage?.covered && !scenarioIds.length) return coverageBadge(true, ["direct test"], ruleCoverage, sourceLinks);
-  return coverageBadge(ruleCoverage?.covered, scenarioIds, ruleCoverage, sourceLinks);
+function ruleCoverageBadge(
+  ruleCoverage: CoverageItem | undefined,
+  scenarioIds: string[],
+  sourceLinks: SourceLinkOptions,
+) {
+  if (ruleCoverage?.covered && !scenarioIds.length)
+    return coverageBadge(true, ["direct test"], ruleCoverage, sourceLinks);
+  return coverageBadge(
+    ruleCoverage?.covered,
+    scenarioIds,
+    ruleCoverage,
+    sourceLinks,
+  );
 }
 
-function renderCoverageReferenceMarkers(item: CoverageItem | undefined, sourceLinks: SourceLinkOptions) {
+function renderCoverageReferenceMarkers(
+  item: CoverageItem | undefined,
+  sourceLinks: SourceLinkOptions,
+) {
   const references = uniqueCoverageReferences(item);
   if (!references.length) return "";
   return ` <span class="coverage-refs">${references.map((reference, index) => renderCoverageReferenceMarker(reference, index + 1, sourceLinks)).join(",")}</span>`;
 }
 
-function renderCoverageReferenceMarker(reference: TestReference, index: number, sourceLinks: SourceLinkOptions) {
+function renderCoverageReferenceMarker(
+  reference: TestReference,
+  index: number,
+  sourceLinks: SourceLinkOptions,
+) {
   const label = coverageReferenceLabel(reference);
   const url = coverageReferenceUrl(reference, sourceLinks);
-  if (!url) return `<span class="coverage-ref" title="${html(label)}">${index}</span>`;
+  if (!url)
+    return `<span class="coverage-ref" title="${html(label)}">${index}</span>`;
   return `<a class="coverage-ref" href="${html(url)}" title="${html(label)}" target="_blank" rel="noopener noreferrer">${index}</a>`;
 }
 
@@ -667,19 +950,32 @@ function coverageReferenceLabel(reference: TestReference) {
   return `${reference.filePath}${line}`;
 }
 
-function coverageReferenceUrl(reference: TestReference, sourceLinks: SourceLinkOptions) {
+function coverageReferenceUrl(
+  reference: TestReference,
+  sourceLinks: SourceLinkOptions,
+) {
   return sourceLineUrl(reference.filePath, reference.line, sourceLinks);
 }
 
-function sourceLineUrl(filePath: string, line: number, sourceLinks: SourceLinkOptions) {
+function sourceLineUrl(
+  filePath: string,
+  line: number,
+  sourceLinks: SourceLinkOptions,
+) {
   if (!sourceLinks.githubBaseUrl || !sourceLinks.githubRef) return undefined;
   const baseUrl = sourceLinks.githubBaseUrl.replace(/\/$/, "");
   const ref = encodeURIComponent(sourceLinks.githubRef);
-  const encodedFilePath = filePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  const encodedFilePath = filePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
   return `${baseUrl}/blob/${ref}/${encodedFilePath}#L${line}`;
 }
 
-function allReportDocuments(specs: FeatureSpec[], options: ReportOptions): ReportDocument[] {
+function allReportDocuments(
+  specs: FeatureSpec[],
+  options: ReportOptions,
+): ReportDocument[] {
   return [
     ...(options.models ?? []),
     ...(options.stacks ?? []),
@@ -702,7 +998,10 @@ function extensionSections(document: ReportDocument): ReportExtensionSection[] {
 
 function extensionSection(lines: string[], title: string) {
   const headingPattern = /^##\s+(.+?)\s*$/;
-  const start = lines.findIndex((line) => headingPattern.exec(line)?.[1].toLowerCase() === title.toLowerCase());
+  const start = lines.findIndex(
+    (line) =>
+      headingPattern.exec(line)?.[1].toLowerCase() === title.toLowerCase(),
+  );
   if (start === -1) return undefined;
   let end = lines.length;
   for (let index = start + 1; index < lines.length; index += 1) {
@@ -724,24 +1023,52 @@ function trimSectionLines(lines: string[]) {
   return lines.slice(start, end);
 }
 
-function ruleScenarioIds(ruleId: string, ruleScenarioLinks: RuleScenarioLink[]) {
-  return Array.from(new Set(ruleScenarioLinks.filter((link) => link.ruleId === ruleId).map((link) => link.scenarioId))).sort();
+function ruleScenarioIds(
+  ruleId: string,
+  ruleScenarioLinks: RuleScenarioLink[],
+) {
+  return Array.from(
+    new Set(
+      ruleScenarioLinks
+        .filter((link) => link.ruleId === ruleId)
+        .map((link) => link.scenarioId),
+    ),
+  ).sort();
 }
 
-function ruleIdsForScenario(scenarioId: string, specRuleIds: string[], ruleScenarioLinks: RuleScenarioLink[]) {
-  const ruleIds = new Set(ruleScenarioLinks.filter((link) => link.scenarioId === scenarioId).map((link) => link.ruleId));
+function ruleIdsForScenario(
+  scenarioId: string,
+  specRuleIds: string[],
+  ruleScenarioLinks: RuleScenarioLink[],
+) {
+  const ruleIds = new Set(
+    ruleScenarioLinks
+      .filter((link) => link.scenarioId === scenarioId)
+      .map((link) => link.ruleId),
+  );
   return specRuleIds.filter((ruleId) => ruleIds.has(ruleId));
 }
 
-function buildRuleScenarioLinks(ruleCoverage: CoverageItem[], scenarioCoverage: CoverageItem[]) {
+function buildRuleScenarioLinks(
+  ruleCoverage: CoverageItem[],
+  scenarioCoverage: CoverageItem[],
+) {
   const scenarioReferences = scenarioCoverage.flatMap((scenario) =>
-    scenario.references.map((reference) => ({ scenarioId: scenario.id, filePath: reference.filePath, line: reference.line })),
+    scenario.references.map((reference) => ({
+      scenarioId: scenario.id,
+      filePath: reference.filePath,
+      line: reference.line,
+    })),
   );
   const links: RuleScenarioLink[] = [];
   const seen = new Set<string>();
   for (const rule of ruleCoverage) {
     for (const ruleReference of rule.references) {
-      const scenarioReference = nearestScenarioReference(ruleReference.filePath, ruleReference.line, scenarioReferences);
+      const scenarioReference = nearestScenarioReference(
+        ruleReference.filePath,
+        ruleReference.line,
+        scenarioReferences,
+      );
       if (!scenarioReference) continue;
       const key = `${rule.id}:${scenarioReference.scenarioId}`;
       if (seen.has(key)) continue;
@@ -752,10 +1079,19 @@ function buildRuleScenarioLinks(ruleCoverage: CoverageItem[], scenarioCoverage: 
   return links;
 }
 
-function nearestScenarioReference(filePath: string, line: number, scenarioReferences: { scenarioId: string; filePath: string; line: number }[]) {
+function nearestScenarioReference(
+  filePath: string,
+  line: number,
+  scenarioReferences: { scenarioId: string; filePath: string; line: number }[],
+) {
   const maxLineDistance = 8;
   return scenarioReferences
-    .filter((reference) => reference.filePath === filePath && reference.line <= line && line - reference.line <= maxLineDistance)
+    .filter(
+      (reference) =>
+        reference.filePath === filePath &&
+        reference.line <= line &&
+        line - reference.line <= maxLineDistance,
+    )
     .sort((left, right) => right.line - left.line)[0];
 }
 

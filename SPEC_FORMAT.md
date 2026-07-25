@@ -75,6 +75,7 @@ Optional sections:
 
 ```md
 ## Rules
+
 ## Model Diagram
 ```
 
@@ -165,6 +166,7 @@ Scenario-level overrides go directly below a scenario heading. The Given / When 
 
 ````md
 ### KANBAN-CARD-AUTHORING-S002: Card title is normalized
+
 Test: unit
 Screenshots: skip
 
@@ -186,6 +188,66 @@ Defaults:
 - If `screenshots` is omitted and `test` resolves to `unit`, `integration`, `manual`, or `skip`, screenshots default to `skip`.
 
 See [Scenario Test And Evidence Policy](docs/evidence-policy.md) for details and CI examples.
+
+### End-to-end journey metadata
+
+Scenarios that cross multiple product or system boundaries can be identified as
+end-to-end journeys. When most or all scenarios in a feature share the same
+journey metadata, declare the defaults in frontmatter:
+
+```md
+---
+id: CHECKOUT
+title: Checkout
+test: playwright
+screenshots: required
+journey: end-to-end
+path: happy
+critical: true
+---
+```
+
+Scenarios inherit those values and only need to declare their systems:
+
+````md
+### CHECKOUT-S001: Attendee buys access and books
+
+Systems: consumer UI, API, payment provider, email
+
+```
+Given a new attendee is viewing a public class
+When they purchase access and complete the booking
+Then the booking appears in their account
+```
+````
+
+Scenario-level metadata overrides feature defaults, so an exceptional failure
+path can remain explicit:
+
+````md
+### CHECKOUT-S002: Payment is declined
+
+Path: failure
+Critical: false
+Systems: consumer UI, API, payment provider, email
+
+```
+Given an attendee is checking out
+When the payment provider declines the payment
+Then access is not granted
+```
+````
+
+`Path` is either `happy` or `failure`. `Critical` marks release-gating
+journeys, and `Systems` is a comma-separated list shown in the report. Journey
+scenarios appear in a dedicated report overview and otherwise retain normal
+scenario coverage and evidence requirements. CI can enforce critical journeys
+even when general scenario coverage is disabled by passing
+`--require-critical-journey-coverage`.
+
+For a mixed feature, `Journey: end-to-end`, `Path`, and `Critical` may still be
+declared per scenario. Feature defaults are optional; `path` and `critical`
+frontmatter require `journey: end-to-end`.
 
 ## Stack Files
 
@@ -258,10 +320,10 @@ Use `## API Contract` for API-first features and services. This section SHOULD d
 ```md
 ## API Contract
 
-| Method | Path | Purpose | Auth |
-| --- | --- | --- | --- |
-| POST | /api/events | Create an event | administrator |
-| GET | /api/events | List visible events | account member |
+| Method | Path        | Purpose             | Auth           |
+| ------ | ----------- | ------------------- | -------------- |
+| POST   | /api/events | Create an event     | administrator  |
+| GET    | /api/events | List visible events | account member |
 ```
 
 API contract details can be covered by integration tests that reference the relevant scenario and rule IDs.
@@ -273,10 +335,10 @@ Use `## Permissions` for role, group, and tenant capability matrices.
 ```md
 ## Permissions
 
-| Capability | Owner | Administrator | Teacher | Attendee |
-| --- | --- | --- | --- | --- |
-| Manage payment connection | yes | no | no | no |
-| Move own class instance | yes | yes | yes | no |
+| Capability                | Owner | Administrator | Teacher | Attendee |
+| ------------------------- | ----- | ------------- | ------- | -------- |
+| Manage payment connection | yes   | no            | no      | no       |
+| Move own class instance   | yes   | yes           | yes     | no       |
 ```
 
 Permissions that must be enforced by the implementation SHOULD also be written as rules so coverage can track them.
@@ -285,7 +347,7 @@ Permissions that must be enforced by the implementation SHOULD also be written a
 
 Use `## Lifecycle` for state machines and transition rules for entities such as bookings, payments, subscriptions, passes, and recurring event instances.
 
-```md
+````md
 ## Lifecycle
 
 Payment states:
@@ -295,9 +357,11 @@ pending -> paid
 pending -> failed
 paid -> refunded
 ```
+````
 
 Invalid transitions MUST be rejected by the API.
-```
+
+````
 
 Lifecycle behavior that must be executable SHOULD be represented by rules and scenarios in the same feature file.
 
@@ -311,7 +375,7 @@ Use `## Test Environment` for mocks, seed data, fixed-time behavior, provider ad
 - Email delivery is mocked and exposes the latest magic link to tests.
 - MobilePay runs through a deterministic mock in CI.
 - Time is frozen during recurring-event generation tests.
-```
+````
 
 This section is especially useful for SaaS apps with external dependencies such as payment providers, email, calendars, or third-party APIs.
 
