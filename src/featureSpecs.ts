@@ -19,6 +19,7 @@ import type {
   FeatureScenario,
   FeatureSpec,
   ScenarioEvidencePolicy,
+  ScenarioJourneyMetadata,
   ScenarioTestType,
   ScreenshotPolicy,
   StepKeyword,
@@ -253,6 +254,7 @@ export function validateCoverage(
   options: {
     requireRuleCoverage?: boolean;
     requireScenarioCoverage?: boolean;
+    criticalJourneyIds?: string[];
   } = {},
 ) {
   const issues: ValidationIssue[] = [];
@@ -277,6 +279,21 @@ export function validateCoverage(
         code: "missing-rule-coverage",
         severity: "error",
         message: `Rule "${item.id}" has no matching test reference.`,
+        filePath: item.filePath,
+        line: item.line,
+      });
+    }
+  }
+
+  for (const id of options.criticalJourneyIds ?? []) {
+    const item = coverage.scenarioCoverage.find(
+      (candidate) => candidate.id === id,
+    );
+    if (item && !item.covered) {
+      issues.push({
+        code: "missing-critical-journey-coverage",
+        severity: "error",
+        message: `Critical end-to-end journey "${item.id}" has no matching test reference.`,
         filePath: item.filePath,
         line: item.line,
       });
@@ -323,6 +340,7 @@ export async function checkFeatureSpecs(options: {
   tests?: string[];
   requireRuleCoverage?: boolean;
   requireScenarioCoverage?: boolean;
+  requireCriticalJourneyCoverage?: boolean;
 }) {
   const specs = await loadFeatureSpecs(options.specs);
   const validationIssues = specs.flatMap(validateFeatureSpec);
@@ -333,6 +351,12 @@ export async function checkFeatureSpecs(options: {
     ? validateCoverage(coverage, {
         requireRuleCoverage: options.requireRuleCoverage,
         requireScenarioCoverage: options.requireScenarioCoverage,
+        criticalJourneyIds: options.requireCriticalJourneyCoverage
+          ? specs
+              .flatMap((spec) => spec.scenarios)
+              .filter((scenario) => scenario.journey?.critical)
+              .map((scenario) => scenario.id)
+          : [],
       })
     : [];
 
@@ -361,6 +385,7 @@ function parseScenarios(
     if (!match) continue;
     const steps: FeatureScenario["steps"] = [];
     const overrides: Partial<ScenarioEvidencePolicy> = {};
+    const journey: Partial<ScenarioJourneyMetadata> = {};
 
     for (let j = i + 1; j < lines.length; j += 1) {
       if (/^##?#\s+/.test(lines[j])) break;
@@ -369,6 +394,26 @@ function parseScenarios(
       const screenshotsMatch = lines[j].trim().match(/^Screenshots:\s*(.+)$/i);
       if (screenshotsMatch)
         overrides.screenshots = normalizeScreenshotPolicy(screenshotsMatch[1]);
+      const journeyMatch = lines[j].trim().match(/^Journey:\s*(.+)$/i);
+      if (journeyMatch && journeyMatch[1].trim().toLowerCase() === "end-to-end")
+        journey.scope = "end-to-end";
+      const pathMatch = lines[j].trim().match(/^Path:\s*(.+)$/i);
+      if (
+        pathMatch &&
+        ["happy", "failure"].includes(pathMatch[1].trim().toLowerCase())
+      )
+        journey.path = pathMatch[1]
+          .trim()
+          .toLowerCase() as ScenarioJourneyMetadata["path"];
+      const criticalMatch = lines[j].trim().match(/^Critical:\s*(.+)$/i);
+      if (criticalMatch)
+        journey.critical = criticalMatch[1].trim().toLowerCase() === "true";
+      const systemsMatch = lines[j].trim().match(/^Systems:\s*(.+)$/i);
+      if (systemsMatch)
+        journey.systems = systemsMatch[1]
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
       const step = lines[j].trim().match(/^(Given|When|Then|And|But)\s+(.+)$/);
       if (step)
         steps.push({
@@ -383,6 +428,15 @@ function parseScenarios(
       title: match[2].trim(),
       line: bodyStartLine + i,
       evidence: resolveEvidencePolicy(frontmatter, overrides),
+      journey:
+        journey.scope === "end-to-end"
+          ? {
+              scope: journey.scope,
+              path: journey.path ?? "happy",
+              critical: journey.critical ?? false,
+              systems: journey.systems ?? [],
+            }
+          : undefined,
       steps,
     });
   }
@@ -408,7 +462,9 @@ function normalizeTestType(value: unknown): ScenarioTestType | undefined {
   return scenarioTestTypes.find((candidate) => candidate === normalized);
 }
 
-function normalizeScreenshotPolicy(value: unknown): ScreenshotPolicy | undefined {
+function normalizeScreenshotPolicy(
+  value: unknown,
+): ScreenshotPolicy | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().toLowerCase();
   if (normalized === "none") return "skip";
@@ -430,7 +486,10 @@ function validateEvidencePolicy(
       ),
     );
   }
-  if (frontmatter.screenshots && !normalizeScreenshotPolicy(frontmatter.screenshots)) {
+  if (
+    frontmatter.screenshots &&
+    !normalizeScreenshotPolicy(frontmatter.screenshots)
+  ) {
     issues.push(
       issue(
         spec,

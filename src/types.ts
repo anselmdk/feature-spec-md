@@ -33,12 +33,22 @@ export type SpecExtensionSections = {
   testEnvironment?: SpecExtensionSection;
 };
 
-export type ScenarioTestType = "unit" | "integration" | "playwright" | "manual" | "skip";
+export type ScenarioTestType =
+  "unit" | "integration" | "playwright" | "manual" | "skip";
 export type ScreenshotPolicy = "required" | "optional" | "skip";
 
 export type ScenarioEvidencePolicy = {
   test: ScenarioTestType;
   screenshots: ScreenshotPolicy;
+};
+
+export type JourneyPath = "happy" | "failure";
+
+export type ScenarioJourneyMetadata = {
+  scope: "end-to-end";
+  path: JourneyPath;
+  critical: boolean;
+  systems: string[];
 };
 
 export type FeatureFrontmatter = ModelReferenceFrontmatter & {
@@ -121,6 +131,7 @@ export type FeatureScenario = {
   title: string;
   line: number;
   evidence: ScenarioEvidencePolicy;
+  journey?: ScenarioJourneyMetadata;
   steps: FeatureStep[];
 };
 
@@ -130,7 +141,8 @@ export type FeatureStep = {
   line: number;
 };
 
-export type RuleKeyword = "MUST" | "MUST NOT" | "SHOULD" | "SHOULD NOT" | "MAY" | "OPTIONAL";
+export type RuleKeyword =
+  "MUST" | "MUST NOT" | "SHOULD" | "SHOULD NOT" | "MAY" | "OPTIONAL";
 export type StepKeyword = "Given" | "When" | "Then" | "And" | "But";
 
 export type ValidationIssue = {

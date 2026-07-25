@@ -82,6 +82,11 @@ on:
         required: false
         type: boolean
         default: true
+      require-critical-journey-coverage:
+        description: Fail when a critical end-to-end journey has no matching test reference.
+        required: false
+        type: boolean
+        default: false
       publish-report:
         description: Publish the consuming project's generated report through feature-spec-md github-report.
         required: false
@@ -112,12 +117,14 @@ jobs:
           FEATURE_SPEC_TESTS: ${{ inputs.tests }}
           REQUIRE_MODEL_COVERAGE: ${{ inputs.require-model-coverage }}
           REQUIRE_RULE_COVERAGE: ${{ inputs.require-rule-coverage }}
+          REQUIRE_CRITICAL_JOURNEY_COVERAGE: ${{ inputs.require-critical-journey-coverage }}
         run: |
           args=()
           if [ -n "$FEATURE_SPEC_SPECS" ]; then args+=(--specs "$FEATURE_SPEC_SPECS"); fi
           if [ -n "$FEATURE_SPEC_TESTS" ]; then args+=(--tests "$FEATURE_SPEC_TESTS"); fi
           if [ "$REQUIRE_MODEL_COVERAGE" = "true" ]; then args+=(--require-model-coverage); fi
           if [ "$REQUIRE_RULE_COVERAGE" = "true" ]; then args+=(--require-rule-coverage); fi
+          if [ "$REQUIRE_CRITICAL_JOURNEY_COVERAGE" = "true" ]; then args+=(--require-critical-journey-coverage); fi
           npx feature-spec-md check "${args[@]}"
       - name: Check consuming project feature spec coverage
         env:
