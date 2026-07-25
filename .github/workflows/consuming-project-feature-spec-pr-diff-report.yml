@@ -179,15 +179,24 @@ jobs:
       - name: Comment on consuming project PR
         if: steps.changes.outputs.changed == 'true' && steps.diff_report.outputs.diff-report-url != ''
         uses: actions/github-script@v8
+        env:
+          REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_REPORT_BASE_URL }}
+          DIFF_REPORT_URL: ${{ steps.diff_report.outputs.diff-report-url }}
+          CURRENT_BUILD_NUMBER: ${{ steps.current_build.outputs.build-number }}
+          BASE_BUILD_NUMBER: ${{ steps.main_build.outputs.build-number }}
+          CURRENT_RUN_URL: ${{ steps.current_build.outputs.run-url }}
         with:
           script: |
             const prNumber = Number('${{ steps.changes.outputs.pr-number }}');
-            const body = ${{ toJson(steps.diff_report.outputs.diff-comment-body) }};
             const marker = '<!-- feature-spec-md-pr-diff -->';
-            const buildNumber = '${{ steps.current_build.outputs.build-number }}';
-            const baseBuildNumber = '${{ steps.main_build.outputs.build-number }}';
+            const statePrefix = '<!-- feature-spec-md-report-state:';
+            const buildNumber = process.env.CURRENT_BUILD_NUMBER;
+            const baseBuildNumber = process.env.BASE_BUILD_NUMBER;
             const timestamp = new Date().toISOString();
-            const runUrl = '${{ steps.current_build.outputs.run-url }}';
+            const runUrl = process.env.CURRENT_RUN_URL;
+            const diffUrl = process.env.DIFF_REPORT_URL;
+            const reportBaseUrl = process.env.REPORT_BASE_URL.replace(/\/+$/, '');
+            const specUrl = reportBaseUrl + '/build/' + buildNumber + '/';
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -196,17 +205,91 @@ jobs:
             const previous = comments.find((comment) =>
               comment.user?.type === 'Bot' && comment.body?.includes(marker)
             );
-            const lines = [];
-            lines.push('### PR build ' + buildNumber + ' - ' + timestamp);
-            lines.push('');
-            lines.push(baseBuildNumber ? 'Base: main build ' + baseBuildNumber : 'Base: previous build fallback');
-            lines.push('CI run: [#' + buildNumber + '](' + runUrl + ')');
-            lines.push('');
-            lines.push(body);
-            const entry = lines.join('\n');
-            const nextBody = previous
-              ? previous.body + '\n\n---\n\n' + entry
-              : marker + '\n## Feature spec PR diff history\n\n' + entry;
+
+            const decodeState = (body) => {
+              const match = body?.match(/<!-- feature-spec-md-report-state:([A-Za-z0-9+/=]+) -->/);
+              if (!match) return undefined;
+              try {
+                return JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
+              } catch {
+                return undefined;
+              }
+            };
+            const legacyEntries = (body) => {
+              const entries = [];
+              const pattern = /### PR build (\d+) - ([^\n]+)[\s\S]*?\[Open the diff report\]\(([^)]+)\)/g;
+              for (const match of body?.matchAll(pattern) ?? []) {
+                entries.push({
+                  buildNumber: match[1],
+                  baseBuildNumber: '',
+                  timestamp: match[2],
+                  runUrl: '',
+                  diffUrl: match[3],
+                  specUrl: reportBaseUrl + '/build/' + match[1] + '/',
+                });
+              }
+              return entries;
+            };
+            const previousState = decodeState(previous?.body);
+            const priorEntries = previousState
+              ? [previousState.current, ...(previousState.history ?? [])].filter(Boolean)
+              : legacyEntries(previous?.body);
+            const current = {
+              buildNumber,
+              baseBuildNumber,
+              timestamp,
+              runUrl,
+              diffUrl,
+              specUrl,
+            };
+            const history = priorEntries
+              .filter((entry) => entry.buildNumber !== buildNumber)
+              .slice(0, 30);
+            const state = Buffer.from(
+              JSON.stringify({ current, history }),
+              'utf8',
+            ).toString('base64');
+            const formatDate = (value) =>
+              new Intl.DateTimeFormat('en-GB', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'UTC',
+                timeZoneName: 'short',
+              }).format(new Date(value));
+            const comparison = (entry) =>
+              entry.baseBuildNumber
+                ? ' compared with main build ' + entry.baseBuildNumber
+                : '';
+            const historyLines = history.map((entry) =>
+              '- Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.specUrl) + ')' +
+              comparison(entry) + ' · ' + formatDate(entry.timestamp) +
+              ' · [spec](' + entry.specUrl + ') · [diff](' + entry.diffUrl + ')'
+            );
+            const lines = [
+              marker,
+              statePrefix + state + ' -->',
+              '## Feature spec reports',
+              '',
+              '[Full spec report](' + specUrl + ') · [Changes since main](' + diffUrl + ')',
+              '',
+              'Build [' + buildNumber + '](' + runUrl + ')' + comparison(current) +
+                ' · ' + formatDate(timestamp),
+            ];
+            if (historyLines.length) {
+              lines.push(
+                '',
+                '<details>',
+                '<summary>Previous reports (' + historyLines.length + ')</summary>',
+                '',
+                ...historyLines,
+                '',
+                '</details>',
+              );
+            }
+            const nextBody = lines.join('\n');
             if (previous) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
