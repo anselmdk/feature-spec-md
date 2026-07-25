@@ -28,8 +28,7 @@ export async function publishGithubActionReport(
     value(options, "report-dir", "FEATURE_SPEC_REPORT_DIR") ??
     "test-results/spec-report";
   const reportName =
-    value(options, "name", "FEATURE_SPEC_REPORT_NAME") ??
-    "feature-spec-report";
+    value(options, "name", "FEATURE_SPEC_REPORT_NAME") ?? "feature-spec-report";
   const specPatterns = optionList(
     value(options, "specs", "FEATURE_SPEC_SPECS"),
     defaultSpecPattern,
@@ -42,12 +41,20 @@ export async function publishGithubActionReport(
 
   if (mode === "ftp") {
     const config = ftpConfig(options);
-    const reportUrl = await publishReportToFtp(reportDir, config);
+    const publishLatest = booleanValue(
+      value(options, "publish-latest", "FEATURE_SPEC_PUBLISH_LATEST"),
+    );
+    const { reportUrl, latestReportUrl } = await publishReportToFtp(
+      reportDir,
+      config,
+      publishLatest,
+    );
     await writeGithubSummary(
       [
         "## Feature Spec Report",
         "",
         `<p><strong>Hosted HTML report:</strong> <a href="${escapeHtml(reportUrl)}">${escapeHtml(reportName)}</a></p>`,
+        `<p><strong>Latest report:</strong> <a href="${escapeHtml(latestReportUrl)}">stable link</a></p>`,
         `<p><strong>Build report index:</strong> <a href="${escapeHtml(buildIndexUrl(config.baseUrl))}">all builds</a></p>`,
         "",
       ].join("\n"),
@@ -55,9 +62,12 @@ export async function publishGithubActionReport(
     await writeGithubOutput({
       "upload-github-artifact": "false",
       "report-url": reportUrl,
+      "latest-report-url": latestReportUrl,
       "index-url": buildIndexUrl(config.baseUrl),
     });
-    console.log(`Feature spec report uploaded to ${reportUrl}`);
+    console.log(
+      `Feature spec report uploaded to ${reportUrl} and ${latestReportUrl}`,
+    );
     return;
   }
 
@@ -79,10 +89,18 @@ export async function publishGithubActionReport(
 async function publishReportToFtp(
   reportDir: string,
   config: ReturnType<typeof ftpConfig>,
+  publishLatest: boolean,
 ) {
   const buildsRoot = pathJoin(config.remoteDir, "build");
   const buildRemoteDir = pathJoin(buildsRoot, config.buildNumber);
   await uploadDirectory(reportDir, buildRemoteDir, config);
+  if (publishLatest) {
+    await uploadDirectory(
+      reportDir,
+      pathJoin(config.remoteDir, "latest"),
+      config,
+    );
+  }
 
   const builds = await listBuildNumbers(buildsRoot, config);
   if (!builds.includes(config.buildNumber)) builds.push(config.buildNumber);
@@ -95,12 +113,16 @@ async function publishReportToFtp(
   await writeFile(localIndex, renderBuildIndex(config.baseUrl, builds), "utf8");
   await uploadFile(localIndex, pathJoin(buildsRoot, "index.html"), config);
 
-  return buildUrl(config.baseUrl, config.buildNumber);
+  return featureReportUrls(config.baseUrl, config.buildNumber);
 }
 
 function publishMode(value: string): PublishMode {
   if (value === "ftp" || value === "artifact") return value;
   throw new Error(`Unknown report publish mode: ${value}`);
+}
+
+function booleanValue(value: string | undefined) {
+  return value?.toLowerCase() === "true";
 }
 
 function value(
@@ -135,6 +157,7 @@ li { margin: 0.35rem 0; }
     body: `
 <h1>Feature spec build reports</h1>
 <p>Generated ${escapeHtml(generatedAt)}.</p>
+<p><a href="${escapeHtml(latestReportUrl(baseUrl))}"><strong>Open the latest report</strong></a></p>
 <ol>
 ${rows}
 </ol>
@@ -144,6 +167,17 @@ ${rows}
 
 function buildUrl(baseUrl: string, build: string) {
   return publicUrl(baseUrl, "build", build, "");
+}
+
+export function latestReportUrl(baseUrl: string) {
+  return publicUrl(baseUrl, "latest", "");
+}
+
+export function featureReportUrls(baseUrl: string, build: string) {
+  return {
+    reportUrl: buildUrl(baseUrl, build),
+    latestReportUrl: latestReportUrl(baseUrl),
+  };
 }
 
 function buildIndexUrl(baseUrl: string) {
