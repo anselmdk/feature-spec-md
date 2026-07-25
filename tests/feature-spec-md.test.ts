@@ -402,6 +402,93 @@ Systems: consumer UI, API, email`,
     assert.equal(coverageIssues[0]?.code, "missing-critical-journey-coverage");
   });
 
+  it("inherits feature-level journey defaults and allows scenario overrides", () => {
+    const inheritedSource = specSource
+      .replace(
+        "status: draft",
+        `status: draft
+test: playwright
+screenshots: required
+journey: end-to-end
+path: happy
+critical: true`,
+      )
+      .replace(
+        "### ACCOUNT-S001: Returning person completes access flow",
+        `### ACCOUNT-S001: Returning person completes access flow
+Systems: admin UI, API, email`,
+      )
+      .replace(
+        "Then account access is granted",
+        `Then account access is granted
+
+### ACCOUNT-S002: Access is denied
+
+Path: failure
+Critical: false
+Systems: admin UI, API
+Test: integration
+Screenshots: skip
+
+Given a person has no account
+When they request account access
+Then account access is denied`,
+      );
+    const spec = parseFeatureSpec(inheritedSource, {
+      filePath: "account.feature.md",
+    });
+
+    assert.deepEqual(spec.scenarios[0]?.journey, {
+      scope: "end-to-end",
+      path: "happy",
+      critical: true,
+      systems: ["admin UI", "API", "email"],
+    });
+    assert.deepEqual(spec.scenarios[1]?.journey, {
+      scope: "end-to-end",
+      path: "failure",
+      critical: false,
+      systems: ["admin UI", "API"],
+    });
+    assert.deepEqual(spec.scenarios[1]?.evidence, {
+      test: "integration",
+      screenshots: "skip",
+    });
+    assert.deepEqual(validateFeatureSpec(spec), []);
+
+    const reportHtml = renderHtmlReport([spec]);
+    assert.match(
+      reportHtml,
+      /<span class="muted">journey<\/span> <code>end-to-end<\/code>/,
+    );
+    assert.match(
+      reportHtml,
+      /<span class="muted">critical<\/span> <code>true<\/code>/,
+    );
+  });
+
+  it("validates feature-level journey defaults", () => {
+    const invalidSpec = parseFeatureSpec(
+      specSource.replace(
+        "status: draft",
+        `status: draft
+path: unknown
+critical: sometimes`,
+      ),
+    );
+
+    assert.deepEqual(
+      validateFeatureSpec(invalidSpec)
+        .filter((item) => item.severity === "error")
+        .map((item) => item.code),
+      [
+        "invalid-journey-path",
+        "invalid-journey-criticality",
+        "journey-default-without-scope",
+      ],
+    );
+  });
+
   it("renders ordinal suffixes in generated timestamps", () => {
     const spec = parseFeatureSpec(specSource, {
       filePath: "account.feature.md",

@@ -192,22 +192,49 @@ See [Scenario Test And Evidence Policy](docs/evidence-policy.md) for details and
 ### End-to-end journey metadata
 
 Scenarios that cross multiple product or system boundaries can be identified as
-end-to-end journeys:
+end-to-end journeys. When most or all scenarios in a feature share the same
+journey metadata, declare the defaults in frontmatter:
+
+```md
+---
+id: CHECKOUT
+title: Checkout
+test: playwright
+screenshots: required
+journey: end-to-end
+path: happy
+critical: true
+---
+```
+
+Scenarios inherit those values and only need to declare their systems:
 
 ````md
 ### CHECKOUT-S001: Attendee buys access and books
 
-Journey: end-to-end
-Path: happy
-Critical: true
 Systems: consumer UI, API, payment provider, email
-Test: playwright
-Screenshots: required
 
 ```
 Given a new attendee is viewing a public class
 When they purchase access and complete the booking
 Then the booking appears in their account
+```
+````
+
+Scenario-level metadata overrides feature defaults, so an exceptional failure
+path can remain explicit:
+
+````md
+### CHECKOUT-S002: Payment is declined
+
+Path: failure
+Critical: false
+Systems: consumer UI, API, payment provider, email
+
+```
+Given an attendee is checking out
+When the payment provider declines the payment
+Then access is not granted
 ```
 ````
 
@@ -217,6 +244,10 @@ scenarios appear in a dedicated report overview and otherwise retain normal
 scenario coverage and evidence requirements. CI can enforce critical journeys
 even when general scenario coverage is disabled by passing
 `--require-critical-journey-coverage`.
+
+For a mixed feature, `Journey: end-to-end`, `Path`, and `Critical` may still be
+declared per scenario. Feature defaults are optional; `path` and `critical`
+frontmatter require `journey: end-to-end`.
 
 ## Stack Files
 

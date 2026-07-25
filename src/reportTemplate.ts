@@ -597,6 +597,13 @@ function renderFeaturePolicy(spec: FeatureSpec) {
     spec.frontmatter.screenshots
       ? ["screenshots", spec.frontmatter.screenshots]
       : undefined,
+    spec.frontmatter.journey
+      ? ["journey", spec.frontmatter.journey]
+      : undefined,
+    spec.frontmatter.path ? ["path", spec.frontmatter.path] : undefined,
+    spec.frontmatter.critical !== undefined
+      ? ["critical", String(spec.frontmatter.critical)]
+      : undefined,
   ].filter((item): item is [string, string] => Boolean(item));
   if (!items.length) return "";
   return `<div class="feature-policy">${items

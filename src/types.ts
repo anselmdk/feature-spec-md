@@ -54,6 +54,12 @@ export type ScenarioJourneyMetadata = {
 export type FeatureFrontmatter = ModelReferenceFrontmatter & {
   test?: ScenarioTestType;
   screenshots?: ScreenshotPolicy;
+  /** Default journey scope inherited by scenarios in this feature. */
+  journey?: "end-to-end";
+  /** Default journey path inherited by scenarios in this feature. */
+  path?: JourneyPath;
+  /** Default criticality inherited by scenarios in this feature. */
+  critical?: boolean | "true" | "false";
 };
 
 export type DesignFrontmatter = ModelReferenceFrontmatter;
