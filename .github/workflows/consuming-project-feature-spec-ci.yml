@@ -184,7 +184,6 @@ jobs:
           FEATURE_SPEC_FTP_REMOTE_DIR: ${{ vars.FEATURE_SPEC_FTP_REMOTE_DIR }}
           FEATURE_SPEC_REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_REPORT_BASE_URL }}
           FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
-          FEATURE_SPEC_PUBLISH_LATEST: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
         run: npx feature-spec-md github-report --publish ftp --report-dir "${{ inputs.report-dir }}"
       - name: Fail on consuming project feature spec evidence errors
         if: always() && steps.spec_report.outputs.status != '0'
