@@ -138,6 +138,11 @@ Then account access is granted
   await expect(
     page.getByRole("heading", { name: "Capabilities" }),
   ).toBeVisible();
+  const navigator = page.getByRole("navigation", { name: "Report navigation" });
+  await expect(navigator).toBeVisible();
+  await expect(navigator.locator("[data-navigator-current]")).toHaveText(
+    "Capabilities",
+  );
   await expect(
     page.getByRole("heading", { name: "Account access" }),
   ).not.toBeVisible();
@@ -148,6 +153,17 @@ Then account access is granted
   await expect(
     page.getByText("People can access their account."),
   ).not.toBeVisible();
+
+  await navigator.locator("[data-navigator-trigger]").click();
+  await navigator.getByRole("link", { name: "Account access" }).click();
+  await expect(page).toHaveURL(/#account$/);
+  await expect(page.locator("details#account")).not.toHaveAttribute("open", "");
+  await expect(navigator.locator("[data-navigator-current]")).toHaveText(
+    "Account access",
+  );
+  await navigator.locator("[data-navigator-trigger]").click();
+  await navigator.getByRole("button", { name: "Expand current" }).click();
+  await expect(page.locator("details#account")).toHaveAttribute("open", "");
 
   await page.evaluate('window.location.hash = "account-s001"');
   await expect(page.locator("details#account")).toHaveAttribute("open", "");

@@ -297,8 +297,11 @@ ordered layer catalogue in `package.json`:
 
 When layers are configured, unassigned documents remain visible in an `Other`
 layer and produce a warning; unknown layer ids are errors. Deep links open all
-containing layers and documents automatically. Projects without layer
-configuration retain the flat report layout.
+containing layers and documents automatically. A fixed report navigator follows
+the reader's current layer or document, provides previous/next and
+expand/collapse-current controls, and offers direct links to the complete layer
+hierarchy. It collapses into a compact floating control on narrower screens.
+Projects without layer configuration retain the flat report layout.
 
 ### `github-report`
 

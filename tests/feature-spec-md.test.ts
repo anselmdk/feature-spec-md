@@ -108,6 +108,10 @@ describe("feature-spec-md", () => {
     assert.match(html, /1 document/);
     assert.match(html, /Toggle dark mode/);
     assert.match(html, /class="image-lightbox"/);
+    assert.match(html, /aria-label="Report navigation"/);
+    assert.match(html, /data-navigator-toggle-current/);
+    assert.match(html, /data-navigator-target="layer-capability"/);
+    assert.match(html, /data-navigator-target="account"/);
   });
 
   it("warns for unassigned documents and rejects unknown report layers", () => {
