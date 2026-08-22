@@ -9,6 +9,7 @@ import type {
   FeatureSpec,
   FeatureStep,
   ModelSpec,
+  ReportLayer,
   SpecScreenshot,
   StackSpec,
   TestReference,
@@ -27,6 +28,9 @@ export type ReportOptions = {
   githubBaseUrl?: string;
   githubRef?: string;
   repositoryUrl?: string;
+  layers?: ReportLayer[];
+  layersDefaultOpen?: boolean;
+  documentsDefaultOpen?: boolean;
 };
 
 type RuleScenarioLink = {
@@ -100,6 +104,14 @@ function featureReportBody({
   title: string;
 }) {
   const documents = allReportDocuments(specs, options);
+  if (options.layers?.length) {
+    return `
+<h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
+<p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+${renderIssues(options.validationIssues ?? [])}
+${renderLayeredDocuments(documents, options, evidence, sourceLinks)}
+`;
+  }
   return `
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
@@ -142,46 +154,49 @@ function renderJourneyOverview(
 }
 
 function featureReportStyles() {
-  return `.panel{border:1px solid #d0d7de;border-radius:8px;margin:18px 0;overflow:hidden}
+  return `.panel{border:1px solid var(--border);border-radius:8px;margin:18px 0;overflow:hidden;background:var(--surface)}
+.report-layers{margin-top:18px}.report-layers>.details-section-header{margin-bottom:8px}.layer-section{border:1px solid var(--border);border-radius:10px;margin:12px 0;background:var(--surface);overflow:hidden}
+.layer-summary{cursor:pointer;display:flex;gap:12px;align-items:center;padding:18px 20px;list-style:none}.layer-summary::-webkit-details-marker{display:none}.layer-summary::before{content:"▶";color:var(--muted);font-size:12px;transition:transform .15s ease}.layer-section[open]>.layer-summary::before{transform:rotate(90deg)}
+.layer-summary-copy{flex:1}.layer-summary h2{font-size:1.35em;margin:0}.layer-summary p{color:var(--muted);margin:3px 0 0}.layer-badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.layer-body{padding:0 18px 18px}.layer-body>.details-section-header{margin:0 0 10px}.document-section{margin:12px 0}.document-kind{color:var(--muted)}
 .report-section-summary{cursor:pointer;display:flex;gap:12px;align-items:center;padding:20px;list-style:none}.report-section-summary::-webkit-details-marker{display:none}
-.report-section-summary::before{content:"▶";color:#57606a;font-size:12px;transition:transform .15s ease}.report-section[open]>.report-section-summary::before{transform:rotate(90deg)}
+.report-section-summary::before{content:"▶";color:var(--muted);font-size:12px;transition:transform .15s ease}.report-section[open]>.report-section-summary::before{transform:rotate(90deg)}
 .report-section-summary h2{font-size:1.5em;margin:0;flex:1}.report-section-body{padding:0 20px 20px}
-.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
-.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
+.ok{color:var(--success)}.missing,.error{color:var(--danger)}.warning{color:var(--warning)}.muted{color:var(--muted)}
+.badge{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
 .details-section-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
 .details-section-header h2,.details-section-header h3{margin-bottom:0}
-.details-toggle-button{appearance:none;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#24292f;cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;white-space:nowrap}
-.details-toggle-button:hover{background:#eef1f4}.details-toggle-button:focus-visible{outline:2px solid #0969da;outline-offset:2px}
+.details-toggle-button{appearance:none;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;white-space:nowrap}
+.details-toggle-button:hover{background:var(--surface-hover)}.details-toggle-button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 .feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
-.scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.scenario{border:1px solid var(--border);border-radius:8px;margin:12px 0;background:var(--surface)}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
 .scenario-body.compact-steps .step{margin:4px 0}.scenario-body.compact-steps .step p{margin:2px 0}
-.model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.model-item{border:1px solid var(--border);border-radius:8px;margin:12px 0;background:var(--surface)}
 .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
 .model-entry{padding:0 0 12px}.model-entry h4{font-size:14px;margin:14px 0 8px}
 .table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}
-h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
-.step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
+th,td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top}th{background:var(--surface-muted)}
+h1 a{color:var(--link);text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
+.step{border-left:3px solid var(--border);margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
 .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
-.screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
-.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
+.screenshot{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface-muted)}
+.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:var(--muted)}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
-.flag-card{border:1px solid #d0d7de;border-left:4px solid #d0d7de;border-radius:8px;padding:14px;background:#fff}
+.flag-card{border:1px solid var(--border);border-left:4px solid var(--border);border-radius:8px;padding:14px;background:var(--surface)}
 .flag-card h3{font-size:16px;margin:0 0 8px}.flag-card p{margin:8px 0}
-.flag-item-link{color:inherit;text-decoration:underline;text-decoration-color:#8c959f;text-underline-offset:2px}
-.flag-card.openQuestions{border-left-color:#9a6700}.flag-card.assumptions{border-left-color:#57606a}
-.extension-section{border:1px solid #d0d7de;border-radius:8px;padding:14px;margin:12px 0;background:#fff}
+.flag-item-link{color:inherit;text-decoration:underline;text-decoration-color:var(--muted);text-underline-offset:2px}
+.flag-card.openQuestions{border-left-color:var(--warning)}.flag-card.assumptions{border-left-color:var(--muted)}
+.extension-section{border:1px solid var(--border);border-radius:8px;padding:14px;margin:12px 0;background:var(--surface)}
 .extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}
-.mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid #d0d7de;border-radius:8px;background:#fff}
+.mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .mermaid{min-width:max-content;text-align:center}.mermaid svg{display:block;max-width:none;height:auto;margin:0 auto}
-.mermaid-error{color:#cf222e;text-align:left;white-space:pre-wrap}
-@media(max-width:720px){.flag-grid{grid-template-columns:1fr}}`;
+.mermaid-error{color:var(--danger);text-align:left;white-space:pre-wrap}
+@media(max-width:720px){.flag-grid{grid-template-columns:1fr}.layer-summary{align-items:flex-start;flex-wrap:wrap}.layer-badges{justify-content:flex-start;width:100%}}`;
 }
 
 function featureReportScripts() {
@@ -240,10 +255,24 @@ document.addEventListener("toggle", (event) => {
     window.scrollBy(0, topAfter - topBefore);
   });
 }, true);
+
+function revealHashTarget() {
+  const id = decodeURIComponent(window.location.hash.slice(1));
+  if (!id) return;
+  const target = document.getElementById(id);
+  if (!target) return;
+  let ancestor = target instanceof HTMLDetailsElement ? target : target.closest("details");
+  while (ancestor) {
+    ancestor.open = true;
+    ancestor = ancestor.parentElement?.closest("details");
+  }
+}
+window.addEventListener("hashchange", revealHashTarget);
+document.addEventListener("DOMContentLoaded", revealHashTarget);
 ${closeTag}
 ${mermaidOpenTag}${closeTag}
 ${openTag}
-document.addEventListener("DOMContentLoaded", async () => {
+async function renderMermaidDiagrams() {
   const diagrams = document.querySelectorAll(".mermaid");
   if (!diagrams.length) return;
   if (!window.mermaid) {
@@ -251,13 +280,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   try {
-    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+    diagrams.forEach((diagram) => {
+      diagram.dataset.mermaidSource ||= diagram.textContent || "";
+      diagram.textContent = diagram.dataset.mermaidSource;
+      diagram.removeAttribute("data-processed");
+    });
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: document.documentElement.dataset.theme === "dark" ? "dark" : "default" });
     await window.mermaid.run({ nodes: diagrams });
   } catch (error) {
     diagrams.forEach((diagram) => diagram.classList.add("mermaid-error"));
     console.error("Unable to render Mermaid diagram", error);
   }
-});
+}
+document.addEventListener("DOMContentLoaded", renderMermaidDiagrams);
+document.addEventListener("feature-spec-theme-change", renderMermaidDiagrams);
 ${closeTag}`;
 }
 
@@ -300,6 +336,189 @@ function ordinalSuffix(day: number) {
   if (day % 10 === 2) return "nd";
   if (day % 10 === 3) return "rd";
   return "th";
+}
+
+function renderLayeredDocuments(
+  documents: ReportDocument[],
+  options: ReportOptions,
+  evidence: SpecScreenshot[],
+  sourceLinks: SourceLinkOptions,
+) {
+  const configured = options.layers ?? [];
+  const configuredIds = new Set(configured.map((layer) => layer.id));
+  const layers = configured.map((layer) => ({
+    ...layer,
+    documents: documents.filter(
+      (document) => document.frontmatter.layer === layer.id,
+    ),
+  }));
+  const otherDocuments = documents.filter(
+    (document) =>
+      !document.frontmatter.layer ||
+      !configuredIds.has(document.frontmatter.layer),
+  );
+  if (otherDocuments.length) {
+    layers.push({
+      id: "other",
+      title: "Other",
+      description: "Documents without a configured report layer",
+      documents: otherDocuments,
+    });
+  }
+
+  return `<section class="report-layers" data-details-section>
+  <div class="details-section-header"><h2>Specification layers</h2>${renderDetailsToggleButton("details.layer-section", "layers")}</div>
+  ${layers
+    .map((layer) =>
+      renderLayer(
+        layer,
+        options,
+        evidence,
+        sourceLinks,
+        options.layersDefaultOpen ?? false,
+        options.documentsDefaultOpen ?? false,
+      ),
+    )
+    .join("\n")}
+</section>`;
+}
+
+function renderLayer(
+  layer: ReportLayer & { documents: ReportDocument[] },
+  options: ReportOptions,
+  evidence: SpecScreenshot[],
+  sourceLinks: SourceLinkOptions,
+  open: boolean,
+  documentsOpen: boolean,
+) {
+  const metrics = layerMetrics(layer.documents, options);
+  const description = layer.description
+    ? `<p>${html(layer.description)}</p>`
+    : "";
+  return `<details id="layer-${html(layer.id)}" class="layer-section" data-details-section${openAttribute(open)}>
+  <summary class="layer-summary">
+    <div class="layer-summary-copy"><h2>${html(layer.title)}</h2>${description}</div>
+    <span class="layer-badges"><span class="badge">${layer.documents.length} document${layer.documents.length === 1 ? "" : "s"}</span>${metrics.coverageTotal ? `<span class="badge ${metrics.coverageMissing ? "warning" : "ok"}">${metrics.coverageTotal - metrics.coverageMissing}/${metrics.coverageTotal} covered</span>` : ""}${metrics.issues ? `<span class="badge ${metrics.errors ? "error" : "warning"}">${metrics.issues} issue${metrics.issues === 1 ? "" : "s"}</span>` : ""}${metrics.flags ? `<span class="badge muted">${metrics.flags} open item${metrics.flags === 1 ? "" : "s"}</span>` : ""}</span>
+  </summary>
+  <div class="layer-body">
+    <div class="details-section-header">${renderDetailsToggleButton(".layer-body > details.document-section", "documents")}</div>
+    ${layer.documents.map((document) => renderLayerDocument(document, options, evidence, sourceLinks, documentsOpen)).join("\n")}
+  </div>
+</details>`;
+}
+
+function renderLayerDocument(
+  document: ReportDocument,
+  options: ReportOptions,
+  evidence: SpecScreenshot[],
+  sourceLinks: SourceLinkOptions,
+  open: boolean,
+) {
+  if (document.kind === "model")
+    return renderModelDocument(document, options.coverage, sourceLinks, open);
+  if (document.kind === "stack")
+    return renderContextDocument(
+      document,
+      "Stack",
+      [
+        ["Stack", document.stack],
+        ["Context", document.context],
+        ["Rationale", document.rationale],
+        ["Consequences", document.consequences],
+      ],
+      options.coverage,
+      sourceLinks,
+      open,
+      true,
+    );
+  if (document.kind === "design")
+    return renderContextDocument(
+      document,
+      "Design",
+      [
+        ["Design", document.design],
+        ["Principles", document.principles],
+        ["Layout", document.layout],
+        ["Interaction", document.interaction],
+        ["Visual style", document.visualStyle],
+      ],
+      options.coverage,
+      sourceLinks,
+      open,
+      true,
+    );
+  return renderSpec(
+    document,
+    options.coverage,
+    evidence,
+    sourceLinks,
+    open,
+    true,
+  );
+}
+
+function renderModelDocument(
+  model: ModelSpec,
+  coverage: CoverageSummary | undefined,
+  sourceLinks: SourceLinkOptions,
+  open: boolean,
+) {
+  const ruleCoverage = coverage?.ruleCoverage ?? [];
+  const scenarioCoverage = coverage?.scenarioCoverage ?? [];
+  return `<details id="${html(model.frontmatter.id.toLowerCase())}" class="panel report-section document-section" data-details-section${openAttribute(open)}>
+  <summary class="report-section-summary"><h2>${html(model.title)}</h2><span class="badge document-kind">Model</span><span class="badge">${html(model.frontmatter.status ?? "draft")}</span></summary>
+  <div class="report-section-body">
+    <div class="details-section-header">${renderDetailsToggleButton("details.model-item", "model items")}</div>
+    ${renderModel(model, coverage?.modelCoverage ?? [], ruleCoverage, buildRuleScenarioLinks(ruleCoverage, scenarioCoverage), sourceLinks)}
+  </div>
+</details>`;
+}
+
+function layerMetrics(documents: ReportDocument[], options: ReportOptions) {
+  const filePaths = new Set(documents.map((document) => document.filePath));
+  const ids = new Set(
+    documents.flatMap((document) => [
+      ...(document.kind === "model"
+        ? document.modelItems.map((item) => item.id)
+        : []),
+      ...document.rules.map((rule) => rule.id),
+      ...(document.kind === "feature" || document.kind === undefined
+        ? document.scenarios.map((scenario) => scenario.id)
+        : []),
+    ]),
+  );
+  const coverageItems = [
+    ...(options.coverage?.modelCoverage ?? []),
+    ...(options.coverage?.ruleCoverage ?? []),
+    ...(options.coverage?.scenarioCoverage ?? []),
+  ].filter((item) => ids.has(item.id));
+  const issues = (options.validationIssues ?? []).filter(
+    (issue) => !issue.filePath || filePaths.has(issue.filePath),
+  );
+  const flags = documents.reduce(
+    (sum, document) =>
+      sum +
+      (document.source.match(/^## (?:Open Questions|Assumptions)$/gim)
+        ?.length ?? 0),
+    0,
+  );
+  return {
+    coverageTotal: coverageItems.length,
+    coverageMissing: coverageItems.filter((item) => !item.covered).length,
+    issues: issues.length,
+    errors: issues.filter((issue) => issue.severity === "error").length,
+    flags,
+  };
+}
+
+function openAttribute(open: boolean) {
+  return open ? " open" : "";
+}
+
+function documentDetailsAttributes(id: string, open: boolean, nested: boolean) {
+  return nested
+    ? ` id="${html(id.toLowerCase())}" class="panel report-section document-section"${openAttribute(open)}`
+    : ` class="panel report-section"${openAttribute(open)}`;
 }
 
 function renderOpenQuestionsAndAssumptions(
@@ -512,13 +731,15 @@ function renderContextDocument(
   sections: Array<[string, string]>,
   coverage: CoverageSummary | undefined,
   sourceLinks: SourceLinkOptions,
+  open = true,
+  nested = false,
 ) {
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const ruleScenarioLinks = buildRuleScenarioLinks(
     ruleCoverage,
     coverage?.scenarioCoverage ?? [],
   );
-  return `<details class="panel report-section" open>
+  return `<details${documentDetailsAttributes(document.frontmatter.id, open, nested)}>
   <summary class="report-section-summary">
     <h2>${html(document.title)}</h2>
     <span class="badge">${html(kindLabel)}</span>
@@ -561,6 +782,8 @@ function renderSpec(
   coverage?: CoverageSummary,
   evidence: SpecScreenshot[] = [],
   sourceLinks: SourceLinkOptions = {},
+  open = true,
+  nested = false,
 ) {
   const evidenceByLine = groupEvidenceByLine(evidence);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
@@ -569,7 +792,7 @@ function renderSpec(
     ruleCoverage,
     scenarioCoverage,
   );
-  return `<details class="panel report-section" open>
+  return `<details${documentDetailsAttributes(spec.frontmatter.id, open, nested)}>
   <summary class="report-section-summary">
     <h2>${html(spec.title)}</h2>
     <span class="badge">${html(spec.frontmatter.status ?? "draft")}</span>
@@ -880,7 +1103,7 @@ function renderLineBadge(
 
 function renderScreenshots(screenshots: SpecScreenshot[]) {
   if (!screenshots.length) return "";
-  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
+  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}" data-lightbox tabindex="0"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
 }
 
 function coverageBadge(

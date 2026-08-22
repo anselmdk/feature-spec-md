@@ -81,7 +81,9 @@ export function createPlaywrightSpecEvidence(
         const stateKey = screenStateKey(testInfo, scenarioId);
         if (!screenStateByScenario.has(stateKey)) {
           const baseline = await capturePageBuffer(page, reportDir, "baseline");
-          screenStateByScenario.set(stateKey, { hash: screenshotHash(baseline) });
+          screenStateByScenario.set(stateKey, {
+            hash: screenshotHash(baseline),
+          });
         }
 
         await body();
@@ -219,10 +221,15 @@ async function recordEvidence(
   },
   entry: SpecEvidenceScreenshot,
 ) {
-  const entries = options.entriesByWorker.get(options.testInfo.workerIndex) ?? [];
+  const entries =
+    options.entriesByWorker.get(options.testInfo.workerIndex) ?? [];
   entries.push(entry);
   options.entriesByWorker.set(options.testInfo.workerIndex, entries);
-  await writeWorkerManifest(options.reportDir, options.testInfo.workerIndex, entries);
+  await writeWorkerManifest(
+    options.reportDir,
+    options.testInfo.workerIndex,
+    entries,
+  );
 }
 
 async function capturePageBuffer(
@@ -232,7 +239,10 @@ async function capturePageBuffer(
 ) {
   const tempDir = path.join(reportDir, ".visual-evidence-tmp");
   await mkdir(tempDir, { recursive: true });
-  const tempPath = path.join(tempDir, `${process.pid}-${Date.now()}-${slug(label)}.png`);
+  const tempPath = path.join(
+    tempDir,
+    `${process.pid}-${Date.now()}-${slug(label)}.png`,
+  );
   try {
     await page.screenshot({ fullPage: true, path: tempPath });
     return await readFile(tempPath);

@@ -8,6 +8,7 @@ import path from "node:path";
 import {
   collectSpecScreenshots,
   insertReportMetadata,
+  loadProjectConfiguration,
   renderHtmlReport,
   validateScenarioScreenshots,
   writeTextFile,
@@ -36,10 +37,11 @@ main().catch((error) => {
 async function main() {
   const [command = "help", ...args] = process.argv.slice(2);
   const options = parseArgs(args);
+  const configuration = await loadProjectConfiguration();
 
-  if (command === "check") return runCheck(options);
-  if (command === "report") return runReport(options);
-  if (command === "coverage") return runCoverage(options);
+  if (command === "check") return runCheck(options, configuration);
+  if (command === "report") return runReport(options, configuration);
+  if (command === "coverage") return runCoverage(options, configuration);
   if (command === "github-report") return publishGithubActionReport(options);
   if (command === "github-diff-report")
     return publishGithubActionDiffReport(options);
@@ -51,7 +53,10 @@ async function main() {
   );
 }
 
-async function runCheck(options: CliOptions) {
+async function runCheck(
+  options: CliOptions,
+  configuration: Awaited<ReturnType<typeof loadProjectConfiguration>>,
+) {
   const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
@@ -72,6 +77,7 @@ async function runCheck(options: CliOptions) {
       "require-critical-journey-coverage",
       false,
     ),
+    layers: configuration.report?.layers,
   });
 
   printIssues([...result.validationIssues, ...result.coverageIssues]);
@@ -94,7 +100,10 @@ async function runCheck(options: CliOptions) {
   );
 }
 
-async function runCoverage(options: CliOptions) {
+async function runCoverage(
+  options: CliOptions,
+  configuration: Awaited<ReturnType<typeof loadProjectConfiguration>>,
+) {
   const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
@@ -102,6 +111,7 @@ async function runCoverage(options: CliOptions) {
     requireModelCoverage: false,
     requireRuleCoverage: false,
     requireScenarioCoverage: false,
+    layers: configuration.report?.layers,
   });
 
   printIssues(result.coverageIssues);
@@ -130,13 +140,17 @@ async function runCoverage(options: CliOptions) {
   }
 }
 
-async function runReport(options: CliOptions) {
+async function runReport(
+  options: CliOptions,
+  configuration: Awaited<ReturnType<typeof loadProjectConfiguration>>,
+) {
   const result = await checkSpecDocuments({
     specs: optionList(options.specs, defaultSpecPattern),
     tests:
       options.tests === "" ? [] : optionList(options.tests, defaultTestPattern),
     requireRuleCoverage: booleanOption(options, "require-rule-coverage", false),
     requireScenarioCoverage: false,
+    layers: configuration.report?.layers,
   });
 
   const out = options.out ?? defaultReportPath;
@@ -167,6 +181,7 @@ async function runReport(options: CliOptions) {
     coverage: result.coverage,
     screenshots,
     validationIssues,
+    ...configuration.report,
     ...githubSourceLinkOptions(),
   });
 

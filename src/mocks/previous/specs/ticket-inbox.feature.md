@@ -2,6 +2,7 @@
 id: SUPPORT-INBOX
 title: Ticket inbox
 status: active
+layer: surface
 model: SUPPORT
 test: playwright
 screenshots: optional

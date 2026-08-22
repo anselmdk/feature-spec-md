@@ -12,7 +12,9 @@ export async function writeGithubSummary(markdown: string) {
 export async function writeGithubOutput(values: Record<string, string>) {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (!outputPath) return;
-  const lines = Object.entries(values).map(([key, value]) => outputLine(key, value));
+  const lines = Object.entries(values).map(([key, value]) =>
+    outputLine(key, value),
+  );
   const existing = await readTextIfExists(outputPath);
   await writeFile(outputPath, `${existing}${lines.join("\n")}\n`, "utf8");
 }

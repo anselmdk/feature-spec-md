@@ -6,11 +6,12 @@ export async function collectSpecScreenshots(patterns: string[]) {
   const evidence: SpecScreenshot[] = [];
   for (const file of await expandArtifactPatterns(patterns)) {
     const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
-    const entries = isRecord(parsed) && Array.isArray(parsed.evidence)
-      ? parsed.evidence
-      : isRecord(parsed) && Array.isArray(parsed.screenshots)
-        ? parsed.screenshots
-        : [];
+    const entries =
+      isRecord(parsed) && Array.isArray(parsed.evidence)
+        ? parsed.evidence
+        : isRecord(parsed) && Array.isArray(parsed.screenshots)
+          ? parsed.screenshots
+          : [];
 
     for (const entry of entries) {
       const normalized = normalizeEvidence(entry);
@@ -75,7 +76,9 @@ function normalizeEvidence(value: unknown): SpecScreenshot | null {
     title: typeof value.title === "string" ? value.title : undefined,
     testPath: typeof value.testPath === "string" ? value.testPath : undefined,
     comparedWithLine:
-      typeof value.comparedWithLine === "number" ? value.comparedWithLine : undefined,
+      typeof value.comparedWithLine === "number"
+        ? value.comparedWithLine
+        : undefined,
   };
 }
 

@@ -253,6 +253,53 @@ npx feature-spec-md report \
 
 This gate only fails for scenarios whose resolved screenshot policy is `required`. In GitHub Actions, the report also includes source links and report metadata derived from the repository, ref, SHA, run, build number, and pull request context when available.
 
+Reports include a persistent light/dark theme toggle. Screenshot evidence is
+clickable and opens at its native size in a scrollable full-screen viewer. PR
+diff reports keep before and after images side by side, with red and green
+borders respectively.
+
+Projects can group model, stack, design, and feature documents into collapsible
+report layers. Add a `layer` to each document's frontmatter and define the
+ordered layer catalogue in `package.json`:
+
+```json
+{
+  "featureSpecMd": {
+    "report": {
+      "layers": [
+        {
+          "id": "context",
+          "title": "Context",
+          "description": "Architecture, design, and domain vocabulary"
+        },
+        {
+          "id": "capability",
+          "title": "Capabilities",
+          "description": "Authoritative business behavior"
+        },
+        {
+          "id": "surface",
+          "title": "Delivery surfaces",
+          "description": "Applications, hosting, and documentation"
+        },
+        {
+          "id": "journey",
+          "title": "Journeys",
+          "description": "Cross-system release paths"
+        }
+      ],
+      "layersDefaultOpen": false,
+      "documentsDefaultOpen": false
+    }
+  }
+}
+```
+
+When layers are configured, unassigned documents remain visible in an `Other`
+layer and produce a warning; unknown layer ids are errors. Deep links open all
+containing layers and documents automatically. Projects without layer
+configuration retain the flat report layout.
+
 ### `github-report`
 
 Writes a GitHub Actions job summary and prepares the generated report for either artifact upload or FTP publishing.
@@ -283,7 +330,7 @@ npx feature-spec-md github-diff-report \
 ```
 
 The diff report lists changed report assets, extracts changed spec sections,
-groups screenshot changes by spec/scenario, writes a GitHub Actions summary,
+groups configured projects by layer and screenshot changes by spec/scenario, writes a GitHub Actions summary,
 and exposes a `diff-comment-body` output. The reusable PR workflow maintains
 one compact PR comment linking to the latest full spec report and diff report.
 Earlier build links remain available in a collapsed history below the current

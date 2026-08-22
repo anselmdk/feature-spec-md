@@ -8,10 +8,13 @@ import {
   checkSpecDocuments,
   checkFeatureSpecs,
   collectSpecScreenshots,
+  normalizeProjectConfiguration,
   parseFeatureSpec,
   parseSpecDocument,
   parseTestReferences,
   renderHtmlReport,
+  renderMockDiffReport,
+  validateDocumentLayers,
   validateCoverage,
   validateFeatureSpec,
 } from "../src/index.js";
@@ -66,6 +69,84 @@ describe("feature-spec-md", () => {
       validateFeatureSpec(spec).filter((issue) => issue.severity === "error"),
       [],
     );
+  });
+
+  it("loads report layers from project configuration and validates document assignments", () => {
+    const configuration = normalizeProjectConfiguration({
+      report: {
+        layers: [
+          {
+            id: "capability",
+            title: "Capabilities",
+            description: "Authoritative behavior",
+          },
+        ],
+        layersDefaultOpen: false,
+        documentsDefaultOpen: false,
+      },
+    });
+    const spec = parseFeatureSpec(
+      specSource.replace("status: draft", "status: draft\nlayer: capability"),
+      { filePath: "specs/account.feature.md" },
+    );
+    assert.equal(spec.frontmatter.layer, "capability");
+    assert.deepEqual(
+      validateDocumentLayers([spec], configuration.report?.layers),
+      [],
+    );
+
+    const html = renderHtmlReport([spec], configuration.report);
+    assert.match(html, /<details id="layer-capability" class="layer-section"/);
+    assert.doesNotMatch(
+      html,
+      /<details id="layer-capability" class="layer-section"[^>]* open/,
+    );
+    assert.match(
+      html,
+      /<details id="account" class="panel report-section document-section">/,
+    );
+    assert.match(html, /1 document/);
+    assert.match(html, /Toggle dark mode/);
+    assert.match(html, /class="image-lightbox"/);
+  });
+
+  it("warns for unassigned documents and rejects unknown report layers", () => {
+    const unassigned = parseFeatureSpec(specSource, {
+      filePath: "specs/account.feature.md",
+    });
+    const unknown = parseFeatureSpec(
+      specSource.replace("status: draft", "status: draft\nlayer: missing"),
+      { filePath: "specs/unknown.feature.md" },
+    );
+    const issues = validateDocumentLayers(
+      [unassigned, unknown],
+      [{ id: "capability", title: "Capabilities" }],
+    );
+    assert.equal(issues[0]?.code, "missing-report-layer");
+    assert.equal(issues[0]?.severity, "warning");
+    assert.equal(issues[1]?.code, "unknown-report-layer");
+    assert.equal(issues[1]?.severity, "error");
+  });
+
+  it("groups diff changes by layer and distinguishes clickable before and after screenshots", async () => {
+    const html = await renderMockDiffReport();
+    assert.match(html, /<details class="diff-layer" open>/);
+    assert.match(html, /<strong>Delivery surfaces<\/strong>/);
+    assert.match(
+      html,
+      /\.image-pair\.paired\{grid-template-columns:minmax\(280px,1fr\) minmax\(280px,1fr\);min-width:572px\}/,
+    );
+    assert.match(html, /class="image-card before"/);
+    assert.match(html, /class="image-card after"/);
+    assert.match(
+      html,
+      /\.image-card\.before\{border:3px solid var\(--danger\)\}/,
+    );
+    assert.match(
+      html,
+      /\.image-card\.after\{border:3px solid var\(--success\)\}/,
+    );
+    assert.equal((html.match(/data-lightbox/g)?.length ?? 0) >= 2, true);
   });
 
   it("maps test references to rule and scenario coverage", () => {

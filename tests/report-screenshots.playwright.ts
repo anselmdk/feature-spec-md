@@ -71,4 +71,91 @@ Then account access is granted
   await expect(
     page.getByRole("img", { name: "ACCOUNT-S001 screenshot" }),
   ).toBeVisible();
+
+  await page.getByRole("img", { name: "ACCOUNT-S001 screenshot" }).click();
+  await expect(page.locator("dialog.image-lightbox")).toBeVisible();
+  await expect(page.locator(".lightbox-viewport img")).toHaveCSS(
+    "max-width",
+    "none",
+  );
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("dialog.image-lightbox")).not.toBeVisible();
+
+  const originalTheme = await page.locator("html").getAttribute("data-theme");
+  await page.getByRole("button", { name: "Toggle dark mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-theme",
+    originalTheme === "dark" ? "light" : "dark",
+  );
+});
+
+test("layered reports start collapsed and open ancestors for deep links", async ({
+  page,
+}) => {
+  const spec = parseFeatureSpec(
+    `---
+id: ACCOUNT
+title: Account access
+status: draft
+layer: capability
+---
+
+# Account access
+
+## Purpose
+
+People can access their account.
+
+## Rules
+
+- ACCOUNT-R001: A person MUST complete the access flow.
+
+## Scenarios
+
+### ACCOUNT-S001: Returning person completes access flow
+
+Given a returning person is on the access page
+When they complete the access flow
+Then account access is granted
+`,
+    { filePath: "specs/account.feature.md" },
+  );
+
+  await page.setContent(
+    renderHtmlReport([spec], {
+      layers: [
+        {
+          id: "capability",
+          title: "Capabilities",
+          description: "Authoritative behavior",
+        },
+      ],
+      layersDefaultOpen: false,
+      documentsDefaultOpen: false,
+    }),
+  );
+
+  await expect(
+    page.getByRole("heading", { name: "Capabilities" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Account access" }),
+  ).not.toBeVisible();
+  await page.locator("details.layer-section > summary").click();
+  await expect(
+    page.getByRole("heading", { name: "Account access" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("People can access their account."),
+  ).not.toBeVisible();
+
+  await page.evaluate('window.location.hash = "account-s001"');
+  await expect(page.locator("details#account")).toHaveAttribute("open", "");
+  await expect(page.locator("details#account-s001")).toHaveAttribute(
+    "open",
+    "",
+  );
+  await expect(
+    page.getByText("People can access their account."),
+  ).toBeVisible();
 });

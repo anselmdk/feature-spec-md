@@ -1,4 +1,7 @@
-export function reportPageDefaults(maxWidth: string | undefined, styleText: string | undefined) {
+export function reportPageDefaults(
+  maxWidth: string | undefined,
+  styleText: string | undefined,
+) {
   return {
     maxWidth: maxWidth ?? "1180px",
     styleText: styleText ?? "",

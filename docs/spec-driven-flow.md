@@ -96,6 +96,7 @@ Example scenario-level override for unit-only behavior:
 
 ```md
 ### ACCOUNT-ACCESS-S002: Link expiry is calculated
+
 Test: unit
 Screenshots: skip
 

@@ -7,6 +7,11 @@ import path from "node:path";
 
 export { expandFilePatterns } from "./filePatterns.js";
 export {
+  loadProjectConfiguration,
+  normalizeProjectConfiguration,
+  validateDocumentLayers,
+} from "./config.js";
+export {
   buildCoverageSummary,
   checkFeatureSpecs,
   collectTestReferences,
@@ -16,9 +21,7 @@ export {
   validateCoverage,
   validateFeatureSpec,
 } from "./featureSpecs.js";
-export {
-  renderLocalDiffReport,
-} from "./githubActionDiffReport.js";
+export { renderLocalDiffReport } from "./githubActionDiffReport.js";
 export {
   githubReportMetadata,
   githubReportMetadataFromEnv,
@@ -54,20 +57,14 @@ export {
   validateSpecGraph,
   validateStackSpec,
 } from "./specDocuments.js";
-export type {
-  LocalDiffReportOptions,
-} from "./githubActionDiffReport.js";
-export type {
-  GithubReportMetadataOptions,
-} from "./githubReportMetadata.js";
+export type { LocalDiffReportOptions } from "./githubActionDiffReport.js";
+export type { GithubReportMetadataOptions } from "./githubReportMetadata.js";
 export type {
   MockReportData,
   MockReportVariant,
   WriteMockReportsOptions,
 } from "./mockReports.js";
-export type {
-  ReportMetadataItem,
-} from "./reportMetadata.js";
+export type { ReportMetadataItem } from "./reportMetadata.js";
 export type {
   CoverageItem,
   CoverageSummary,
@@ -75,6 +72,7 @@ export type {
   DesignSpec,
   FeatureFrontmatter,
   FeatureRule,
+  FeatureSpecMdConfiguration,
   FeatureScenario,
   FeatureSpec,
   FeatureStep,
@@ -82,6 +80,8 @@ export type {
   ModelReferenceFrontmatter,
   ModelSpec,
   RuleKeyword,
+  ReportConfiguration,
+  ReportLayer,
   ScenarioEvidencePolicy,
   ScenarioTestType,
   ScreenshotPolicy,

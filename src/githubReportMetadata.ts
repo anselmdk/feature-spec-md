@@ -55,7 +55,9 @@ function buildGithubReportMetadata({
   fallbackSha,
 }: GithubReportMetadataInput): ReportMetadataItem[] {
   const pullRequest = githubPullRequestFromEvent(event);
-  const githubBaseUrl = repository ? githubBaseUrlFromRepository(repository) : undefined;
+  const githubBaseUrl = repository
+    ? githubBaseUrlFromRepository(repository)
+    : undefined;
   const branch = githubBranchFromEnv(pullRequest) ?? fallbackBranch;
   const buildNumber =
     process.env.FEATURE_SPEC_BUILD_NUMBER ??
@@ -70,14 +72,19 @@ function buildGithubReportMetadata({
     metadata.push({
       label: "Branch",
       value: branch,
-      url: githubBaseUrl ? `${githubBaseUrl}/tree/${encodeGithubPath(branch)}` : undefined,
+      url: githubBaseUrl
+        ? `${githubBaseUrl}/tree/${encodeGithubPath(branch)}`
+        : undefined,
     });
   }
   if (buildNumber) {
     metadata.push({
       label: "Build",
       value: buildNumber,
-      url: githubBaseUrl && runId ? `${githubBaseUrl}/actions/runs/${runId}` : undefined,
+      url:
+        githubBaseUrl && runId
+          ? `${githubBaseUrl}/actions/runs/${runId}`
+          : undefined,
     });
   }
   if (sha) {
@@ -91,7 +98,9 @@ function buildGithubReportMetadata({
     metadata.push({
       label: "Pull request",
       value: `#${prNumber}`,
-      url: pullRequest?.url ?? (githubBaseUrl ? `${githubBaseUrl}/pull/${prNumber}` : undefined),
+      url:
+        pullRequest?.url ??
+        (githubBaseUrl ? `${githubBaseUrl}/pull/${prNumber}` : undefined),
     });
   }
 
@@ -137,12 +146,16 @@ function githubPullRequestFromEvent(
   };
 }
 
-function githubBranchFromEnv(pullRequest: GithubPullRequestMetadata | undefined) {
+function githubBranchFromEnv(
+  pullRequest: GithubPullRequestMetadata | undefined,
+) {
   if (pullRequest?.branch) return pullRequest.branch;
   if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
   if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
   const ref = process.env.GITHUB_REF;
-  return ref?.replace(/^refs\/(heads|tags)\//, "").replace(/^refs\/pull\/(\d+)\/merge$/, "PR #$1");
+  return ref
+    ?.replace(/^refs\/(heads|tags)\//, "")
+    .replace(/^refs\/pull\/(\d+)\/merge$/, "PR #$1");
 }
 
 function githubBaseUrlFromRepository(repository: string) {

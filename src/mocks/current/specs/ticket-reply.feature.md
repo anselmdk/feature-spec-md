@@ -2,6 +2,7 @@
 id: SUPPORT-REPLY
 title: Ticket replies
 status: active
+layer: surface
 model: SUPPORT
 test: playwright
 screenshots: optional

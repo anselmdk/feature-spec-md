@@ -17,6 +17,7 @@ Use scenario-level overrides directly below a scenario heading when one scenario
 
 ````md
 ### KANBAN-CARD-AUTHORING-S002: Card title is normalized
+
 Test: unit
 Screenshots: skip
 
