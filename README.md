@@ -14,6 +14,7 @@ model + features + stack + design
 
 The clearest example of what this library can deliver is the demo feature PR workflow:
 
+- **Latest library mock reports:** <https://feature-spec-md.anselm.dk/mocks/latest/>
 - **Feature PR:** <https://github.com/anselmdk/feature-spec-md-demo/pull/16>
 - **Feature spec report:** <https://feature-spec-md.anselm.dk/demo/build/269/>
 - **Feature spec diff:** <https://feature-spec-md.anselm.dk/demo/pr/16/269/>
