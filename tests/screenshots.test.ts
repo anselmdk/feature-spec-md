@@ -82,7 +82,10 @@ test("accepts screenshot evidence for matching spec step lines", () => {
     }),
   );
 
-  assert.deepEqual(validateScenarioScreenshots([requiredSpec], screenshots), []);
+  assert.deepEqual(
+    validateScenarioScreenshots([requiredSpec], screenshots),
+    [],
+  );
 });
 
 test("defaults non-playwright scenarios to screenshot evidence skip", () => {

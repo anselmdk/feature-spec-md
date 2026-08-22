@@ -4,6 +4,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { expandFilePatterns } from "./filePatterns.js";
+import { validateDocumentLayers } from "./config.js";
 import {
   buildCoverageSummary,
   parseFeatureSpec,
@@ -26,6 +27,7 @@ import type {
   FeatureSpec,
   ModelItem,
   ModelSpec,
+  ReportLayer,
   SpecDocument,
   SpecFrontmatter,
   StackSpec,
@@ -331,6 +333,7 @@ export async function checkSpecDocuments(options: {
   requireRuleCoverage?: boolean;
   requireScenarioCoverage?: boolean;
   requireCriticalJourneyCoverage?: boolean;
+  layers?: ReportLayer[];
 }) {
   const documents = await loadSpecDocuments(options.specs);
   const references = options.tests?.length
@@ -342,6 +345,7 @@ export async function checkSpecDocuments(options: {
   const validationIssues = [
     ...documents.flatMap(validateSpecDocument),
     ...validateSpecGraph(documents),
+    ...validateDocumentLayers(documents, options.layers),
   ];
   const coverageIssues: ValidationIssue[] = coverage
     ? [

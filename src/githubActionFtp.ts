@@ -25,23 +25,40 @@ export function ftpConfig(options: GithubActionOptions): FtpConfig {
     "FEATURE_SPEC_FTP_PASSWORD",
   );
   const baseUrl = required(options, "base-url", "FEATURE_SPEC_REPORT_BASE_URL");
-  const remoteDir = value(options, "ftp-remote-dir", "FEATURE_SPEC_FTP_REMOTE_DIR") ?? "";
+  const remoteDir =
+    value(options, "ftp-remote-dir", "FEATURE_SPEC_FTP_REMOTE_DIR") ?? "";
   const buildNumber =
     value(options, "build-number", "FEATURE_SPEC_BUILD_NUMBER") ??
     value(options, "build-number", "GITHUB_RUN_NUMBER") ??
     "local";
   const prNumber = value(options, "pr-number", "FEATURE_SPEC_PR_NUMBER");
-  const secure = booleanValue(value(options, "ftp-secure", "FEATURE_SPEC_FTP_SECURE"));
+  const secure = booleanValue(
+    value(options, "ftp-secure", "FEATURE_SPEC_FTP_SECURE"),
+  );
   const port = value(options, "ftp-port", "FEATURE_SPEC_FTP_PORT");
 
   if (!/^\d+$/.test(buildNumber)) {
-    throw new Error(`Build number must be numeric for FTP publishing: ${buildNumber}`);
+    throw new Error(
+      `Build number must be numeric for FTP publishing: ${buildNumber}`,
+    );
   }
   if (prNumber !== undefined && !/^\d+$/.test(prNumber)) {
-    throw new Error(`Pull request number must be numeric for FTP publishing: ${prNumber}`);
+    throw new Error(
+      `Pull request number must be numeric for FTP publishing: ${prNumber}`,
+    );
   }
 
-  return { host, user, password, port, secure, remoteDir, baseUrl, buildNumber, prNumber };
+  return {
+    host,
+    user,
+    password,
+    port,
+    secure,
+    remoteDir,
+    baseUrl,
+    buildNumber,
+    prNumber,
+  };
 }
 
 export async function uploadDirectory(
@@ -99,7 +116,10 @@ export async function downloadRemoteFile(
   ]);
 }
 
-export async function listRemoteDirectory(remoteDir: string, config: FtpConfig) {
+export async function listRemoteDirectory(
+  remoteDir: string,
+  config: FtpConfig,
+) {
   const directoryUrl = ftpUrl(config, asDirectoryPath(remoteDir));
   const commonArgs = [
     "--silent",
@@ -182,7 +202,9 @@ export function publicUrl(baseUrl: string, ...parts: string[]) {
     .filter(Boolean)
     .map(encodeURIComponent)
     .join("/");
-  return path ? `${trimTrailingSlash(baseUrl)}/${path}` : trimTrailingSlash(baseUrl);
+  return path
+    ? `${trimTrailingSlash(baseUrl)}/${path}`
+    : trimTrailingSlash(baseUrl);
 }
 
 export function trimTrailingSlash(value: string) {
@@ -257,7 +279,8 @@ function asDirectoryPath(remotePath: string) {
 
 function required(options: GithubActionOptions, key: string, envKey: string) {
   const result = value(options, key, envKey);
-  if (!result) throw new Error(`Missing required option --${key} or ${envKey}.`);
+  if (!result)
+    throw new Error(`Missing required option --${key} or ${envKey}.`);
   return result;
 }
 

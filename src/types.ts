@@ -3,6 +3,24 @@ export type SpecFrontmatter = {
   title: string;
   status?: "draft" | "active" | "deprecated";
   owner?: string;
+  /** Optional project-defined report layer. */
+  layer?: string;
+};
+
+export type ReportLayer = {
+  id: string;
+  title: string;
+  description?: string;
+};
+
+export type ReportConfiguration = {
+  layers?: ReportLayer[];
+  layersDefaultOpen?: boolean;
+  documentsDefaultOpen?: boolean;
+};
+
+export type FeatureSpecMdConfiguration = {
+  report?: ReportConfiguration;
 };
 
 export type ModelReferenceFrontmatter = SpecFrontmatter & {
@@ -34,7 +52,11 @@ export type SpecExtensionSections = {
 };
 
 export type ScenarioTestType =
-  "unit" | "integration" | "playwright" | "manual" | "skip";
+  | "unit"
+  | "integration"
+  | "playwright"
+  | "manual"
+  | "skip";
 export type ScreenshotPolicy = "required" | "optional" | "skip";
 
 export type ScenarioEvidencePolicy = {
@@ -148,7 +170,12 @@ export type FeatureStep = {
 };
 
 export type RuleKeyword =
-  "MUST" | "MUST NOT" | "SHOULD" | "SHOULD NOT" | "MAY" | "OPTIONAL";
+  | "MUST"
+  | "MUST NOT"
+  | "SHOULD"
+  | "SHOULD NOT"
+  | "MAY"
+  | "OPTIONAL";
 export type StepKeyword = "Given" | "When" | "Then" | "And" | "But";
 
 export type ValidationIssue = {

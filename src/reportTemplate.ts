@@ -9,6 +9,7 @@ import type {
   FeatureSpec,
   FeatureStep,
   ModelSpec,
+  ReportLayer,
   SpecScreenshot,
   StackSpec,
   TestReference,
@@ -27,6 +28,9 @@ export type ReportOptions = {
   githubBaseUrl?: string;
   githubRef?: string;
   repositoryUrl?: string;
+  layers?: ReportLayer[];
+  layersDefaultOpen?: boolean;
+  documentsDefaultOpen?: boolean;
 };
 
 type RuleScenarioLink = {
@@ -100,6 +104,14 @@ function featureReportBody({
   title: string;
 }) {
   const documents = allReportDocuments(specs, options);
+  if (options.layers?.length) {
+    return `
+<h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
+<p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+${renderIssues(options.validationIssues ?? [])}
+${renderLayeredDocuments(documents, options, evidence, sourceLinks)}
+`;
+  }
   return `
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
 <p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
@@ -142,46 +154,55 @@ function renderJourneyOverview(
 }
 
 function featureReportStyles() {
-  return `.panel{border:1px solid #d0d7de;border-radius:8px;margin:18px 0;overflow:hidden}
+  return `.panel{border:1px solid var(--border);border-radius:8px;margin:18px 0;overflow:hidden;background:var(--surface)}
+.report-layers{margin-top:18px}.report-layers>.details-section-header{margin-bottom:8px}.layer-section{border:1px solid var(--border);border-radius:10px;margin:12px 0;background:var(--surface);overflow:hidden;scroll-margin-top:16px}
+.layer-summary{cursor:pointer;display:flex;gap:12px;align-items:center;padding:18px 20px;list-style:none}.layer-summary::-webkit-details-marker{display:none}.layer-summary::before{content:"▶";color:var(--muted);font-size:12px;transition:transform .15s ease}.layer-section[open]>.layer-summary::before{transform:rotate(90deg)}
+.layer-summary-copy{flex:1}.layer-summary h2{font-size:1.35em;margin:0}.layer-summary p{color:var(--muted);margin:3px 0 0}.layer-badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.layer-body{padding:0 18px 18px}.layer-body>.details-section-header{margin:0 0 10px}.document-section{margin:12px 0;scroll-margin-top:16px}.document-kind{color:var(--muted)}
 .report-section-summary{cursor:pointer;display:flex;gap:12px;align-items:center;padding:20px;list-style:none}.report-section-summary::-webkit-details-marker{display:none}
-.report-section-summary::before{content:"▶";color:#57606a;font-size:12px;transition:transform .15s ease}.report-section[open]>.report-section-summary::before{transform:rotate(90deg)}
+.report-section-summary::before{content:"▶";color:var(--muted);font-size:12px;transition:transform .15s ease}.report-section[open]>.report-section-summary::before{transform:rotate(90deg)}
 .report-section-summary h2{font-size:1.5em;margin:0;flex:1}.report-section-body{padding:0 20px 20px}
-.ok{color:#1a7f37}.missing,.error{color:#cf222e}.warning{color:#9a6700}.muted{color:#57606a}
-.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
+.ok{color:var(--success)}.missing,.error{color:var(--danger)}.warning{color:var(--warning)}.muted{color:var(--muted)}
+.badge{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
 .feature-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
 .details-section-header{display:flex;gap:12px;align-items:center;justify-content:space-between}
 .details-section-header h2,.details-section-header h3{margin-bottom:0}
-.details-toggle-button{appearance:none;border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#24292f;cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;white-space:nowrap}
-.details-toggle-button:hover{background:#eef1f4}.details-toggle-button:focus-visible{outline:2px solid #0969da;outline-offset:2px}
+.details-toggle-button{appearance:none;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;white-space:nowrap}
+.details-toggle-button:hover{background:var(--surface-hover)}.details-toggle-button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.report-navigator{position:fixed;z-index:19;right:12px;top:54px;width:min(320px,calc(100vw - 24px));border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(31,35,40,.16)}
+.navigator-trigger{appearance:none;display:flex;gap:8px;align-items:center;width:100%;border:0;border-radius:10px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;padding:9px 12px;text-align:left}.navigator-trigger:hover{background:var(--surface-hover)}.navigator-trigger:focus-visible,.navigator-control:focus-visible,.navigator-link:focus-visible{outline:2px solid var(--link);outline-offset:-2px}
+.navigator-current{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}.navigator-chevron{color:var(--muted);font-size:11px;transition:transform .15s ease}.report-navigator[data-open="true"] .navigator-chevron{transform:rotate(180deg)}
+.navigator-menu{display:none;border-top:1px solid var(--border);padding:10px}.report-navigator[data-open="true"] .navigator-menu{display:block}.navigator-controls{display:grid;grid-template-columns:auto 1fr auto;gap:6px;margin-bottom:8px}.navigator-control{appearance:none;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;font-size:12px;font-weight:600;padding:6px 9px}.navigator-control:hover:not(:disabled){background:var(--surface-hover)}.navigator-control:disabled{cursor:default;opacity:.45}
+.navigator-links{max-height:calc(100vh - 180px);overflow:auto;padding:2px}.navigator-layer{margin:6px 0 2px}.navigator-link{display:block;width:100%;border:0;border-radius:5px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;font-size:13px;padding:6px 8px;text-align:left;text-decoration:none}.navigator-link:hover{background:var(--surface-hover)}.navigator-link[aria-current="location"]{background:var(--surface-muted);box-shadow:inset 3px 0 var(--link);font-weight:650}.navigator-document{padding-left:22px;color:var(--muted)}.navigator-document[aria-current="location"]{color:var(--fg)}
 .feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
-.scenario{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.scenario{border:1px solid var(--border);border-radius:8px;margin:12px 0;background:var(--surface)}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .scenario-body{padding:0 16px 16px}
 .scenario-body.compact-steps .step{margin:4px 0}.scenario-body.compact-steps .step p{margin:2px 0}
-.model-item{border:1px solid #d0d7de;border-radius:8px;margin:12px 0;background:#fff}
+.model-item{border:1px solid var(--border);border-radius:8px;margin:12px 0;background:var(--surface)}
 .model-item summary{cursor:pointer;padding:14px 16px;font-weight:600}
 .model-item-body{padding:0 16px 16px}.model-item-body p{margin:8px 0}
 .model-entry{padding:0 0 12px}.model-entry h4{font-size:14px;margin:14px 0 8px}
 .table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f8fa}
-h1 a{color:#0969da;text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
-.step{border-left:3px solid #d0d7de;margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
+th,td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top}th{background:var(--surface-muted)}
+h1 a{color:var(--link);text-decoration:underline;text-underline-offset:3px}h1 a:hover{text-decoration-thickness:2px}
+.step{border-left:3px solid var(--border);margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
 .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
-.screenshot{border:1px solid #d0d7de;border-radius:8px;overflow:hidden;background:#f6f8fa}
-.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:#57606a}
+.screenshot{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface-muted)}
+.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:var(--muted)}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
-.flag-card{border:1px solid #d0d7de;border-left:4px solid #d0d7de;border-radius:8px;padding:14px;background:#fff}
+.flag-card{border:1px solid var(--border);border-left:4px solid var(--border);border-radius:8px;padding:14px;background:var(--surface)}
 .flag-card h3{font-size:16px;margin:0 0 8px}.flag-card p{margin:8px 0}
-.flag-item-link{color:inherit;text-decoration:underline;text-decoration-color:#8c959f;text-underline-offset:2px}
-.flag-card.openQuestions{border-left-color:#9a6700}.flag-card.assumptions{border-left-color:#57606a}
-.extension-section{border:1px solid #d0d7de;border-radius:8px;padding:14px;margin:12px 0;background:#fff}
+.flag-item-link{color:inherit;text-decoration:underline;text-decoration-color:var(--muted);text-underline-offset:2px}
+.flag-card.openQuestions{border-left-color:var(--warning)}.flag-card.assumptions{border-left-color:var(--muted)}
+.extension-section{border:1px solid var(--border);border-radius:8px;padding:14px;margin:12px 0;background:var(--surface)}
 .extension-section h4{margin:0 0 8px}.extension-section p{margin:8px 0}
-.mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid #d0d7de;border-radius:8px;background:#fff}
+.mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .mermaid{min-width:max-content;text-align:center}.mermaid svg{display:block;max-width:none;height:auto;margin:0 auto}
-.mermaid-error{color:#cf222e;text-align:left;white-space:pre-wrap}
-@media(max-width:720px){.flag-grid{grid-template-columns:1fr}}`;
+.mermaid-error{color:var(--danger);text-align:left;white-space:pre-wrap}
+@media(min-width:1600px){.report-navigator{width:220px}.report-navigator .navigator-menu{display:block}.report-navigator .navigator-chevron{display:none}}
+@media(max-width:720px){.flag-grid{grid-template-columns:1fr}.layer-summary{align-items:flex-start;flex-wrap:wrap}.layer-badges{justify-content:flex-start;width:100%}}`;
 }
 
 function featureReportScripts() {
@@ -240,10 +261,117 @@ document.addEventListener("toggle", (event) => {
     window.scrollBy(0, topAfter - topBefore);
   });
 }, true);
+
+function revealHashTarget() {
+  const id = decodeURIComponent(window.location.hash.slice(1));
+  if (!id) return;
+  const target = document.getElementById(id);
+  if (!target) return;
+  let ancestor = target instanceof HTMLDetailsElement ? target : target.closest("details");
+  while (ancestor) {
+    ancestor.open = true;
+    ancestor = ancestor.parentElement?.closest("details");
+  }
+}
+window.addEventListener("hashchange", revealHashTarget);
+document.addEventListener("DOMContentLoaded", revealHashTarget);
+
+function initializeReportNavigator() {
+  const navigator = document.querySelector("[data-report-navigator]");
+  if (!(navigator instanceof HTMLElement)) return;
+  const trigger = navigator.querySelector("[data-navigator-trigger]");
+  const currentLabel = navigator.querySelector("[data-navigator-current]");
+  const toggleCurrent = navigator.querySelector("[data-navigator-toggle-current]");
+  const previous = navigator.querySelector("[data-navigator-previous]");
+  const next = navigator.querySelector("[data-navigator-next]");
+  const entries = Array.from(navigator.querySelectorAll("[data-navigator-target]"));
+  const targets = entries
+    .map((entry) => document.getElementById(entry.dataset.navigatorTarget))
+    .filter((target) => target instanceof HTMLDetailsElement);
+  let activeIndex = 0;
+  let frame = 0;
+  let lockedTarget = null;
+
+  function setMenuOpen(open) {
+    navigator.dataset.open = String(open);
+    trigger?.setAttribute("aria-expanded", String(open));
+  }
+
+  function updateActiveSection() {
+    frame = 0;
+    const visible = targets.filter((target) => target.getClientRects().length > 0);
+    if (!visible.length) return;
+    let active = lockedTarget && visible.includes(lockedTarget) ? lockedTarget : visible[0];
+    if (!lockedTarget || !visible.includes(lockedTarget)) {
+      const threshold = 120;
+      for (const target of visible) {
+        if (target.getBoundingClientRect().top <= threshold) active = target;
+        else break;
+      }
+    }
+    activeIndex = targets.indexOf(active);
+    entries.forEach((entry) => {
+      if (entry.dataset.navigatorTarget === active.id) entry.setAttribute("aria-current", "location");
+      else entry.removeAttribute("aria-current");
+    });
+    const activeEntry = entries.find((entry) => entry.dataset.navigatorTarget === active.id);
+    if (currentLabel) currentLabel.textContent = activeEntry?.textContent?.trim() || active.id;
+    if (toggleCurrent) toggleCurrent.textContent = active.open ? "Collapse current" : "Expand current";
+    if (previous instanceof HTMLButtonElement) previous.disabled = activeIndex <= 0;
+    if (next instanceof HTMLButtonElement) next.disabled = activeIndex >= targets.length - 1;
+  }
+
+  function requestActiveUpdate() {
+    if (frame) return;
+    frame = requestAnimationFrame(updateActiveSection);
+  }
+
+  function jumpTo(index) {
+    const target = targets[index];
+    if (!target) return;
+    lockedTarget = target;
+    let ancestor = target.parentElement?.closest("details");
+    while (ancestor) {
+      ancestor.open = true;
+      ancestor = ancestor.parentElement?.closest("details");
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    history.replaceState(null, "", "#" + target.id);
+    if (window.innerWidth < 1600) setMenuOpen(false);
+    requestActiveUpdate();
+  }
+
+  trigger?.addEventListener("click", () => setMenuOpen(navigator.dataset.open !== "true"));
+  entries.forEach((entry, index) => entry.addEventListener("click", (event) => {
+    event.preventDefault();
+    jumpTo(index);
+  }));
+  toggleCurrent?.addEventListener("click", () => {
+    const target = targets[activeIndex];
+    if (!target) return;
+    target.open = !target.open;
+    requestActiveUpdate();
+  });
+  previous?.addEventListener("click", () => jumpTo(activeIndex - 1));
+  next?.addEventListener("click", () => jumpTo(activeIndex + 1));
+  window.addEventListener("scroll", requestActiveUpdate, { passive: true });
+  window.addEventListener("resize", requestActiveUpdate);
+  window.addEventListener("wheel", () => { lockedTarget = null; requestActiveUpdate(); }, { passive: true });
+  window.addEventListener("touchmove", () => { lockedTarget = null; requestActiveUpdate(); }, { passive: true });
+  document.addEventListener("pointerdown", (event) => {
+    if (!navigator.contains(event.target)) lockedTarget = null;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) lockedTarget = null;
+  });
+  document.addEventListener("toggle", requestActiveUpdate, true);
+  updateActiveSection();
+}
+document.addEventListener("DOMContentLoaded", initializeReportNavigator);
 ${closeTag}
 ${mermaidOpenTag}${closeTag}
 ${openTag}
-document.addEventListener("DOMContentLoaded", async () => {
+async function renderMermaidDiagrams() {
   const diagrams = document.querySelectorAll(".mermaid");
   if (!diagrams.length) return;
   if (!window.mermaid) {
@@ -251,13 +379,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   try {
-    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+    diagrams.forEach((diagram) => {
+      diagram.dataset.mermaidSource ||= diagram.textContent || "";
+      diagram.textContent = diagram.dataset.mermaidSource;
+      diagram.removeAttribute("data-processed");
+    });
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: document.documentElement.dataset.theme === "dark" ? "dark" : "default" });
     await window.mermaid.run({ nodes: diagrams });
   } catch (error) {
     diagrams.forEach((diagram) => diagram.classList.add("mermaid-error"));
     console.error("Unable to render Mermaid diagram", error);
   }
-});
+}
+document.addEventListener("DOMContentLoaded", renderMermaidDiagrams);
+document.addEventListener("feature-spec-theme-change", renderMermaidDiagrams);
 ${closeTag}`;
 }
 
@@ -300,6 +435,230 @@ function ordinalSuffix(day: number) {
   if (day % 10 === 2) return "nd";
   if (day % 10 === 3) return "rd";
   return "th";
+}
+
+function renderLayeredDocuments(
+  documents: ReportDocument[],
+  options: ReportOptions,
+  evidence: SpecScreenshot[],
+  sourceLinks: SourceLinkOptions,
+) {
+  const configured = options.layers ?? [];
+  const configuredIds = new Set(configured.map((layer) => layer.id));
+  const layers = configured.map((layer) => ({
+    ...layer,
+    documents: documents.filter(
+      (document) => document.frontmatter.layer === layer.id,
+    ),
+  }));
+  const otherDocuments = documents.filter(
+    (document) =>
+      !document.frontmatter.layer ||
+      !configuredIds.has(document.frontmatter.layer),
+  );
+  if (otherDocuments.length) {
+    layers.push({
+      id: "other",
+      title: "Other",
+      description: "Documents without a configured report layer",
+      documents: otherDocuments,
+    });
+  }
+
+  return `${renderReportNavigator(layers)}
+<section class="report-layers" data-details-section>
+  <div class="details-section-header"><h2>Specification layers</h2>${renderDetailsToggleButton("details.layer-section", "layers")}</div>
+  ${layers
+    .map((layer) =>
+      renderLayer(
+        layer,
+        options,
+        evidence,
+        sourceLinks,
+        options.layersDefaultOpen ?? false,
+        options.documentsDefaultOpen ?? false,
+      ),
+    )
+    .join("\n")}
+</section>`;
+}
+
+function renderReportNavigator(
+  layers: Array<ReportLayer & { documents: ReportDocument[] }>,
+) {
+  const entries = layers
+    .map(
+      (layer) => `<div class="navigator-layer">
+    ${renderNavigatorLink(`layer-${layer.id}`, layer.title, "navigator-layer-link")}
+    ${layer.documents
+      .map((document) =>
+        renderNavigatorLink(
+          document.frontmatter.id.toLowerCase(),
+          document.title,
+          "navigator-document",
+        ),
+      )
+      .join("")}
+  </div>`,
+    )
+    .join("");
+  const firstTitle = layers[0]?.title ?? "Specification layers";
+  return `<nav class="report-navigator" data-report-navigator data-open="false" aria-label="Report navigation">
+  <button class="navigator-trigger" type="button" data-navigator-trigger aria-expanded="false">
+    <span class="navigator-current" data-navigator-current>${html(firstTitle)}</span>
+    <span class="navigator-chevron" aria-hidden="true">▼</span>
+  </button>
+  <div class="navigator-menu">
+    <div class="navigator-controls">
+      <button class="navigator-control" type="button" data-navigator-previous aria-label="Previous report section">←</button>
+      <button class="navigator-control" type="button" data-navigator-toggle-current>Expand current</button>
+      <button class="navigator-control" type="button" data-navigator-next aria-label="Next report section">→</button>
+    </div>
+    <div class="navigator-links">${entries}</div>
+  </div>
+</nav>`;
+}
+
+function renderNavigatorLink(id: string, title: string, className: string) {
+  return `<a class="navigator-link ${className}" href="#${html(id)}" data-navigator-target="${html(id)}">${html(title)}</a>`;
+}
+
+function renderLayer(
+  layer: ReportLayer & { documents: ReportDocument[] },
+  options: ReportOptions,
+  evidence: SpecScreenshot[],
+  sourceLinks: SourceLinkOptions,
+  open: boolean,
+  documentsOpen: boolean,
+) {
+  const metrics = layerMetrics(layer.documents, options);
+  const description = layer.description
+    ? `<p>${html(layer.description)}</p>`
+    : "";
+  return `<details id="layer-${html(layer.id)}" class="layer-section" data-details-section${openAttribute(open)}>
+  <summary class="layer-summary">
+    <div class="layer-summary-copy"><h2>${html(layer.title)}</h2>${description}</div>
+    <span class="layer-badges"><span class="badge">${layer.documents.length} document${layer.documents.length === 1 ? "" : "s"}</span>${metrics.coverageTotal ? `<span class="badge ${metrics.coverageMissing ? "warning" : "ok"}">${metrics.coverageTotal - metrics.coverageMissing}/${metrics.coverageTotal} covered</span>` : ""}${metrics.issues ? `<span class="badge ${metrics.errors ? "error" : "warning"}">${metrics.issues} issue${metrics.issues === 1 ? "" : "s"}</span>` : ""}${metrics.flags ? `<span class="badge muted">${metrics.flags} open item${metrics.flags === 1 ? "" : "s"}</span>` : ""}</span>
+  </summary>
+  <div class="layer-body">
+    <div class="details-section-header">${renderDetailsToggleButton(".layer-body > details.document-section", "documents")}</div>
+    ${layer.documents.map((document) => renderLayerDocument(document, options, evidence, sourceLinks, documentsOpen)).join("\n")}
+  </div>
+</details>`;
+}
+
+function renderLayerDocument(
+  document: ReportDocument,
+  options: ReportOptions,
+  evidence: SpecScreenshot[],
+  sourceLinks: SourceLinkOptions,
+  open: boolean,
+) {
+  if (document.kind === "model")
+    return renderModelDocument(document, options.coverage, sourceLinks, open);
+  if (document.kind === "stack")
+    return renderContextDocument(
+      document,
+      "Stack",
+      [
+        ["Stack", document.stack],
+        ["Context", document.context],
+        ["Rationale", document.rationale],
+        ["Consequences", document.consequences],
+      ],
+      options.coverage,
+      sourceLinks,
+      open,
+      true,
+    );
+  if (document.kind === "design")
+    return renderContextDocument(
+      document,
+      "Design",
+      [
+        ["Design", document.design],
+        ["Principles", document.principles],
+        ["Layout", document.layout],
+        ["Interaction", document.interaction],
+        ["Visual style", document.visualStyle],
+      ],
+      options.coverage,
+      sourceLinks,
+      open,
+      true,
+    );
+  return renderSpec(
+    document,
+    options.coverage,
+    evidence,
+    sourceLinks,
+    open,
+    true,
+  );
+}
+
+function renderModelDocument(
+  model: ModelSpec,
+  coverage: CoverageSummary | undefined,
+  sourceLinks: SourceLinkOptions,
+  open: boolean,
+) {
+  const ruleCoverage = coverage?.ruleCoverage ?? [];
+  const scenarioCoverage = coverage?.scenarioCoverage ?? [];
+  return `<details id="${html(model.frontmatter.id.toLowerCase())}" class="panel report-section document-section" data-details-section${openAttribute(open)}>
+  <summary class="report-section-summary"><h2>${html(model.title)}</h2><span class="badge document-kind">Model</span><span class="badge">${html(model.frontmatter.status ?? "draft")}</span></summary>
+  <div class="report-section-body">
+    <div class="details-section-header">${renderDetailsToggleButton("details.model-item", "model items")}</div>
+    ${renderModel(model, coverage?.modelCoverage ?? [], ruleCoverage, buildRuleScenarioLinks(ruleCoverage, scenarioCoverage), sourceLinks)}
+  </div>
+</details>`;
+}
+
+function layerMetrics(documents: ReportDocument[], options: ReportOptions) {
+  const filePaths = new Set(documents.map((document) => document.filePath));
+  const ids = new Set(
+    documents.flatMap((document) => [
+      ...(document.kind === "model"
+        ? document.modelItems.map((item) => item.id)
+        : []),
+      ...document.rules.map((rule) => rule.id),
+      ...(document.kind === "feature" || document.kind === undefined
+        ? document.scenarios.map((scenario) => scenario.id)
+        : []),
+    ]),
+  );
+  const coverageItems = [
+    ...(options.coverage?.modelCoverage ?? []),
+    ...(options.coverage?.ruleCoverage ?? []),
+    ...(options.coverage?.scenarioCoverage ?? []),
+  ].filter((item) => ids.has(item.id));
+  const issues = (options.validationIssues ?? []).filter(
+    (issue) => !issue.filePath || filePaths.has(issue.filePath),
+  );
+  const flags = documents.reduce(
+    (sum, document) =>
+      sum +
+      (document.source.match(/^## (?:Open Questions|Assumptions)$/gim)
+        ?.length ?? 0),
+    0,
+  );
+  return {
+    coverageTotal: coverageItems.length,
+    coverageMissing: coverageItems.filter((item) => !item.covered).length,
+    issues: issues.length,
+    errors: issues.filter((issue) => issue.severity === "error").length,
+    flags,
+  };
+}
+
+function openAttribute(open: boolean) {
+  return open ? " open" : "";
+}
+
+function documentDetailsAttributes(id: string, open: boolean, nested: boolean) {
+  return nested
+    ? ` id="${html(id.toLowerCase())}" class="panel report-section document-section"${openAttribute(open)}`
+    : ` class="panel report-section"${openAttribute(open)}`;
 }
 
 function renderOpenQuestionsAndAssumptions(
@@ -512,13 +871,15 @@ function renderContextDocument(
   sections: Array<[string, string]>,
   coverage: CoverageSummary | undefined,
   sourceLinks: SourceLinkOptions,
+  open = true,
+  nested = false,
 ) {
   const ruleCoverage = coverage?.ruleCoverage ?? [];
   const ruleScenarioLinks = buildRuleScenarioLinks(
     ruleCoverage,
     coverage?.scenarioCoverage ?? [],
   );
-  return `<details class="panel report-section" open>
+  return `<details${documentDetailsAttributes(document.frontmatter.id, open, nested)}>
   <summary class="report-section-summary">
     <h2>${html(document.title)}</h2>
     <span class="badge">${html(kindLabel)}</span>
@@ -561,6 +922,8 @@ function renderSpec(
   coverage?: CoverageSummary,
   evidence: SpecScreenshot[] = [],
   sourceLinks: SourceLinkOptions = {},
+  open = true,
+  nested = false,
 ) {
   const evidenceByLine = groupEvidenceByLine(evidence);
   const ruleCoverage = coverage?.ruleCoverage ?? [];
@@ -569,7 +932,7 @@ function renderSpec(
     ruleCoverage,
     scenarioCoverage,
   );
-  return `<details class="panel report-section" open>
+  return `<details${documentDetailsAttributes(spec.frontmatter.id, open, nested)}>
   <summary class="report-section-summary">
     <h2>${html(spec.title)}</h2>
     <span class="badge">${html(spec.frontmatter.status ?? "draft")}</span>
@@ -880,7 +1243,7 @@ function renderLineBadge(
 
 function renderScreenshots(screenshots: SpecScreenshot[]) {
   if (!screenshots.length) return "";
-  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
+  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}" data-lightbox tabindex="0"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
 }
 
 function coverageBadge(

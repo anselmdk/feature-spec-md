@@ -6,7 +6,10 @@ import { renderLocalDiffReport } from "./githubActionDiffReport.js";
 import { publishedSpecRoot } from "./reportArtifacts.js";
 import { collectSpecScreenshots } from "./screenshots.js";
 import { checkSpecDocuments } from "./specDocuments.js";
-import { insertReportMetadata, type ReportMetadataItem } from "./reportMetadata.js";
+import {
+  insertReportMetadata,
+  type ReportMetadataItem,
+} from "./reportMetadata.js";
 import { renderHtmlReport } from "./reportTemplate.js";
 import type {
   CoverageItem,
@@ -14,6 +17,7 @@ import type {
   DesignSpec,
   FeatureSpec,
   ModelSpec,
+  ReportLayer,
   SpecDocument,
   SpecScreenshot,
   StackSpec,
@@ -30,8 +34,22 @@ export type WriteMockReportsOptions = {
 };
 
 const defaultGeneratedAt = "2026-01-15T12:30:00.000Z";
+const mockLayers: ReportLayer[] = [
+  {
+    id: "context",
+    title: "Context",
+    description: "Architecture, design, and domain vocabulary",
+  },
+  {
+    id: "surface",
+    title: "Delivery surfaces",
+    description: "User-visible applications and workflows",
+  },
+];
 
-export async function loadMockReportData(variant: MockReportVariant = "current") {
+export async function loadMockReportData(
+  variant: MockReportVariant = "current",
+) {
   const fixturesRoot = await mockFixturesRoot();
   const variantRoot = path.join(fixturesRoot, variant);
   const result = await checkSpecDocuments({
@@ -47,7 +65,9 @@ export async function loadMockReportData(variant: MockReportVariant = "current")
     requireScenarioCoverage: false,
   });
   const screenshots = normalizeMockScreenshots(
-    await collectSpecScreenshots([path.join(variantRoot, "screenshots/screenshots.json")]),
+    await collectSpecScreenshots([
+      path.join(variantRoot, "screenshots/screenshots.json"),
+    ]),
     fixturesRoot,
     variantRoot,
   );
@@ -63,9 +83,14 @@ export async function loadMockReportData(variant: MockReportVariant = "current")
     designs: normalizeMockDocuments(result.designs, variantRoot),
     coverage: normalizeMockCoverage(result.coverage, variantRoot),
     screenshots,
-    validationIssues: [...result.validationIssues, ...result.coverageIssues].map((issue) => ({
+    validationIssues: [
+      ...result.validationIssues,
+      ...result.coverageIssues,
+    ].map((issue) => ({
       ...issue,
-      filePath: issue.filePath ? normalizeMockSourcePath(issue.filePath, variantRoot) : issue.filePath,
+      filePath: issue.filePath
+        ? normalizeMockSourcePath(issue.filePath, variantRoot)
+        : issue.filePath,
     })),
     metadata: mockMetadata(variant),
   };
@@ -89,6 +114,9 @@ export async function renderMockFeatureSpecReport(
       githubBaseUrl: "https://github.com/anselmdk/feature-spec-md",
       githubRef: variant === "current" ? "abc1234" : "def5678",
       repositoryUrl: "https://github.com/anselmdk/feature-spec-md",
+      layers: mockLayers,
+      layersDefaultOpen: false,
+      documentsDefaultOpen: false,
     }),
     data.metadata,
   );
@@ -115,6 +143,7 @@ export async function renderMockDiffReport(generatedAt = defaultGeneratedAt) {
     currentBuildUrl: "current/",
     previousAssetUrlPrefix: "previous",
     currentAssetUrlPrefix: "current",
+    layers: mockLayers,
   });
 }
 
@@ -126,7 +155,11 @@ export async function writeMockReports(options: WriteMockReportsOptions = {}) {
   const diffDir = path.join(outDir, "diff-report");
 
   await writeFeatureReportDirectory(featureDir, "current", generatedAt);
-  await writeFeatureReportDirectory(previousFeatureDir, "previous", generatedAt);
+  await writeFeatureReportDirectory(
+    previousFeatureDir,
+    "previous",
+    generatedAt,
+  );
   await copyDirectory(previousFeatureDir, path.join(diffDir, "previous"));
   await copyDirectory(featureDir, path.join(diffDir, "current"));
   await writeTextFile(
@@ -167,7 +200,11 @@ async function writeFeatureReportDirectory(
     path.join(reportDir, "screenshots"),
     (filePath) => filePath.endsWith(".svg"),
   );
-  await writeMockFeatureSpecSourceArtifacts(reportDir, variantRoot, generatedAt);
+  await writeMockFeatureSpecSourceArtifacts(
+    reportDir,
+    variantRoot,
+    generatedAt,
+  );
 }
 
 async function writeMockFeatureSpecSourceArtifacts(
@@ -181,7 +218,10 @@ async function writeMockFeatureSpecSourceArtifacts(
 
   const files = await listFilesRecursive(sourceRoot, isSpecMarkdownFile);
   const specs = files.map((filePath) => {
-    const relativePath = path.relative(variantRoot, filePath).split("\\").join("/");
+    const relativePath = path
+      .relative(variantRoot, filePath)
+      .split("\\")
+      .join("/");
     return {
       filePath: relativePath,
       publishedPath: `${publishedSpecRoot}/${relativePath}`,
@@ -240,10 +280,9 @@ async function mockFixturesRoot() {
   );
 }
 
-function normalizeMockDocuments<T extends SpecDocument | FeatureSpec | ModelSpec | StackSpec | DesignSpec>(
-  documents: T[],
-  variantRoot: string,
-): T[] {
+function normalizeMockDocuments<
+  T extends SpecDocument | FeatureSpec | ModelSpec | StackSpec | DesignSpec,
+>(documents: T[], variantRoot: string): T[] {
   return documents.map((document) => ({
     ...document,
     filePath: normalizeMockSourcePath(document.filePath, variantRoot),
@@ -261,13 +300,25 @@ function normalizeMockCoverage(
     modelCoverage: coverage.modelCoverage
       ? normalizeMockCoverageItems(coverage.modelCoverage, variantRoot)
       : coverage.modelCoverage,
-    ruleCoverage: normalizeMockCoverageItems(coverage.ruleCoverage, variantRoot),
-    scenarioCoverage: normalizeMockCoverageItems(coverage.scenarioCoverage, variantRoot),
+    ruleCoverage: normalizeMockCoverageItems(
+      coverage.ruleCoverage,
+      variantRoot,
+    ),
+    scenarioCoverage: normalizeMockCoverageItems(
+      coverage.scenarioCoverage,
+      variantRoot,
+    ),
     orphanModelReferences: coverage.orphanModelReferences
       ? normalizeMockReferences(coverage.orphanModelReferences, variantRoot)
       : coverage.orphanModelReferences,
-    orphanRuleReferences: normalizeMockReferences(coverage.orphanRuleReferences, variantRoot),
-    orphanScenarioReferences: normalizeMockReferences(coverage.orphanScenarioReferences, variantRoot),
+    orphanRuleReferences: normalizeMockReferences(
+      coverage.orphanRuleReferences,
+      variantRoot,
+    ),
+    orphanScenarioReferences: normalizeMockReferences(
+      coverage.orphanScenarioReferences,
+      variantRoot,
+    ),
   };
 }
 
@@ -277,7 +328,9 @@ function normalizeMockCoverageItems<T extends CoverageItem>(
 ): T[] {
   return items.map((item) => ({
     ...item,
-    filePath: item.filePath ? normalizeMockSourcePath(item.filePath, variantRoot) : item.filePath,
+    filePath: item.filePath
+      ? normalizeMockSourcePath(item.filePath, variantRoot)
+      : item.filePath,
     references: normalizeMockReferences(item.references, variantRoot),
   }));
 }
@@ -302,7 +355,10 @@ function normalizeMockScreenshots(
     specPath: normalizeMockSourcePath(
       path.isAbsolute(screenshot.specPath)
         ? screenshot.specPath
-        : path.join(fixturesRoot, screenshot.specPath.replace(/^src\/mocks\//, "")),
+        : path.join(
+            fixturesRoot,
+            screenshot.specPath.replace(/^src\/mocks\//, ""),
+          ),
       variantRoot,
     ),
     testPath: screenshot.testPath
@@ -312,8 +368,15 @@ function normalizeMockScreenshots(
 }
 
 function normalizeMockSourcePath(filePath: string, variantRoot: string) {
-  const relativePath = path.relative(variantRoot, filePath).split("\\").join("/");
-  if (relativePath && !relativePath.startsWith("../") && relativePath !== "..") {
+  const relativePath = path
+    .relative(variantRoot, filePath)
+    .split("\\")
+    .join("/");
+  if (
+    relativePath &&
+    !relativePath.startsWith("../") &&
+    relativePath !== ".."
+  ) {
     return relativePath;
   }
 
@@ -387,6 +450,8 @@ function isDirectRun() {
 if (isDirectRun()) {
   const paths = await writeMockReports({ outDir: argValue("--out") });
   console.log(`Mock feature spec report written to ${paths.featureReportPath}`);
-  console.log(`Mock previous feature spec report written to ${paths.previousFeatureReportPath}`);
+  console.log(
+    `Mock previous feature spec report written to ${paths.previousFeatureReportPath}`,
+  );
   console.log(`Mock diff report written to ${paths.diffReportPath}`);
 }

@@ -31,7 +31,11 @@ export async function writePublishedFeatureSpecFiles(
   await mkdir(dirname(manifestPath), { recursive: true });
   await writeFile(
     manifestPath,
-    JSON.stringify({ generatedAt: new Date().toISOString(), features }, null, 2),
+    JSON.stringify(
+      { generatedAt: new Date().toISOString(), features },
+      null,
+      2,
+    ),
     "utf8",
   );
 }

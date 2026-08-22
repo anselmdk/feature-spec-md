@@ -44,12 +44,26 @@ Optional fields:
 
 - `status`: `draft`, `active`, or `deprecated`
 - `owner`
+- `layer`: a project-defined report layer id
 - `model`: a single referenced model id, for feature and design files
 - `models`: comma-separated referenced model ids, for feature and design files
 - `test`: default scenario test type for feature files
 - `screenshots`: default screenshot evidence policy for feature files
 
 IDs use uppercase words separated by hyphens. IDs are the contract between specs, tests, reports, and implementation work.
+
+### Report Layers
+
+Any model, feature, stack, or design document MAY declare a project-defined
+`layer` in frontmatter. Layer definitions belong in the consuming project's
+`package.json` under `featureSpecMd.report.layers`; the configuration controls
+their titles, descriptions, and order. `layersDefaultOpen` and
+`documentsDefaultOpen` control the initial nested report state.
+
+Layer ids MUST use lowercase words separated by hyphens. When a layer catalogue
+is configured, an unknown layer is an error. A document without a layer remains
+visible under `Other` and produces a warning so report content is never silently
+discarded.
 
 ## Purpose
 

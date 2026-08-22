@@ -70,19 +70,19 @@ The FTP publisher then uploads the whole `test-results/mock-reports` directory t
 
 Configure these repository settings before enabling the workflow:
 
-| Name | Source |
-| --- | --- |
-| `FEATURE_SPEC_FTP_HOST` | Repository variable |
-| `FEATURE_SPEC_FTP_USER` | Repository variable |
-| `FEATURE_SPEC_FTP_PASSWORD` | Repository secret |
+| Name                           | Source              |
+| ------------------------------ | ------------------- |
+| `FEATURE_SPEC_FTP_HOST`        | Repository variable |
+| `FEATURE_SPEC_FTP_USER`        | Repository variable |
+| `FEATURE_SPEC_FTP_PASSWORD`    | Repository secret   |
 | `FEATURE_SPEC_REPORT_BASE_URL` | Repository variable |
-| `FEATURE_SPEC_FTP_REMOTE_DIR` | Repository variable |
+| `FEATURE_SPEC_FTP_REMOTE_DIR`  | Repository variable |
 
 Optional settings:
 
-| Name | Source |
-| --- | --- |
-| `FEATURE_SPEC_FTP_PORT` | Repository variable |
+| Name                      | Source              |
+| ------------------------- | ------------------- |
+| `FEATURE_SPEC_FTP_PORT`   | Repository variable |
 | `FEATURE_SPEC_FTP_SECURE` | Repository variable |
 
 Use a mock-specific base URL and remote directory value so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.

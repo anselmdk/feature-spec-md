@@ -2,6 +2,7 @@
 id: SUPPORT-PLATFORM
 title: Support platform
 status: accepted
+layer: context
 ---
 
 # Support platform

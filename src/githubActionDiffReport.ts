@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
+import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
   ftpConfig,
@@ -16,6 +17,7 @@ import {
 import { writeGithubOutput, writeGithubSummary } from "./githubActionOutput.js";
 import { publishedSpecRoot } from "./reportArtifacts.js";
 import { renderHtmlPage } from "./reportHtml.js";
+import type { ReportLayer } from "./types.js";
 
 export type GithubActionDiffReportOptions = GithubActionOptions;
 
@@ -30,6 +32,7 @@ export type LocalDiffReportOptions = {
   baseLabel?: DiffReport["baseLabel"];
   previousAssetUrlPrefix?: string;
   currentAssetUrlPrefix?: string;
+  layers?: ReportLayer[];
 };
 
 type ComparedFile = {
@@ -55,6 +58,7 @@ type SpecSection = {
   filePath?: string;
   scenarioIds: string[];
   text: string;
+  layer?: string;
 };
 
 type SpecDiff = {
@@ -63,6 +67,7 @@ type SpecDiff = {
   filePath?: string;
   status: "added" | "removed" | "changed";
   lines: DiffLine[];
+  layer?: string;
 };
 
 type ScreenshotDiffItem = {
@@ -79,6 +84,7 @@ type ScreenshotDiffGroup = {
   specLabel: string;
   specPath?: string;
   items: ScreenshotDiffItem[];
+  layer?: string;
 };
 
 type DiffReport = {
@@ -91,6 +97,7 @@ type DiffReport = {
   files: ComparedFile[];
   specDiffs: SpecDiff[];
   screenshotDiffs: ScreenshotDiffGroup[];
+  layers?: ReportLayer[];
 };
 
 export async function publishGithubActionDiffReport(
@@ -98,40 +105,71 @@ export async function publishGithubActionDiffReport(
 ) {
   const config = ftpConfig(options);
   const prNumber = config.prNumber;
-  if (!prNumber) throw new Error("Missing required option --pr-number or FEATURE_SPEC_PR_NUMBER.");
+  if (!prNumber)
+    throw new Error(
+      "Missing required option --pr-number or FEATURE_SPEC_PR_NUMBER.",
+    );
 
   const buildsRoot = pathJoin(config.remoteDir, "build");
   const builds = await listBuildNumbers(buildsRoot, config);
   const currentBuild = config.buildNumber;
-  const requestedBaseBuild = optionValue(options, "base-build-number", "FEATURE_SPEC_BASE_BUILD_NUMBER");
-  const hasRequestedBaseBuild = Boolean(requestedBaseBuild && builds.includes(requestedBaseBuild));
-  const baseBuild = hasRequestedBaseBuild ? requestedBaseBuild : previousBuildNumber(builds, currentBuild);
-  const baseLabel: DiffReport["baseLabel"] = hasRequestedBaseBuild ? "main" : baseBuild ? "previous" : "none";
+  const requestedBaseBuild = optionValue(
+    options,
+    "base-build-number",
+    "FEATURE_SPEC_BASE_BUILD_NUMBER",
+  );
+  const hasRequestedBaseBuild = Boolean(
+    requestedBaseBuild && builds.includes(requestedBaseBuild),
+  );
+  const baseBuild = hasRequestedBaseBuild
+    ? requestedBaseBuild
+    : previousBuildNumber(builds, currentBuild);
+  const baseLabel: DiffReport["baseLabel"] = hasRequestedBaseBuild
+    ? "main"
+    : baseBuild
+      ? "previous"
+      : "none";
 
   const report = baseBuild
     ? await compareBuilds(config, baseBuild, currentBuild, prNumber, baseLabel)
     : emptyReport(config, prNumber, currentBuild);
+  report.layers = (await loadProjectConfiguration()).report?.layers;
 
-  const localReportDir = join(tmpdir(), `feature-spec-md-pr-diff-${process.pid}-${prNumber}-${currentBuild}`);
+  const localReportDir = join(
+    tmpdir(),
+    `feature-spec-md-pr-diff-${process.pid}-${prNumber}-${currentBuild}`,
+  );
   await mkdir(localReportDir, { recursive: true });
-  await writeFile(join(localReportDir, "index.html"), renderDiffReport(report), "utf8");
+  await writeFile(
+    join(localReportDir, "index.html"),
+    renderDiffReport(report),
+    "utf8",
+  );
 
-  const remoteReportDir = pathJoin(config.remoteDir, "pr", prNumber, currentBuild);
+  const remoteReportDir = pathJoin(
+    config.remoteDir,
+    "pr",
+    prNumber,
+    currentBuild,
+  );
   await uploadDirectory(localReportDir, remoteReportDir, config);
 
   const reportUrl = publicUrl(config.baseUrl, "pr", prNumber, currentBuild, "");
-  await writeGithubSummary([
-    "## Feature Spec PR Diff",
-    "",
-    `<p><strong>Diff report:</strong> <a href="${html(reportUrl)}">PR #${html(prNumber)} build ${html(currentBuild)}</a></p>`,
-    summaryComparisonSentence(report),
-    "",
-  ].join("\n"));
+  await writeGithubSummary(
+    [
+      "## Feature Spec PR Diff",
+      "",
+      `<p><strong>Diff report:</strong> <a href="${html(reportUrl)}">PR #${html(prNumber)} build ${html(currentBuild)}</a></p>`,
+      summaryComparisonSentence(report),
+      "",
+    ].join("\n"),
+  );
   await writeGithubOutput({
     "diff-report-url": reportUrl,
     "diff-comment-body": commentBody(report, reportUrl),
-    "base-build": report.baseLabel === "main" ? report.baseBuild ?? "" : "",
-    "previous-build": report.baseLabel === "previous" ? report.baseBuild ?? "" : "",
+    "base-build": report.baseLabel === "main" ? (report.baseBuild ?? "") : "",
+    "previous-build":
+      report.baseLabel === "previous" ? (report.baseBuild ?? "") : "",
     "current-build": currentBuild,
   });
   console.log(`Feature spec PR diff report uploaded to ${reportUrl}`);
@@ -141,17 +179,24 @@ export async function renderLocalDiffReport(options: LocalDiffReportOptions) {
   return renderDiffReport(await compareLocalBuilds(options));
 }
 
-async function compareLocalBuilds(options: LocalDiffReportOptions): Promise<DiffReport> {
+async function compareLocalBuilds(
+  options: LocalDiffReportOptions,
+): Promise<DiffReport> {
   const baseBuild = options.baseBuild ?? "127";
   const currentBuild = options.currentBuild ?? "128";
-  const files = await compareLocalFiles(options.previousDir, options.currentDir);
+  const files = await compareLocalFiles(
+    options.previousDir,
+    options.currentDir,
+  );
   const previousSpecs = await loadSpecSections(options.previousDir);
   const currentSpecs = await loadSpecSections(options.currentDir);
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
   const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
   const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, {
-    previousUrl: (filePath) => relativeAssetUrl(options.previousAssetUrlPrefix ?? "previous", filePath),
-    currentUrl: (filePath) => relativeAssetUrl(options.currentAssetUrlPrefix ?? "current", filePath),
+    previousUrl: (filePath) =>
+      relativeAssetUrl(options.previousAssetUrlPrefix ?? "previous", filePath),
+    currentUrl: (filePath) =>
+      relativeAssetUrl(options.currentAssetUrlPrefix ?? "current", filePath),
   });
 
   return {
@@ -164,10 +209,15 @@ async function compareLocalBuilds(options: LocalDiffReportOptions): Promise<Diff
     files,
     specDiffs,
     screenshotDiffs,
+    layers: options.layers,
   };
 }
 
-function emptyReport(config: ReturnType<typeof ftpConfig>, prNumber: string, currentBuild: string): DiffReport {
+function emptyReport(
+  config: ReturnType<typeof ftpConfig>,
+  prNumber: string,
+  currentBuild: string,
+): DiffReport {
   return {
     prNumber,
     currentBuild,
@@ -190,24 +240,49 @@ async function compareBuilds(
   const currentRoot = pathJoin(config.remoteDir, "build", currentBuild);
   const baseFiles = await listRemoteFilesRecursive(baseRoot, config);
   const currentFiles = await listRemoteFilesRecursive(currentRoot, config);
-  const baseRelative = new Set(baseFiles.map((file) => relativeRemotePath(baseRoot, file)));
-  const currentRelative = new Set(currentFiles.map((file) => relativeRemotePath(currentRoot, file)));
-  const allPaths = Array.from(new Set([...baseRelative, ...currentRelative])).sort();
-  const localRoot = join(tmpdir(), `feature-spec-md-build-compare-${process.pid}-${baseBuild}-${currentBuild}`);
+  const baseRelative = new Set(
+    baseFiles.map((file) => relativeRemotePath(baseRoot, file)),
+  );
+  const currentRelative = new Set(
+    currentFiles.map((file) => relativeRemotePath(currentRoot, file)),
+  );
+  const allPaths = Array.from(
+    new Set([...baseRelative, ...currentRelative]),
+  ).sort();
+  const localRoot = join(
+    tmpdir(),
+    `feature-spec-md-build-compare-${process.pid}-${baseBuild}-${currentBuild}`,
+  );
   const files: ComparedFile[] = [];
 
   for (const filePath of allPaths) {
-    const baseRemote = baseRelative.has(filePath) ? pathJoin(baseRoot, filePath) : undefined;
-    const currentRemote = currentRelative.has(filePath) ? pathJoin(currentRoot, filePath) : undefined;
-    const baseLocal = baseRemote ? join(localRoot, "base", filePath) : undefined;
-    const currentLocal = currentRemote ? join(localRoot, "current", filePath) : undefined;
+    const baseRemote = baseRelative.has(filePath)
+      ? pathJoin(baseRoot, filePath)
+      : undefined;
+    const currentRemote = currentRelative.has(filePath)
+      ? pathJoin(currentRoot, filePath)
+      : undefined;
+    const baseLocal = baseRemote
+      ? join(localRoot, "base", filePath)
+      : undefined;
+    const currentLocal = currentRemote
+      ? join(localRoot, "current", filePath)
+      : undefined;
 
-    if (baseRemote && baseLocal) await downloadRemoteFile(baseRemote, baseLocal, config);
-    if (currentRemote && currentLocal) await downloadRemoteFile(currentRemote, currentLocal, config);
+    if (baseRemote && baseLocal)
+      await downloadRemoteFile(baseRemote, baseLocal, config);
+    if (currentRemote && currentLocal)
+      await downloadRemoteFile(currentRemote, currentLocal, config);
 
     const baseInfo = baseLocal ? await fileInfo(baseLocal) : undefined;
     const currentInfo = currentLocal ? await fileInfo(currentLocal) : undefined;
-    const status = !baseInfo ? "added" : !currentInfo ? "removed" : baseInfo.hash === currentInfo.hash ? "unchanged" : "changed";
+    const status = !baseInfo
+      ? "added"
+      : !currentInfo
+        ? "removed"
+        : baseInfo.hash === currentInfo.hash
+          ? "unchanged"
+          : "changed";
 
     files.push({
       path: filePath,
@@ -225,8 +300,10 @@ async function compareBuilds(
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
   const scenarioToSpec = scenarioSpecMap([...previousSpecs, ...currentSpecs]);
   const screenshotDiffs = groupScreenshotDiffs(files, scenarioToSpec, {
-    previousUrl: (filePath) => publicUrl(config.baseUrl, "build", baseBuild, filePath),
-    currentUrl: (filePath) => publicUrl(config.baseUrl, "build", currentBuild, filePath),
+    previousUrl: (filePath) =>
+      publicUrl(config.baseUrl, "build", baseBuild, filePath),
+    currentUrl: (filePath) =>
+      publicUrl(config.baseUrl, "build", currentBuild, filePath),
   });
 
   return {
@@ -242,27 +319,42 @@ async function compareBuilds(
   };
 }
 
-async function compareLocalFiles(previousDir: string, currentDir: string): Promise<ComparedFile[]> {
+async function compareLocalFiles(
+  previousDir: string,
+  currentDir: string,
+): Promise<ComparedFile[]> {
   const previousFiles = await listLocalFilesRecursive(previousDir);
   const currentFiles = await listLocalFilesRecursive(currentDir);
   const previousSet = new Set(previousFiles);
   const currentSet = new Set(currentFiles);
   const allPaths = Array.from(new Set([...previousSet, ...currentSet])).sort();
 
-  return Promise.all(allPaths.map(async (filePath) => {
-    const previousInfo = previousSet.has(filePath) ? await fileInfo(join(previousDir, filePath)) : undefined;
-    const currentInfo = currentSet.has(filePath) ? await fileInfo(join(currentDir, filePath)) : undefined;
-    const status = !previousInfo ? "added" : !currentInfo ? "removed" : previousInfo.hash === currentInfo.hash ? "unchanged" : "changed";
-    return {
-      path: filePath,
-      kind: fileKind(filePath),
-      status,
-      previousHash: previousInfo?.hash,
-      currentHash: currentInfo?.hash,
-      previousSize: previousInfo?.size,
-      currentSize: currentInfo?.size,
-    };
-  }));
+  return Promise.all(
+    allPaths.map(async (filePath) => {
+      const previousInfo = previousSet.has(filePath)
+        ? await fileInfo(join(previousDir, filePath))
+        : undefined;
+      const currentInfo = currentSet.has(filePath)
+        ? await fileInfo(join(currentDir, filePath))
+        : undefined;
+      const status = !previousInfo
+        ? "added"
+        : !currentInfo
+          ? "removed"
+          : previousInfo.hash === currentInfo.hash
+            ? "unchanged"
+            : "changed";
+      return {
+        path: filePath,
+        kind: fileKind(filePath),
+        status,
+        previousHash: previousInfo?.hash,
+        currentHash: currentInfo?.hash,
+        previousSize: previousInfo?.size,
+        currentSize: currentInfo?.size,
+      };
+    }),
+  );
 }
 
 async function listLocalFilesRecursive(root: string) {
@@ -279,7 +371,9 @@ async function listLocalFilesRecursive(root: string) {
       return;
     }
     for (const entry of entries) {
-      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const relativePath = relativeDir
+        ? `${relativeDir}/${entry.name}`
+        : entry.name;
       if (entry.isDirectory()) await visit(relativePath);
       else if (entry.isFile()) files.push(relativePath);
     }
@@ -295,14 +389,27 @@ async function loadSpecSections(root: string): Promise<SpecSection[]> {
 
 async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
   const specRoot = join(root, publishedSpecRoot);
-  const files = (await listLocalFilesRecursive(specRoot)).filter(isSpecMarkdownFile);
+  const files = (await listLocalFilesRecursive(specRoot)).filter(
+    isSpecMarkdownFile,
+  );
   const sections: SpecSection[] = [];
   for (const file of files) {
     const source = await readFile(join(specRoot, file), "utf8");
     const filePath = safeRelativePath(file);
     const title = source.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? filePath;
-    const scenarioIds = Array.from(source.matchAll(/^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3})\b/gm), (match) => match[1]);
-    sections.push({ key: filePath, title, filePath, scenarioIds, text: source.trimEnd() });
+    const scenarioIds = Array.from(
+      source.matchAll(/^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3})\b/gm),
+      (match) => match[1],
+    );
+    const layer = source.match(/^layer:\s*(.+)$/m)?.[1]?.trim();
+    sections.push({
+      key: filePath,
+      title,
+      filePath,
+      scenarioIds,
+      text: source.trimEnd(),
+      layer,
+    });
   }
   return sections.sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -313,16 +420,28 @@ function isSpecMarkdownFile(filePath: string) {
 
 function previousBuildNumber(builds: string[], currentBuild: string) {
   const current = Number(currentBuild);
-  return builds.map(Number).filter((build) => Number.isFinite(build) && build < current).sort((a, b) => b - a).at(0)?.toString();
+  return builds
+    .map(Number)
+    .filter((build) => Number.isFinite(build) && build < current)
+    .sort((a, b) => b - a)
+    .at(0)
+    ?.toString();
 }
 
-function optionValue(options: GithubActionDiffReportOptions, key: string, envKey: string) {
+function optionValue(
+  options: GithubActionDiffReportOptions,
+  key: string,
+  envKey: string,
+) {
   return options[key] ?? process.env[envKey];
 }
 
 async function fileInfo(filePath: string) {
   const buffer = await readFile(filePath);
-  return { hash: createHash("sha256").update(buffer).digest("hex"), size: buffer.byteLength };
+  return {
+    hash: createHash("sha256").update(buffer).digest("hex"),
+    size: buffer.byteLength,
+  };
 }
 
 async function readFileMaybe(filePath: string) {
@@ -344,7 +463,8 @@ function safeRelativePath(filePath: string) {
 function fileKind(filePath: string): ComparedFile["kind"] {
   const name = basename(filePath).toLowerCase();
   if (filePath.startsWith("__feature-spec-md/")) return "report";
-  if (name === "index.html" || name.endsWith(".html") || name.endsWith(".json")) return "report";
+  if (name === "index.html" || name.endsWith(".html") || name.endsWith(".json"))
+    return "report";
   if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "screenshot";
   return "asset";
 }
@@ -352,18 +472,32 @@ function fileKind(filePath: string): ComparedFile["kind"] {
 function extractSpecSections(source: string): SpecSection[] {
   if (!source) return [];
   const sections: SpecSection[] = [];
-  const matches = source.matchAll(/<section class="panel">([\s\S]*?)(?=<section class="panel">|<script>|<\/body>)/g);
+  const matches = source.matchAll(
+    /<section class="panel">([\s\S]*?)(?=<section class="panel">|<script>|<\/body>)/g,
+  );
   for (const match of matches) {
     const fragment = match[1] ?? "";
     const heading = fragment.match(/<h2[^>]*>([\s\S]*?)<\/h2>/)?.[1];
     if (!heading) continue;
     const title = textContent(heading).trim();
     if (!title || title === "Validation" || title === "Models") continue;
-    const filePaths = Array.from(fragment.matchAll(/title="([^":]+\.md):\d+"/g), (item) => item[1]);
-    const scenarioIds = Array.from(fragment.matchAll(/<summary><code>([^<]+)<\/code>/g), (item) => textContent(item[1] ?? ""));
+    const filePaths = Array.from(
+      fragment.matchAll(/title="([^":]+\.md):\d+"/g),
+      (item) => item[1],
+    );
+    const scenarioIds = Array.from(
+      fragment.matchAll(/<summary><code>([^<]+)<\/code>/g),
+      (item) => textContent(item[1] ?? ""),
+    );
     const text = specText(fragment);
     const filePath = filePaths[0];
-    sections.push({ key: filePath ?? title, title, filePath, scenarioIds, text });
+    sections.push({
+      key: filePath ?? title,
+      title,
+      filePath,
+      scenarioIds,
+      text,
+    });
   }
   return sections;
 }
@@ -394,15 +528,26 @@ function decodeEntities(value: string) {
     .replace(/&amp;/g, "&");
 }
 
-function compareSpecSections(previous: SpecSection[], current: SpecSection[]): SpecDiff[] {
+function compareSpecSections(
+  previous: SpecSection[],
+  current: SpecSection[],
+): SpecDiff[] {
   const previousByKey = new Map(previous.map((spec) => [spec.key, spec]));
   const currentByKey = new Map(current.map((spec) => [spec.key, spec]));
-  const keys = Array.from(new Set([...previousByKey.keys(), ...currentByKey.keys()])).sort();
+  const keys = Array.from(
+    new Set([...previousByKey.keys(), ...currentByKey.keys()]),
+  ).sort();
   const diffs: SpecDiff[] = [];
   for (const key of keys) {
     const before = previousByKey.get(key);
     const after = currentByKey.get(key);
-    const status = !before ? "added" : !after ? "removed" : before.text === after.text ? undefined : "changed";
+    const status = !before
+      ? "added"
+      : !after
+        ? "removed"
+        : before.text === after.text
+          ? undefined
+          : "changed";
     if (!status) continue;
     diffs.push({
       key,
@@ -410,6 +555,7 @@ function compareSpecSections(previous: SpecSection[], current: SpecSection[]): S
       filePath: after?.filePath ?? before?.filePath,
       status,
       lines: diffLines(before?.text ?? "", after?.text ?? ""),
+      layer: after?.layer ?? before?.layer,
     });
   }
   return diffs;
@@ -418,10 +564,15 @@ function compareSpecSections(previous: SpecSection[], current: SpecSection[]): S
 function diffLines(previous: string, current: string): DiffLine[] {
   const a = previous.split("\n");
   const b = current.split("\n");
-  const matrix = Array.from({ length: a.length + 1 }, () => Array<number>(b.length + 1).fill(0));
+  const matrix = Array.from({ length: a.length + 1 }, () =>
+    Array<number>(b.length + 1).fill(0),
+  );
   for (let i = a.length - 1; i >= 0; i -= 1) {
     for (let j = b.length - 1; j >= 0; j -= 1) {
-      matrix[i][j] = a[i] === b[j] ? matrix[i + 1][j + 1] + 1 : Math.max(matrix[i + 1][j], matrix[i][j + 1]);
+      matrix[i][j] =
+        a[i] === b[j]
+          ? matrix[i + 1][j + 1] + 1
+          : Math.max(matrix[i + 1][j], matrix[i][j + 1]);
     }
   }
   const lines: DiffLine[] = [];
@@ -429,10 +580,18 @@ function diffLines(previous: string, current: string): DiffLine[] {
   let j = 0;
   while (i < a.length || j < b.length) {
     if (i < a.length && j < b.length && a[i] === b[j]) {
-      lines.push({ kind: "context", previousLine: i + 1, currentLine: j + 1, text: a[i] });
+      lines.push({
+        kind: "context",
+        previousLine: i + 1,
+        currentLine: j + 1,
+        text: a[i],
+      });
       i += 1;
       j += 1;
-    } else if (j < b.length && (i === a.length || matrix[i][j + 1] >= matrix[i + 1][j])) {
+    } else if (
+      j < b.length &&
+      (i === a.length || matrix[i][j + 1] >= matrix[i + 1][j])
+    ) {
       lines.push({ kind: "added", currentLine: j + 1, text: b[j] });
       j += 1;
     } else if (i < a.length) {
@@ -452,7 +611,9 @@ function compactContext(lines: DiffLine[]) {
       if (candidate >= 0 && candidate < lines.length) keep.add(candidate);
     }
   });
-  return lines.filter((line, index) => line.kind !== "context" || keep.has(index));
+  return lines.filter(
+    (line, index) => line.kind !== "context" || keep.has(index),
+  );
 }
 
 function scenarioSpecMap(specs: SpecSection[]) {
@@ -472,23 +633,35 @@ function groupScreenshotDiffs(
   },
 ): ScreenshotDiffGroup[] {
   const groups = new Map<string, ScreenshotDiffGroup>();
-  for (const file of files.filter((item) => item.kind === "screenshot" && item.status !== "unchanged")) {
+  for (const file of files.filter(
+    (item) => item.kind === "screenshot" && item.status !== "unchanged",
+  )) {
     const scenarioId = scenarioIdFromScreenshotPath(file.path);
     const spec = scenarioId ? scenarioMap.get(scenarioId) : undefined;
-    const specLabel = spec?.filePath ?? spec?.title ?? scenarioId ?? "Unmapped screenshots";
-    const group = groups.get(specLabel) ?? { specLabel, specPath: spec?.filePath, items: [] };
+    const specLabel =
+      spec?.filePath ?? spec?.title ?? scenarioId ?? "Unmapped screenshots";
+    const group = groups.get(specLabel) ?? {
+      specLabel,
+      specPath: spec?.filePath,
+      items: [],
+      layer: spec?.layer,
+    };
     group.items.push({
       path: file.path,
       title: screenshotTitle(file.path, scenarioId),
       status: file.status,
-      previousUrl: file.status !== "added" ? urls.previousUrl(file.path) : undefined,
-      currentUrl: file.status !== "removed" ? urls.currentUrl(file.path) : undefined,
+      previousUrl:
+        file.status !== "added" ? urls.previousUrl(file.path) : undefined,
+      currentUrl:
+        file.status !== "removed" ? urls.currentUrl(file.path) : undefined,
       previousSize: file.previousSize,
       currentSize: file.currentSize,
     });
     groups.set(specLabel, group);
   }
-  return Array.from(groups.values()).sort((a, b) => a.specLabel.localeCompare(b.specLabel));
+  return Array.from(groups.values()).sort((a, b) =>
+    a.specLabel.localeCompare(b.specLabel),
+  );
 }
 
 function scenarioIdFromScreenshotPath(filePath: string) {
@@ -501,11 +674,15 @@ function screenshotTitle(filePath: string, scenarioId: string | undefined) {
 }
 
 function relativeAssetUrl(prefix: string, filePath: string) {
-  return [prefix.replace(/\/+$/, ""), ...filePath.split("/").filter(Boolean)].filter(Boolean).join("/");
+  return [prefix.replace(/\/+$/, ""), ...filePath.split("/").filter(Boolean)]
+    .filter(Boolean)
+    .join("/");
 }
 
 function renderDiffReport(report: DiffReport) {
-  const changed = report.files.filter((file) => file.status !== "unchanged" && file.kind !== "report");
+  const changed = report.files.filter(
+    (file) => file.status !== "unchanged" && file.kind !== "report",
+  );
   const assetChanges = changed.filter((file) => file.kind === "asset");
   return renderHtmlPage({
     title: "Feature spec PR diff",
@@ -515,35 +692,39 @@ function renderDiffReport(report: DiffReport) {
 <h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1>
 <p>Generated ${html(new Date().toISOString())}.</p>
 <section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>
-${renderSpecDiffs(report.specDiffs)}
-${renderScreenshotDiffs(report.screenshotDiffs)}
+${renderSpecDiffs(report.specDiffs, report.layers)}
+${renderScreenshotDiffs(report.screenshotDiffs, report.layers)}
 ${renderFileSection("Other assets", assetChanges)}
 `,
   });
 }
 
 function diffReportStyles() {
-  return `.panel{border:1px solid #d0d7de;border-radius:8px;padding:20px;margin:18px 0}
-.badge{border:1px solid #d0d7de;border-radius:999px;padding:2px 8px;font-size:12px}
-.added{color:#1a7f37}.removed{color:#cf222e}.changed{color:#9a6700}.muted{color:#57606a}
+  return `.panel{border:1px solid var(--border);border-radius:8px;padding:20px;margin:18px 0}
+.badge{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px}
+.added{color:var(--success)}.removed{color:var(--danger)}.changed{color:var(--warning)}.muted{color:var(--muted)}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
-.screenshot-toggle-button{border:1px solid #d0d7de;border-radius:6px;background:#f6f8fa;color:#1f2328;cursor:pointer;font:inherit;padding:6px 10px}
-.screenshot-toggle-button:hover{background:#eef2f6}
+.screenshot-toggle-button{border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;padding:6px 10px}
+.screenshot-toggle-button:hover{background:var(--surface-hover)}
+.diff-layer{border-top:1px solid var(--border);padding:10px 0}.diff-layer>summary{cursor:pointer;font-size:16px;margin-bottom:8px}.diff-layer-body{padding-left:12px}
 table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}
-th{background:#f6f8fa}a{color:#0969da}
+th,td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--surface-muted)}a{color:var(--link)}
 .diff{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
-.diff td{padding:2px 8px}.line-no{width:1%;color:#57606a;background:#f6f8fa;text-align:right;user-select:none}
-.diff-added td{background:#dafbe1}.diff-removed td{background:#ffebe9}.diff-context td{background:#fff}
-.screenshot-diff{border-top:1px solid #d0d7de;padding:10px 0}.screenshot-diff summary{cursor:pointer;margin-bottom:8px}
-.image-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
-.image-card{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;overflow:hidden}
-.image-card h4{margin:0;padding:8px 10px;background:#fff;border-bottom:1px solid #d0d7de}.image-card img{display:block;width:100%;height:auto}`;
+.diff td{padding:2px 8px}.line-no{width:1%;color:var(--muted);background:var(--surface-muted);text-align:right;user-select:none}
+.diff-added td{background:var(--diff-added)}.diff-removed td{background:var(--diff-removed)}.diff-context td{background:var(--surface)}
+.screenshot-diff{border-top:1px solid var(--border);padding:10px 0}.screenshot-diff summary{cursor:pointer;margin-bottom:8px}
+.image-pair-scroll{overflow-x:auto}.image-pair{display:grid;grid-template-columns:minmax(280px,1fr);gap:12px}.image-pair.paired{grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);min-width:572px}
+.image-card{border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
+.image-card.before{border:3px solid var(--danger)}.image-card.after{border:3px solid var(--success)}
+.image-card.before h4{color:var(--danger)}.image-card.after h4{color:var(--success)}
+.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:100%;height:auto}`;
 }
 
-function renderSpecDiffs(specDiffs: SpecDiff[]) {
-  if (!specDiffs.length) return `<section class="panel"><h2>Spec changes</h2><p class="muted">No spec source changes detected.</p></section>`;
-  return `<section class="panel"><h2>Spec changes</h2><p class="muted">Diffed from published Markdown files under the specs directory, not from rendered report HTML.</p>${specDiffs.map(renderSpecDiff).join("\n")}</section>`;
+function renderSpecDiffs(specDiffs: SpecDiff[], layers: ReportLayer[] = []) {
+  if (!specDiffs.length)
+    return `<section class="panel"><h2>Spec changes</h2><p class="muted">No spec source changes detected.</p></section>`;
+  return `<section class="panel"><h2>Spec changes</h2><p class="muted">Diffed from published Markdown files under the specs directory, not from rendered report HTML.</p>${renderLayerGroups(specDiffs, layers, renderSpecDiff)}</section>`;
 }
 
 function renderSpecDiff(diff: SpecDiff) {
@@ -551,13 +732,47 @@ function renderSpecDiff(diff: SpecDiff) {
 }
 
 function renderDiffLine(line: DiffLine) {
-  const marker = line.kind === "added" ? "+" : line.kind === "removed" ? "-" : "";
+  const marker =
+    line.kind === "added" ? "+" : line.kind === "removed" ? "-" : "";
   return `<tr class="diff-${line.kind}"><td class="line-no">${line.previousLine ?? ""}</td><td class="line-no">${line.currentLine ?? ""}</td><td>${html(marker)} ${html(line.text)}</td></tr>`;
 }
 
-function renderScreenshotDiffs(groups: ScreenshotDiffGroup[]) {
-  if (!groups.length) return `<section class="panel"><h2>Screenshots</h2><p class="muted">No screenshot changes.</p></section>`;
-  return `<section class="panel"><h2>Screenshots</h2><div class="toolbar"><button class="screenshot-toggle-button" type="button" data-show-label="Show all screenshots" data-hide-label="Hide all screenshots">Show all screenshots</button></div>${groups.map(renderScreenshotGroup).join("\n")}</section>`;
+function renderScreenshotDiffs(
+  groups: ScreenshotDiffGroup[],
+  layers: ReportLayer[] = [],
+) {
+  if (!groups.length)
+    return `<section class="panel"><h2>Screenshots</h2><p class="muted">No screenshot changes.</p></section>`;
+  return `<section class="panel"><h2>Screenshots</h2><div class="toolbar"><button class="screenshot-toggle-button" type="button" data-show-label="Show all screenshots" data-hide-label="Hide all screenshots">Show all screenshots</button></div>${renderLayerGroups(groups, layers, renderScreenshotGroup)}</section>`;
+}
+
+function renderLayerGroups<T extends { layer?: string }>(
+  items: T[],
+  layers: ReportLayer[],
+  renderItem: (item: T) => string,
+) {
+  if (!layers.length) return items.map(renderItem).join("\n");
+  const layerIds = new Set(layers.map((layer) => layer.id));
+  const configured = layers
+    .map((layer) => ({
+      layer,
+      items: items.filter((item) => item.layer === layer.id),
+    }))
+    .filter((group) => group.items.length);
+  const other = items.filter(
+    (item) => !item.layer || !layerIds.has(item.layer),
+  );
+  if (other.length)
+    configured.push({
+      layer: { id: "other", title: "Other" },
+      items: other,
+    });
+  return configured
+    .map(
+      ({ layer, items }) =>
+        `<details class="diff-layer" open><summary><strong>${html(layer.title)}</strong> <span class="badge">${items.length}</span></summary><div class="diff-layer-body">${items.map(renderItem).join("\n")}</div></details>`,
+    )
+    .join("\n");
 }
 
 function renderScreenshotGroup(group: ScreenshotDiffGroup) {
@@ -565,20 +780,27 @@ function renderScreenshotGroup(group: ScreenshotDiffGroup) {
 }
 
 function renderScreenshotItem(item: ScreenshotDiffItem) {
-  const before = item.previousUrl ? `<div class="image-card"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}"></div>` : "";
-  const after = item.currentUrl ? `<div class="image-card"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}"></div>` : "";
-  return `<details class="screenshot-diff"><summary><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair">${before}${after}</div></details>`;
+  const before = item.previousUrl
+    ? `<div class="image-card before"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}" data-lightbox tabindex="0"></div>`
+    : "";
+  const after = item.currentUrl
+    ? `<div class="image-card after"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}" data-lightbox tabindex="0"></div>`
+    : "";
+  const pairClass = before && after ? " paired" : "";
+  return `<details class="screenshot-diff"><summary><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll"><div class="image-pair${pairClass}">${before}${after}</div></div></details>`;
 }
 
 function renderScreenshotToggleScript() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
-  const source = "(function(){var button=document.querySelector('.screenshot-toggle-button');if(!button)return;var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}button.addEventListener('click',function(){expanded=!expanded;apply();});apply();})();";
+  const source =
+    "(function(){var button=document.querySelector('.screenshot-toggle-button');if(!button)return;var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}button.addEventListener('click',function(){expanded=!expanded;apply();});apply();})();";
   return openTag + source + closeTag;
 }
 
 function renderFileSection(title: string, files: ComparedFile[]) {
-  if (!files.length) return `<section class="panel"><h2>${html(title)}</h2><p class="muted">No changes.</p></section>`;
+  if (!files.length)
+    return `<section class="panel"><h2>${html(title)}</h2><p class="muted">No changes.</p></section>`;
   return `<section class="panel"><h2>${html(title)}</h2><table><thead><tr><th>Status</th><th>File</th><th>Size change</th></tr></thead><tbody>${files.map((file) => `<tr><td class="${file.status}">${html(file.status)}</td><td><code>${html(file.path)}</code></td><td>${html(sizeChange(file))}</td></tr>`).join("")}</tbody></table></section>`;
 }
 
@@ -590,7 +812,10 @@ function sizeChange(file: { previousSize?: number; currentSize?: number }) {
 }
 
 function screenshotChangeCount(report: DiffReport) {
-  return report.screenshotDiffs.reduce((sum, group) => sum + group.items.length, 0);
+  return report.screenshotDiffs.reduce(
+    (sum, group) => sum + group.items.length,
+    0,
+  );
 }
 
 function commentBody(report: DiffReport, reportUrl: string) {
@@ -609,7 +834,8 @@ function comparisonText(report: DiffReport) {
 }
 
 function summaryComparisonSentence(report: DiffReport) {
-  if (!report.baseBuild) return `<p>No base build was found, so this report establishes the first comparison baseline.</p>`;
+  if (!report.baseBuild)
+    return `<p>No base build was found, so this report establishes the first comparison baseline.</p>`;
   return `<p>Compared ${html(baseLabel(report).toLowerCase())} build <strong>${html(report.baseBuild)}</strong> with PR build <strong>${html(report.currentBuild)}</strong>.</p>`;
 }
 

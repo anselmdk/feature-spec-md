@@ -1,8 +1,24 @@
-import { draftReply, priorityBadge, visibleTickets } from "../app/supportDesk.js";
+import {
+  draftReply,
+  priorityBadge,
+  visibleTickets,
+} from "../app/supportDesk.js";
 
 const tickets = [
-  { id: "T-2", title: "Newer", status: "open" as const, priority: "high" as const, createdAt: "2026-01-02T10:00:00Z" },
-  { id: "T-1", title: "Older", status: "open" as const, priority: "normal" as const, createdAt: "2026-01-01T10:00:00Z" },
+  {
+    id: "T-2",
+    title: "Newer",
+    status: "open" as const,
+    priority: "high" as const,
+    createdAt: "2026-01-02T10:00:00Z",
+  },
+  {
+    id: "T-1",
+    title: "Older",
+    status: "open" as const,
+    priority: "normal" as const,
+    createdAt: "2026-01-01T10:00:00Z",
+  },
 ];
 
 export function verifiesTicketInboxMock() {
