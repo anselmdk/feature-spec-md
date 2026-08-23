@@ -117,6 +117,7 @@ describe("feature-spec-md", () => {
     assert.match(html, /data-navigator-target="layer-capability"/);
     assert.match(html, /data-navigator-target="account"/);
     assert.match(html, /data-navigator-scenarios-target="account"/);
+    assert.doesNotMatch(html, /data-details-selector="details\.layer-section"/);
 
     const defaultOpenHtml = renderHtmlReport([spec], {
       layers: configuration.report?.layers,

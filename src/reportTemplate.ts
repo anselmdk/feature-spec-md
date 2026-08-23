@@ -479,7 +479,7 @@ function renderLayeredDocuments(
 
   return `${renderReportNavigator(layers)}
 <section class="report-layers" data-details-section>
-  <div class="details-section-header"><h2>Specification layers</h2>${renderDetailsToggleButton("details.layer-section", "layers")}</div>
+  <div class="details-section-header"><h2>Specification layers</h2></div>
   ${layers
     .map((layer) =>
       renderLayer(
