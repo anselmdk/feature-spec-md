@@ -107,11 +107,24 @@ describe("feature-spec-md", () => {
     );
     assert.match(html, /1 document/);
     assert.match(html, /Toggle dark mode/);
+    assert.match(html, /bottom: 12px; left: 12px/);
+    assert.match(html, /dark\?"☀":"☾"/);
     assert.match(html, /class="image-lightbox"/);
     assert.match(html, /aria-label="Report navigation"/);
-    assert.match(html, /data-navigator-toggle-current/);
+    assert.doesNotMatch(html, /data-navigator-toggle-current/);
+    assert.doesNotMatch(html, /data-navigator-previous/);
+    assert.doesNotMatch(html, /data-navigator-next/);
     assert.match(html, /data-navigator-target="layer-capability"/);
     assert.match(html, /data-navigator-target="account"/);
+    assert.match(html, /data-navigator-scenarios-target="account"/);
+
+    const defaultOpenHtml = renderHtmlReport([spec], {
+      layers: configuration.report?.layers,
+    });
+    assert.match(
+      defaultOpenHtml,
+      /<details id="layer-capability" class="layer-section"[^>]* open/,
+    );
   });
 
   it("warns for unassigned documents and rejects unknown report layers", () => {

@@ -254,10 +254,10 @@ npx feature-spec-md report \
 
 This gate only fails for scenarios whose resolved screenshot policy is `required`. In GitHub Actions, the report also includes source links and report metadata derived from the repository, ref, SHA, run, build number, and pull request context when available.
 
-Reports include a persistent light/dark theme toggle. Screenshot evidence is
-clickable and opens at its native size in a scrollable full-screen viewer. PR
-diff reports keep before and after images side by side, with red and green
-borders respectively.
+Reports include a persistent moon/sun light/dark theme toggle in the lower-left
+corner. Screenshot evidence is clickable and opens at its native size in a
+scrollable full-screen viewer. PR diff reports keep before and after images side
+by side, with red and green borders respectively.
 
 Projects can group model, stack, design, and feature documents into collapsible
 report layers. Add a `layer` to each document's frontmatter and define the
@@ -298,11 +298,13 @@ ordered layer catalogue in `package.json`:
 
 When layers are configured, unassigned documents remain visible in an `Other`
 layer and produce a warning; unknown layer ids are errors. Deep links open all
-containing layers and documents automatically. A fixed report navigator follows
-the reader's current layer or document, provides previous/next and
-expand/collapse-current controls, and offers direct links to the complete layer
-hierarchy. It collapses into a compact floating control on narrower screens.
-Projects without layer configuration retain the flat report layout.
+containing layers and documents automatically. Layers start open unless the
+project sets `layersDefaultOpen` to `false`. A fixed report navigator follows
+the reader's current layer or document. Its layer and document controls directly
+toggle the corresponding report sections, and feature documents include a
+separate control for opening or closing all their scenarios. It collapses into a
+compact floating control on narrower screens. Projects without layer
+configuration retain the flat report layout.
 
 ### `github-report`
 

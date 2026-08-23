@@ -168,11 +168,11 @@ function featureReportStyles() {
 .details-section-header h2,.details-section-header h3{margin-bottom:0}
 .details-toggle-button{appearance:none;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;white-space:nowrap}
 .details-toggle-button:hover{background:var(--surface-hover)}.details-toggle-button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
-.report-navigator{position:fixed;z-index:19;right:12px;top:54px;width:min(320px,calc(100vw - 24px));border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(31,35,40,.16)}
-.navigator-trigger{appearance:none;display:flex;gap:8px;align-items:center;width:100%;border:0;border-radius:10px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;padding:9px 12px;text-align:left}.navigator-trigger:hover{background:var(--surface-hover)}.navigator-trigger:focus-visible,.navigator-control:focus-visible,.navigator-link:focus-visible{outline:2px solid var(--link);outline-offset:-2px}
-.navigator-current{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}.navigator-chevron{color:var(--muted);font-size:11px;transition:transform .15s ease}.report-navigator[data-open="true"] .navigator-chevron{transform:rotate(180deg)}
-.navigator-menu{display:none;border-top:1px solid var(--border);padding:10px}.report-navigator[data-open="true"] .navigator-menu{display:block}.navigator-controls{display:grid;grid-template-columns:auto 1fr auto;gap:6px;margin-bottom:8px}.navigator-control{appearance:none;border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;font-size:12px;font-weight:600;padding:6px 9px}.navigator-control:hover:not(:disabled){background:var(--surface-hover)}.navigator-control:disabled{cursor:default;opacity:.45}
-.navigator-links{max-height:calc(100vh - 180px);overflow:auto;padding:2px}.navigator-layer{margin:6px 0 2px}.navigator-link{display:block;width:100%;border:0;border-radius:5px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;font-size:13px;padding:6px 8px;text-align:left;text-decoration:none}.navigator-link:hover{background:var(--surface-hover)}.navigator-link[aria-current="location"]{background:var(--surface-muted);box-shadow:inset 3px 0 var(--link);font-weight:650}.navigator-document{padding-left:22px;color:var(--muted)}.navigator-document[aria-current="location"]{color:var(--fg)}
+.report-navigator{position:fixed;z-index:19;right:12px;top:12px;width:min(320px,calc(100vw - 24px));border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(31,35,40,.16)}
+.navigator-trigger{appearance:none;display:flex;align-items:center;width:100%;border:0;border-radius:10px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;padding:9px 12px;text-align:left}.navigator-trigger:hover{background:var(--surface-hover)}.navigator-trigger:focus-visible,.navigator-link:focus-visible,.navigator-scenarios:focus-visible{outline:2px solid var(--link);outline-offset:-2px}
+.navigator-current{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}
+.navigator-menu{display:none;border-top:1px solid var(--border);padding:10px}.report-navigator[data-open="true"] .navigator-menu{display:block}
+.navigator-links{max-height:calc(100vh - 100px);overflow:auto;padding:2px}.navigator-layer{margin:6px 0 2px}.navigator-row{display:flex;align-items:center;gap:4px}.navigator-link{appearance:none;display:flex;align-items:center;gap:7px;width:100%;min-width:0;border:0;border-radius:5px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;font-size:13px;padding:6px 8px;text-align:left}.navigator-link:hover,.navigator-scenarios:hover{background:var(--surface-hover)}.navigator-link[aria-current="location"]{background:var(--surface-muted);box-shadow:inset 3px 0 var(--link);font-weight:650}.navigator-toggle-state{flex:0 0 auto;width:13px;color:var(--muted);font-size:10px;text-align:center}.navigator-link[aria-pressed="true"]>.navigator-toggle-state::before{content:"●"}.navigator-link[aria-pressed="false"]>.navigator-toggle-state::before{content:"○"}.navigator-link-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.navigator-document{padding-left:22px;color:var(--muted)}.navigator-document[aria-current="location"]{color:var(--fg)}.navigator-scenarios{appearance:none;flex:0 0 auto;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;font:inherit;font-size:11px;padding:3px 7px}.navigator-scenarios[aria-pressed="true"]{background:var(--surface-muted);color:var(--fg)}
 .feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
 .scenario{border:1px solid var(--border);border-radius:8px;margin:12px 0;background:var(--surface)}
 .scenario summary{cursor:pointer;padding:14px 16px;font-weight:600}
@@ -201,7 +201,7 @@ h1 a{color:var(--link);text-decoration:underline;text-underline-offset:3px}h1 a:
 .mermaid-wrap{overflow-x:auto;margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .mermaid{min-width:max-content;text-align:center}.mermaid svg{display:block;max-width:none;height:auto;margin:0 auto}
 .mermaid-error{color:var(--danger);text-align:left;white-space:pre-wrap}
-@media(min-width:1600px){.report-navigator{width:220px}.report-navigator .navigator-menu{display:block}.report-navigator .navigator-chevron{display:none}}
+@media(min-width:1600px){.report-navigator{width:260px}.report-navigator .navigator-menu{display:block}}
 @media(max-width:720px){.flag-grid{grid-template-columns:1fr}.layer-summary{align-items:flex-start;flex-wrap:wrap}.layer-badges{justify-content:flex-start;width:100%}}`;
 }
 
@@ -281,14 +281,11 @@ function initializeReportNavigator() {
   if (!(navigator instanceof HTMLElement)) return;
   const trigger = navigator.querySelector("[data-navigator-trigger]");
   const currentLabel = navigator.querySelector("[data-navigator-current]");
-  const toggleCurrent = navigator.querySelector("[data-navigator-toggle-current]");
-  const previous = navigator.querySelector("[data-navigator-previous]");
-  const next = navigator.querySelector("[data-navigator-next]");
   const entries = Array.from(navigator.querySelectorAll("[data-navigator-target]"));
+  const scenarioButtons = Array.from(navigator.querySelectorAll("[data-navigator-scenarios-target]"));
   const targets = entries
     .map((entry) => document.getElementById(entry.dataset.navigatorTarget))
     .filter((target) => target instanceof HTMLDetailsElement);
-  let activeIndex = 0;
   let frame = 0;
   let lockedTarget = null;
 
@@ -309,16 +306,21 @@ function initializeReportNavigator() {
         else break;
       }
     }
-    activeIndex = targets.indexOf(active);
     entries.forEach((entry) => {
       if (entry.dataset.navigatorTarget === active.id) entry.setAttribute("aria-current", "location");
       else entry.removeAttribute("aria-current");
     });
     const activeEntry = entries.find((entry) => entry.dataset.navigatorTarget === active.id);
     if (currentLabel) currentLabel.textContent = activeEntry?.textContent?.trim() || active.id;
-    if (toggleCurrent) toggleCurrent.textContent = active.open ? "Collapse current" : "Expand current";
-    if (previous instanceof HTMLButtonElement) previous.disabled = activeIndex <= 0;
-    if (next instanceof HTMLButtonElement) next.disabled = activeIndex >= targets.length - 1;
+    entries.forEach((entry) => {
+      const target = document.getElementById(entry.dataset.navigatorTarget);
+      if (target instanceof HTMLDetailsElement) entry.setAttribute("aria-pressed", String(target.open));
+    });
+    scenarioButtons.forEach((button) => {
+      const documentSection = document.getElementById(button.dataset.navigatorScenariosTarget);
+      const scenarios = Array.from(documentSection?.querySelectorAll("details.scenario") ?? []);
+      button.setAttribute("aria-pressed", String(scenarios.length > 0 && scenarios.every((scenario) => scenario.open)));
+    });
   }
 
   function requestActiveUpdate() {
@@ -326,7 +328,7 @@ function initializeReportNavigator() {
     frame = requestAnimationFrame(updateActiveSection);
   }
 
-  function jumpTo(index) {
+  function toggleAndJumpTo(index) {
     const target = targets[index];
     if (!target) return;
     lockedTarget = target;
@@ -335,6 +337,7 @@ function initializeReportNavigator() {
       ancestor.open = true;
       ancestor = ancestor.parentElement?.closest("details");
     }
+    target.open = !target.open;
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     history.replaceState(null, "", "#" + target.id);
     if (window.innerWidth < 1600) setMenuOpen(false);
@@ -344,16 +347,25 @@ function initializeReportNavigator() {
   trigger?.addEventListener("click", () => setMenuOpen(navigator.dataset.open !== "true"));
   entries.forEach((entry, index) => entry.addEventListener("click", (event) => {
     event.preventDefault();
-    jumpTo(index);
+    toggleAndJumpTo(index);
   }));
-  toggleCurrent?.addEventListener("click", () => {
-    const target = targets[activeIndex];
-    if (!target) return;
-    target.open = !target.open;
+  scenarioButtons.forEach((button) => button.addEventListener("click", () => {
+    const documentSection = document.getElementById(button.dataset.navigatorScenariosTarget);
+    if (!(documentSection instanceof HTMLDetailsElement)) return;
+    let ancestor = documentSection.parentElement?.closest("details");
+    while (ancestor) {
+      ancestor.open = true;
+      ancestor = ancestor.parentElement?.closest("details");
+    }
+    documentSection.open = true;
+    const scenarios = Array.from(documentSection.querySelectorAll("details.scenario"));
+    const shouldOpen = !scenarios.every((scenario) => scenario.open);
+    scenarios.forEach((scenario) => {
+      bulkToggledDetails.add(scenario);
+      scenario.open = shouldOpen;
+    });
     requestActiveUpdate();
-  });
-  previous?.addEventListener("click", () => jumpTo(activeIndex - 1));
-  next?.addEventListener("click", () => jumpTo(activeIndex + 1));
+  }));
   window.addEventListener("scroll", requestActiveUpdate, { passive: true });
   window.addEventListener("resize", requestActiveUpdate);
   window.addEventListener("wheel", () => { lockedTarget = null; requestActiveUpdate(); }, { passive: true });
@@ -475,7 +487,7 @@ function renderLayeredDocuments(
         options,
         evidence,
         sourceLinks,
-        options.layersDefaultOpen ?? false,
+        options.layersDefaultOpen ?? true,
         options.documentsDefaultOpen ?? false,
       ),
     )
@@ -489,14 +501,15 @@ function renderReportNavigator(
   const entries = layers
     .map(
       (layer) => `<div class="navigator-layer">
-    ${renderNavigatorLink(`layer-${layer.id}`, layer.title, "navigator-layer-link")}
+    <div class="navigator-row">${renderNavigatorLink(`layer-${layer.id}`, layer.title, "navigator-layer-link")}</div>
     ${layer.documents
-      .map((document) =>
-        renderNavigatorLink(
-          document.frontmatter.id.toLowerCase(),
-          document.title,
-          "navigator-document",
-        ),
+      .map(
+        (document) =>
+          `<div class="navigator-row">${renderNavigatorLink(
+            document.frontmatter.id.toLowerCase(),
+            document.title,
+            "navigator-document",
+          )}${renderNavigatorScenarioButton(document)}</div>`,
       )
       .join("")}
   </div>`,
@@ -506,21 +519,22 @@ function renderReportNavigator(
   return `<nav class="report-navigator" data-report-navigator data-open="false" aria-label="Report navigation">
   <button class="navigator-trigger" type="button" data-navigator-trigger aria-expanded="false">
     <span class="navigator-current" data-navigator-current>${html(firstTitle)}</span>
-    <span class="navigator-chevron" aria-hidden="true">▼</span>
   </button>
   <div class="navigator-menu">
-    <div class="navigator-controls">
-      <button class="navigator-control" type="button" data-navigator-previous aria-label="Previous report section">←</button>
-      <button class="navigator-control" type="button" data-navigator-toggle-current>Expand current</button>
-      <button class="navigator-control" type="button" data-navigator-next aria-label="Next report section">→</button>
-    </div>
     <div class="navigator-links">${entries}</div>
   </div>
 </nav>`;
 }
 
 function renderNavigatorLink(id: string, title: string, className: string) {
-  return `<a class="navigator-link ${className}" href="#${html(id)}" data-navigator-target="${html(id)}">${html(title)}</a>`;
+  return `<button class="navigator-link ${className}" type="button" data-navigator-target="${html(id)}" aria-pressed="false"><span class="navigator-toggle-state" aria-hidden="true"></span><span class="navigator-link-label">${html(title)}</span></button>`;
+}
+
+function renderNavigatorScenarioButton(document: ReportDocument) {
+  if (document.kind !== "feature" && document.kind !== undefined) return "";
+  if (!document.scenarios.length) return "";
+  const id = document.frontmatter.id.toLowerCase();
+  return `<button class="navigator-scenarios" type="button" data-navigator-scenarios-target="${html(id)}" aria-label="Toggle scenarios for ${html(document.title)}" aria-pressed="false">Scenarios</button>`;
 }
 
 function renderLayer(
