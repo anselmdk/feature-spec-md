@@ -12,12 +12,11 @@ model + features + stack + design
 
 ## See the workflow in action
 
-The clearest example of what this library can deliver is the demo feature PR workflow:
+The clearest example of what this library can deliver is the published demo and its repository:
 
 - **Latest library mock reports:** <https://feature-spec-md.anselm.dk/mocks/latest/>
-- **Feature PR:** <https://github.com/anselmdk/feature-spec-md-demo/pull/16>
-- **Feature spec report:** <https://feature-spec-md.anselm.dk/demo/build/269/>
-- **Feature spec diff:** <https://feature-spec-md.anselm.dk/demo/pr/16/269/>
+- **Latest demo report:** <https://feature-spec-md.anselm.dk/demo/latest/>
+- **Demo repository:** <https://github.com/anselmdk/feature-spec-md-demo>
 
 PRs like this are the essence of `feature-spec-md`: a feature branch can carry the product/spec/code change, a published feature spec report can show the full implementation state, and a PR diff report can show exactly what changed in the specs, rendered report, and screenshot evidence.
 
@@ -46,7 +45,7 @@ A complete demo app is available in [`anselmdk/feature-spec-md-demo`](https://gi
 
 Demo reports, including scenario screenshots, are available here:
 
-<https://feature-spec-md.anselm.dk/demo/>
+<https://feature-spec-md.anselm.dk/demo/latest/>
 
 Use the demo repository when you want to see the expected project shape, script names, screenshot manifest flow, CI publishing setup, PR comments, and report output in a real app.
 
