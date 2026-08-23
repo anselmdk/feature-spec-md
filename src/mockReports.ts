@@ -115,7 +115,7 @@ export async function renderMockFeatureSpecReport(
       githubRef: variant === "current" ? "abc1234" : "def5678",
       repositoryUrl: "https://github.com/anselmdk/feature-spec-md",
       layers: mockLayers,
-      layersDefaultOpen: false,
+      layersDefaultOpen: true,
       documentsDefaultOpen: false,
     }),
     data.metadata,

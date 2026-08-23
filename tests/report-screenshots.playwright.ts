@@ -82,16 +82,20 @@ Then account access is granted
   await expect(page.locator("dialog.image-lightbox")).not.toBeVisible();
 
   const originalTheme = await page.locator("html").getAttribute("data-theme");
-  await page.getByRole("button", { name: "Toggle dark mode" }).click();
+  const themeToggle = page.getByRole("button", { name: "Toggle dark mode" });
+  await expect(themeToggle).toHaveText(originalTheme === "dark" ? "☀" : "☾");
+  const themeToggleBox = await themeToggle.boundingBox();
+  expect(themeToggleBox?.x).toBeLessThan(20);
+  expect(themeToggleBox?.y).toBeGreaterThan(650);
+  await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme",
     originalTheme === "dark" ? "light" : "dark",
   );
+  await expect(themeToggle).toHaveText(originalTheme === "dark" ? "☾" : "☀");
 });
 
-test("layered reports start collapsed and open ancestors for deep links", async ({
-  page,
-}) => {
+test("navigator toggles layers, documents, and scenarios", async ({ page }) => {
   const spec = parseFeatureSpec(
     `---
 id: ACCOUNT
@@ -146,7 +150,17 @@ Then account access is granted
   await expect(
     page.getByRole("heading", { name: "Account access" }),
   ).not.toBeVisible();
-  await page.locator("details.layer-section > summary").click();
+  await navigator.locator("[data-navigator-trigger]").click();
+  const layerButton = navigator.locator(
+    '[data-navigator-target="layer-capability"]',
+  );
+  await expect(layerButton).toHaveAttribute("aria-pressed", "false");
+  await layerButton.click();
+  await expect(page.locator("details#layer-capability")).toHaveAttribute(
+    "open",
+    "",
+  );
+  await expect(layerButton).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("heading", { name: "Account access" }),
   ).toBeVisible();
@@ -155,15 +169,37 @@ Then account access is granted
   ).not.toBeVisible();
 
   await navigator.locator("[data-navigator-trigger]").click();
-  await navigator.getByRole("link", { name: "Account access" }).click();
+  const documentButton = navigator.locator('[data-navigator-target="account"]');
+  await expect(documentButton).toHaveAttribute("aria-pressed", "false");
+  await documentButton.click();
   await expect(page).toHaveURL(/#account$/);
-  await expect(page.locator("details#account")).not.toHaveAttribute("open", "");
+  await expect(page.locator("details#account")).toHaveAttribute("open", "");
+  await expect(documentButton).toHaveAttribute("aria-pressed", "true");
   await expect(navigator.locator("[data-navigator-current]")).toHaveText(
     "Account access",
   );
   await navigator.locator("[data-navigator-trigger]").click();
-  await navigator.getByRole("button", { name: "Expand current" }).click();
+  await documentButton.click();
+  await expect(page.locator("details#account")).not.toHaveAttribute("open", "");
+  await expect(documentButton).toHaveAttribute("aria-pressed", "false");
+
+  await navigator.locator("[data-navigator-trigger]").click();
+  const scenariosButton = navigator.getByRole("button", {
+    name: "Toggle scenarios for Account access",
+  });
+  await expect(scenariosButton).toHaveAttribute("aria-pressed", "false");
+  await scenariosButton.click();
   await expect(page.locator("details#account")).toHaveAttribute("open", "");
+  await expect(page.locator("details#account-s001")).toHaveAttribute(
+    "open",
+    "",
+  );
+  await expect(scenariosButton).toHaveAttribute("aria-pressed", "true");
+  await scenariosButton.click();
+  await expect(page.locator("details#account-s001")).not.toHaveAttribute(
+    "open",
+    "",
+  );
 
   await page.evaluate('window.location.hash = "account-s001"');
   await expect(page.locator("details#account")).toHaveAttribute("open", "");

@@ -58,7 +58,8 @@ Any model, feature, stack, or design document MAY declare a project-defined
 `layer` in frontmatter. Layer definitions belong in the consuming project's
 `package.json` under `featureSpecMd.report.layers`; the configuration controls
 their titles, descriptions, and order. `layersDefaultOpen` and
-`documentsDefaultOpen` control the initial nested report state.
+`documentsDefaultOpen` control the initial nested report state. Layers are open
+by default when `layersDefaultOpen` is omitted.
 
 Layer ids MUST use lowercase words separated by hyphens. When a layer catalogue
 is configured, an unknown layer is an error. A document without a layer remains

@@ -79,7 +79,7 @@ export function renderHtmlPage({
       background: var(--bg);
       line-height: 1.5;
     }
-    .theme-toggle { position: fixed; z-index: 20; top: 12px; right: 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--fg); cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; }
+    .theme-toggle { position: fixed; z-index: 20; bottom: 12px; left: 12px; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--fg); cursor: pointer; font: inherit; font-size: 19px; line-height: 1; padding: 0; }
     .theme-toggle:hover { background: var(--surface-hover); }
     .theme-toggle:focus-visible, [data-lightbox]:focus-visible, .lightbox-close:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
     [data-lightbox] { cursor: zoom-in; }
@@ -92,7 +92,7 @@ ${indentTemplateBlock(defaults.styleText, 4)}
   </style>
 </head>
 <body>
-  <button class="theme-toggle" type="button" aria-label="Toggle dark mode">Dark mode</button>
+  <button class="theme-toggle" type="button" aria-label="Toggle dark mode"></button>
 ${indentTemplateBlock(body, 2)}
 ${scripts ? indentTemplateBlock(scripts, 2) : ""}
   <dialog class="image-lightbox" aria-label="Screenshot viewer">
@@ -103,7 +103,7 @@ ${scripts ? indentTemplateBlock(scripts, 2) : ""}
     (function(){
       var root=document.documentElement;
       var themeButton=document.querySelector(".theme-toggle");
-      function updateThemeButton(){themeButton.textContent=root.dataset.theme==="dark"?"Light mode":"Dark mode";}
+      function updateThemeButton(){var dark=root.dataset.theme==="dark";themeButton.textContent=dark?"☀":"☾";themeButton.title=dark?"Use light mode":"Use dark mode";}
       themeButton.addEventListener("click",function(){
         root.dataset.theme=root.dataset.theme==="dark"?"light":"dark";
         try{localStorage.setItem("feature-spec-md-theme",root.dataset.theme);}catch(error){}
