@@ -160,6 +160,7 @@ Then account access is granted
     "open",
     "",
   );
+  await expect(layerButton).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("heading", { name: "Account access" }),
   ).toBeVisible();
@@ -173,12 +174,14 @@ Then account access is granted
   await documentButton.click();
   await expect(page).toHaveURL(/#account$/);
   await expect(page.locator("details#account")).toHaveAttribute("open", "");
+  await expect(documentButton).toHaveAttribute("aria-pressed", "true");
   await expect(navigator.locator("[data-navigator-current]")).toHaveText(
     "Account access",
   );
   await navigator.locator("[data-navigator-trigger]").click();
   await documentButton.click();
   await expect(page.locator("details#account")).not.toHaveAttribute("open", "");
+  await expect(documentButton).toHaveAttribute("aria-pressed", "false");
 
   await navigator.locator("[data-navigator-trigger]").click();
   const scenariosButton = navigator.getByRole("button", {
