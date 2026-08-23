@@ -1,8 +1,43 @@
 import { expect, test } from "@playwright/test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { renderLocalDiffReport } from "../src/githubActionDiffReport.js";
 import { parseFeatureSpec, renderHtmlReport } from "../src/index.js";
 
 const transparentPixel =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+test("renamed screenshots use an interactive before and after slider", async ({
+  page,
+}) => {
+  const root = await mkdtemp(join(tmpdir(), "feature-spec-md-slider-test-"));
+  const previousDir = join(root, "previous");
+  const currentDir = join(root, "current");
+  const previousPath = "screenshots/ACCOUNT-S001-line-25-account.png";
+  const currentPath = "screenshots/ACCOUNT-S001-line-26-account.png";
+
+  try {
+    await mkdir(join(previousDir, "screenshots"), { recursive: true });
+    await mkdir(join(currentDir, "screenshots"), { recursive: true });
+    const pixel = Buffer.from(transparentPixel.split(",")[1] ?? "", "base64");
+    await writeFile(join(previousDir, previousPath), pixel);
+    await writeFile(join(currentDir, currentPath), pixel);
+    await page.setContent(
+      await renderLocalDiffReport({ previousDir, currentDir }),
+    );
+
+    await page.getByRole("button", { name: "Show all screenshots" }).click();
+    const comparison = page.locator("[data-image-comparison]");
+    const slider = comparison.getByRole("slider");
+    await expect(comparison).toBeVisible();
+    await expect(slider).toHaveValue("50");
+    await slider.fill("80");
+    await expect(comparison).toHaveAttribute("style", /--position: 80%/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("report screenshots are hidden until the scenario is toggled", async ({
   page,

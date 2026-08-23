@@ -146,20 +146,12 @@ describe("feature-spec-md", () => {
     assert.equal(issues[1]?.severity, "error");
   });
 
-  it("groups diff changes by layer and distinguishes clickable before and after screenshots", async () => {
+  it("groups diff changes by layer and renders paired and added screenshots", async () => {
     const html = await renderMockDiffReport();
     assert.match(html, /<details class="diff-layer" open>/);
     assert.match(html, /<strong>Delivery surfaces<\/strong>/);
-    assert.match(
-      html,
-      /\.image-pair\.paired\{grid-template-columns:minmax\(280px,1fr\) minmax\(280px,1fr\);min-width:572px\}/,
-    );
-    assert.match(html, /class="image-card before"/);
+    assert.match(html, /class="image-comparison" data-image-comparison/);
     assert.match(html, /class="image-card after"/);
-    assert.match(
-      html,
-      /\.image-card\.before\{border:3px solid var\(--danger\)\}/,
-    );
     assert.match(
       html,
       /\.image-card\.after\{border:3px solid var\(--success\)\}/,
