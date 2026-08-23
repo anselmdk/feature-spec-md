@@ -72,6 +72,8 @@ type SpecDiff = {
 
 type ScreenshotDiffItem = {
   path: string;
+  previousPath?: string;
+  currentPath?: string;
   title: string;
   status: ComparedFile["status"];
   previousUrl?: string;
@@ -633,9 +635,7 @@ function groupScreenshotDiffs(
   },
 ): ScreenshotDiffGroup[] {
   const groups = new Map<string, ScreenshotDiffGroup>();
-  for (const file of files.filter(
-    (item) => item.kind === "screenshot" && item.status !== "unchanged",
-  )) {
+  for (const file of pairRenamedScreenshots(files)) {
     const scenarioId = scenarioIdFromScreenshotPath(file.path);
     const spec = scenarioId ? scenarioMap.get(scenarioId) : undefined;
     const specLabel =
@@ -648,12 +648,18 @@ function groupScreenshotDiffs(
     };
     group.items.push({
       path: file.path,
+      previousPath: file.previousPath,
+      currentPath: file.currentPath,
       title: screenshotTitle(file.path, scenarioId),
       status: file.status,
       previousUrl:
-        file.status !== "added" ? urls.previousUrl(file.path) : undefined,
+        file.previousPath !== undefined
+          ? urls.previousUrl(file.previousPath)
+          : undefined,
       currentUrl:
-        file.status !== "removed" ? urls.currentUrl(file.path) : undefined,
+        file.currentPath !== undefined
+          ? urls.currentUrl(file.currentPath)
+          : undefined,
       previousSize: file.previousSize,
       currentSize: file.currentSize,
     });
@@ -662,6 +668,89 @@ function groupScreenshotDiffs(
   return Array.from(groups.values()).sort((a, b) =>
     a.specLabel.localeCompare(b.specLabel),
   );
+}
+
+type PairedScreenshot = ComparedFile & {
+  previousPath?: string;
+  currentPath?: string;
+};
+
+function pairRenamedScreenshots(files: ComparedFile[]): PairedScreenshot[] {
+  const screenshots = files.filter(
+    (item) => item.kind === "screenshot" && item.status !== "unchanged",
+  );
+  const removed = screenshots.filter((item) => item.status === "removed");
+  const added = screenshots.filter((item) => item.status === "added");
+  const usedAdded = new Set<ComparedFile>();
+  const paired: PairedScreenshot[] = screenshots
+    .filter((item) => item.status === "changed")
+    .map((item) => ({
+      ...item,
+      previousPath: item.path,
+      currentPath: item.path,
+    }));
+
+  for (const before of removed) {
+    const identityMatch = added.find(
+      (candidate) =>
+        !usedAdded.has(candidate) &&
+        screenshotIdentity(before.path) === screenshotIdentity(candidate.path),
+    );
+    const hashMatches = added.filter(
+      (candidate) =>
+        !usedAdded.has(candidate) &&
+        before.previousHash !== undefined &&
+        before.previousHash === candidate.currentHash,
+    );
+    const scenarioId = scenarioIdFromScreenshotPath(before.path);
+    const scenarioRemoved = scenarioId
+      ? removed.filter(
+          (candidate) =>
+            scenarioIdFromScreenshotPath(candidate.path) === scenarioId,
+        )
+      : [];
+    const scenarioAdded = scenarioId
+      ? added.filter(
+          (candidate) =>
+            !usedAdded.has(candidate) &&
+            scenarioIdFromScreenshotPath(candidate.path) === scenarioId,
+        )
+      : [];
+    const after =
+      identityMatch ??
+      (hashMatches.length === 1
+        ? hashMatches[0]
+        : scenarioRemoved.length === 1 && scenarioAdded.length === 1
+          ? scenarioAdded[0]
+          : undefined);
+    if (!after) {
+      paired.push({ ...before, previousPath: before.path });
+      continue;
+    }
+    usedAdded.add(after);
+    paired.push({
+      path: after.path,
+      kind: "screenshot",
+      status: "changed",
+      previousPath: before.path,
+      currentPath: after.path,
+      previousHash: before.previousHash,
+      currentHash: after.currentHash,
+      previousSize: before.previousSize,
+      currentSize: after.currentSize,
+    });
+  }
+
+  for (const item of added) {
+    if (!usedAdded.has(item)) paired.push({ ...item, currentPath: item.path });
+  }
+  return paired.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function screenshotIdentity(filePath: string) {
+  return safeRelativePath(filePath)
+    .replace(/\.(png|jpe?g|webp|gif|svg)$/i, "")
+    .replace(/-line-\d+-/i, "-line-*-");
 }
 
 function scenarioIdFromScreenshotPath(filePath: string) {
@@ -714,11 +803,18 @@ th{background:var(--surface-muted)}a{color:var(--link)}
 .diff td{padding:2px 8px}.line-no{width:1%;color:var(--muted);background:var(--surface-muted);text-align:right;user-select:none}
 .diff-added td{background:var(--diff-added)}.diff-removed td{background:var(--diff-removed)}.diff-context td{background:var(--surface)}
 .screenshot-diff{border-top:1px solid var(--border);padding:10px 0}.screenshot-diff summary{cursor:pointer;margin-bottom:8px}
-.image-pair-scroll{overflow-x:auto}.image-pair{display:grid;grid-template-columns:minmax(280px,1fr);gap:12px}.image-pair.paired{grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);min-width:572px}
+.image-pair-scroll{overflow-x:auto}.image-pair{display:grid;grid-template-columns:minmax(280px,1fr);gap:12px}
 .image-card{border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
 .image-card.before{border:3px solid var(--danger)}.image-card.after{border:3px solid var(--success)}
 .image-card.before h4{color:var(--danger)}.image-card.after h4{color:var(--success)}
-.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:100%;height:auto}`;
+.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:100%;height:auto}
+.image-comparison{--position:50%;border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
+.image-comparison-stage{position:relative;display:grid;background:var(--surface-muted);overflow:hidden}
+.image-comparison-stage img{display:block;grid-area:1/1;width:100%;height:auto}
+.image-comparison-after{clip-path:inset(0 calc(100% - var(--position)) 0 0)}
+.image-comparison-divider{position:absolute;top:0;bottom:0;left:var(--position);width:3px;background:white;box-shadow:0 0 0 1px rgba(0,0,0,.35);transform:translateX(-50%);pointer-events:none}
+.image-comparison-label{position:absolute;top:10px;border-radius:999px;background:rgba(0,0,0,.72);color:white;font-size:12px;font-weight:700;padding:3px 8px;pointer-events:none}.image-comparison-label.before{left:10px}.image-comparison-label.after{right:10px}
+.image-comparison-control{display:flex;align-items:center;gap:12px;padding:10px 12px;color:var(--muted);font-size:12px}.image-comparison-control input{flex:1;cursor:ew-resize}`;
 }
 
 function renderSpecDiffs(specDiffs: SpecDiff[], layers: ReportLayer[] = []) {
@@ -780,21 +876,38 @@ function renderScreenshotGroup(group: ScreenshotDiffGroup) {
 }
 
 function renderScreenshotItem(item: ScreenshotDiffItem) {
+  if (item.previousUrl && item.currentUrl) {
+    return `<details class="screenshot-diff"><summary>${renderScreenshotPath(item)} <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll">${renderImageComparison(item)}</div></details>`;
+  }
   const before = item.previousUrl
     ? `<div class="image-card before"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}" data-lightbox tabindex="0"></div>`
     : "";
   const after = item.currentUrl
     ? `<div class="image-card after"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}" data-lightbox tabindex="0"></div>`
     : "";
-  const pairClass = before && after ? " paired" : "";
-  return `<details class="screenshot-diff"><summary><code>${html(item.path)}</code> <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll"><div class="image-pair${pairClass}">${before}${after}</div></div></details>`;
+  return `<details class="screenshot-diff"><summary>${renderScreenshotPath(item)} <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll"><div class="image-pair">${before}${after}</div></div></details>`;
+}
+
+function renderScreenshotPath(item: ScreenshotDiffItem) {
+  if (
+    item.previousPath &&
+    item.currentPath &&
+    item.previousPath !== item.currentPath
+  ) {
+    return `<code>${html(item.previousPath)}</code> <span aria-label="renamed to">→</span> <code>${html(item.currentPath)}</code>`;
+  }
+  return `<code>${html(item.path)}</code>`;
+}
+
+function renderImageComparison(item: ScreenshotDiffItem) {
+  return `<div class="image-comparison" data-image-comparison><div class="image-comparison-stage"><img src="${html(item.previousUrl ?? "")}" alt="Before ${html(item.title)}" class="image-comparison-before" data-lightbox tabindex="0"><img src="${html(item.currentUrl ?? "")}" alt="After ${html(item.title)}" class="image-comparison-after" data-lightbox tabindex="0"><span class="image-comparison-label before">Before</span><span class="image-comparison-label after">After</span><span class="image-comparison-divider" aria-hidden="true"></span></div><label class="image-comparison-control"><span>Drag to compare</span><input type="range" min="0" max="100" value="50" aria-label="Compare before and after ${html(item.title)}"></label></div>`;
 }
 
 function renderScreenshotToggleScript() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
   const source =
-    "(function(){var button=document.querySelector('.screenshot-toggle-button');if(!button)return;var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}button.addEventListener('click',function(){expanded=!expanded;apply();});apply();})();";
+    "(function(){var button=document.querySelector('.screenshot-toggle-button');var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});if(button)button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}if(button)button.addEventListener('click',function(){expanded=!expanded;apply();});document.querySelectorAll('[data-image-comparison]').forEach(function(comparison){var input=comparison.querySelector('input[type=range]');function update(){comparison.style.setProperty('--position',input.value+'%');}input.addEventListener('input',update);update();});apply();})();";
   return openTag + source + closeTag;
 }
 
