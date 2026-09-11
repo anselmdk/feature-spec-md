@@ -35,12 +35,12 @@ That means a reviewer can move from **rule → scenario → test → screenshot*
 
 ## See one feature move through the loop
 
-The demo project adds ticket priority in [one real pull request](https://github.com/anselmdk/feature-spec-md-demo/pull/16): the branch adds the feature spec, unit and browser tests reference its IDs, CI publishes the complete implementation report, and the diff report shows exactly what changed against `main`.
+The demo project makes high-priority tickets visually distinct in [one real pull request](https://github.com/anselmdk/feature-spec-md-demo/pull/24): the branch updates the feature and design specs, executable tests reference their IDs, CI publishes the complete implementation report, and the diff report shows exactly what changed against `main`.
 
 - [Open the demo app repository](https://github.com/anselmdk/feature-spec-md-demo)
 - [Browse the latest demo report](https://feature-spec-md.anselm.dk/demo/latest/)
-- [Open the complete feature report](https://feature-spec-md.anselm.dk/demo/build/269/)
-- [Open the PR diff report](https://feature-spec-md.anselm.dk/demo/pr/16/269/)
+- [Open the complete feature report](https://feature-spec-md.anselm.dk/demo/build/297/)
+- [Open the PR diff report](https://feature-spec-md.anselm.dk/demo/pr/24/297/)
 - [Browse the latest library-owned mock reports](https://feature-spec-md.anselm.dk/mocks/latest/)
 
 ### The feature report: intent and proof in one place
@@ -53,9 +53,9 @@ _Click the screenshot to explore the live report._
 
 ### The PR diff report: review behavior, not just files
 
-The PR report compares two published builds. It shows changed Markdown contract text and before/after browser evidence side by side, so visual side effects are visible even when the feature did not directly touch that scenario.
+The PR report compares two published builds. It shows changed Markdown contract text and puts before/after browser evidence in an interactive comparison slider, so visual side effects are visible even when the feature did not directly touch that scenario.
 
-[![Feature spec PR diff showing before and after browser screenshots](docs/assets/pr-diff-report.jpg)](https://feature-spec-md.anselm.dk/demo/pr/16/269/)
+[![Feature spec PR diff showing the interactive before and after screenshot slider](docs/assets/pr-diff-report.jpg)](https://feature-spec-md.anselm.dk/demo/pr/24/297/)
 
 _Click the screenshot to explore the live diff report._
 
