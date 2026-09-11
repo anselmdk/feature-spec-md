@@ -811,7 +811,7 @@ th{background:var(--surface-muted)}a{color:var(--link)}
 .image-comparison{--position:50%;border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
 .image-comparison-stage{position:relative;display:grid;background:var(--surface-muted);overflow:hidden}
 .image-comparison-stage img{display:block;grid-area:1/1;width:100%;height:auto}
-.image-comparison-after{clip-path:inset(0 calc(100% - var(--position)) 0 0)}
+.image-comparison-after{clip-path:inset(0 0 0 var(--position))}
 .image-comparison-divider{position:absolute;top:0;bottom:0;left:var(--position);width:3px;background:white;box-shadow:0 0 0 1px rgba(0,0,0,.35);transform:translateX(-50%);pointer-events:none}
 .image-comparison-label{position:absolute;top:10px;border-radius:999px;background:rgba(0,0,0,.72);color:white;font-size:12px;font-weight:700;padding:3px 8px;pointer-events:none}.image-comparison-label.before{left:10px}.image-comparison-label.after{right:10px}
 .image-comparison-control{display:flex;align-items:center;gap:12px;padding:10px 12px;color:var(--muted);font-size:12px}.image-comparison-control input{flex:1;cursor:ew-resize}`;

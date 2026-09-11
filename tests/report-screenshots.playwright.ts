@@ -30,10 +30,13 @@ test("renamed screenshots use an interactive before and after slider", async ({
     await page.getByRole("button", { name: "Show all screenshots" }).click();
     const comparison = page.locator("[data-image-comparison]");
     const slider = comparison.getByRole("slider");
+    const afterImage = comparison.locator(".image-comparison-after");
     await expect(comparison).toBeVisible();
     await expect(slider).toHaveValue("50");
+    await expect(afterImage).toHaveCSS("clip-path", "inset(0px 0px 0px 50%)");
     await slider.fill("80");
     await expect(comparison).toHaveAttribute("style", /--position: 80%/);
+    await expect(afterImage).toHaveCSS("clip-path", "inset(0px 0px 0px 80%)");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
