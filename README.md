@@ -1,80 +1,90 @@
 # feature-spec-md
 
-**Give AI a product contract it can implement—and give reviewers proof they can trust.**
+**Write what should be true. Prove it with tests and screenshots. Review exactly what changed.**
 
-`feature-spec-md` is the accountability layer between a Markdown plan and AI-written code. It keeps product intent readable, connects every rule and scenario to executable tests through stable IDs, and turns the result into reports that answer two simple questions: **what is implemented?** and **what changed in this PR?**
+`feature-spec-md` turns plain Markdown into a durable contract between product intent and working software. It connects each rule and scenario to your existing tests, then produces reports that people can understand without reconstructing an AI conversation or reading the whole codebase.
 
-It does not replace Markdown, your test runner, or CI. It connects them.
+It works with web apps, APIs, services, CLIs, libraries, and other codebases. Use screenshot evidence for visual behavior and normal test coverage everywhere else.
 
 ```mermaid
-flowchart LR
-    A["Markdown specs<br/>Intent, rules, scenarios"]
-    B["AI-assisted delivery<br/>Tests and implementation"]
-    C["CI checks<br/>Validity, coverage, evidence"]
-    D["Feature report<br/>What is implemented?"]
-    E["PR diff report<br/>What changed?"]
+flowchart TB
+    A["1 · SPECIFY<br/>Rules, scenarios, model, stack, and design"]
+    B["2 · BUILD<br/>AI-assisted or human-written code"]
+    C["3 · VERIFY<br/>Your existing tests run in CI"]
+    D["4 · FEATURE REPORT<br/>What is implemented?<br/>Coverage + source links + screenshots"]
+    E["5 · PR DIFF REPORT<br/>What changed?<br/>Spec diff + before/after evidence"]
 
-    A -->|stable spec IDs| B
+    A -->|stable IDs| B
     B --> C
     C --> D
-    D --> E
+    D -->|compare base with PR| E
 ```
 
-The specs can cover the shared model, user-facing features, technical stack, and design direction. Tests keep using the tools you already have—Playwright, Vitest, Node test, or another runner—and only need to reference the relevant IDs.
+## See what reviewers see
 
-## Why it clicks
+This real [demo pull request](https://github.com/anselmdk/feature-spec-md-demo/pull/24) makes high-priority support tickets visually distinct. The spec states the behavior, tests prove it, and CI publishes both views below.
 
-Without a durable link between the plan and the code, an AI can produce a plausible implementation while people still have to reconstruct whether it meets the intent. `feature-spec-md` makes that link explicit:
+### Feature report: the promise and the proof together
 
-1. **Write the contract in ordinary Markdown.** Capture vocabulary, rules, scenarios, technical choices, and design intent in small reviewable documents.
-2. **Let AI turn the contract into tests and code.** Stable IDs such as `TICKET-CREATION-S001` travel from the spec into test titles, annotations, or comments.
-3. **Let CI verify the connection.** Validation catches malformed specs and broken references; coverage shows which model items, rules, and scenarios have executable tests; evidence policy says where screenshots are required.
-4. **Review the result, not the conversation that produced it.** The feature report joins intent, coverage, source links, and browser evidence. The PR diff report isolates changed spec text and before/after screenshots.
+One screen answers three questions: **What did we promise? Which test covers it? What did the user actually see?**
 
-That means a reviewer can move from **rule → scenario → test → screenshot** without guessing, and a team can change AI models or start a fresh chat without losing the product contract.
+[![Feature spec report showing the covered visual rule, scenario, source line, and screenshot evidence](docs/assets/feature-spec-report.jpg)](https://feature-spec-md.anselm.dk/demo/build/299/#support-desk-ticket-priority-s001)
 
-## See one feature move through the loop
+_Click the image to inspect the live feature report._
 
-The demo project makes high-priority tickets visually distinct in [one real pull request](https://github.com/anselmdk/feature-spec-md-demo/pull/24): the branch updates the feature and design specs, executable tests reference their IDs, CI publishes the complete implementation report, and the diff report shows exactly what changed against `main`.
+### PR diff report: see the behavioral change
 
-- [Open the demo app repository](https://github.com/anselmdk/feature-spec-md-demo)
-- [Browse the latest demo report](https://feature-spec-md.anselm.dk/demo/latest/)
-- [Open the complete feature report](https://feature-spec-md.anselm.dk/demo/build/299/)
-- [Open the PR diff report](https://feature-spec-md.anselm.dk/demo/pr/24/299/)
-- [Browse the latest library-owned mock reports](https://feature-spec-md.anselm.dk/mocks/latest/)
+The report shows the contract diff and compares browser evidence from the base build with the PR build. **Before is on the left; After is on the right.** Drag the divider to inspect every pixel.
 
-### The feature report: intent and proof in one place
+[![Feature spec PR diff showing the red high-priority treatment on the After side of the interactive comparison](docs/assets/pr-diff-report.jpg)](https://feature-spec-md.anselm.dk/demo/pr/24/299/)
 
-Rules show their covering scenario and test source. A browser scenario shows its Given/When/Then steps, the exact spec lines, evidence status, and the screenshot captured by the test.
+_Click the image to use the live comparison slider._
 
-[![Feature spec report showing covered rules, a scenario, source lines, and screenshot evidence](docs/assets/feature-spec-report.jpg)](https://feature-spec-md.anselm.dk/demo/build/299/#support-desk-ticket-priority-s001)
+## The connection is the feature
 
-_Click the screenshot to explore the live report._
+Stable IDs make intent traceable all the way to visible evidence:
 
-### The PR diff report: review behavior, not just files
+```mermaid
+flowchart TB
+    R["Rule R004<br/>High-priority tickets must be visually emphasized"]
+    S["Scenario S001<br/>A user creates a high-priority ticket"]
+    T["Existing test<br/>References S001 and exercises the behavior"]
+    P["Report evidence<br/>Links the rule, scenario, test source, and screenshot"]
 
-The PR report compares two published builds. It shows changed Markdown contract text and puts before/after browser evidence in an interactive comparison slider, so visual side effects are visible even when the feature did not directly touch that scenario.
+    R --> S
+    S --> T
+    T --> P
+```
 
-[![Feature spec PR diff showing the interactive before and after screenshot slider](docs/assets/pr-diff-report.jpg)](https://feature-spec-md.anselm.dk/demo/pr/24/299/)
+The test runner stays independent. Reference an ID in a test title, annotation, or comment; `feature-spec-md` scans the files and builds the connection.
 
-_Click the screenshot to explore the live diff report._
+## Bring the project you already have
+
+```mermaid
+flowchart TB
+    P["Any project<br/>Web app · API · service · CLI · library"]
+    S["Plain Markdown specs<br/>Model · features · stack · design"]
+    T["Your test setup<br/>Playwright · Vitest · Node test · anything else"]
+    C["Your CI<br/>GitHub Actions helpers or the library API"]
+    R["Portable HTML reports<br/>Coverage · evidence · pull request changes"]
+
+    P --> S
+    S --> T
+    T --> C
+    C --> R
+```
+
+Screenshots are policy-driven, not mandatory for every scenario. A backend or CLI project can rely on rules, scenarios, source links, and test coverage; a visual project can require screenshot evidence exactly where it matters.
 
 ## What you get
 
-- **One source of intent:** plain Markdown documents for the domain model, product features, technical stack, and UI/design direction.
-- **Traceability without a custom test runner:** stable IDs connect model items, rules, and scenarios to ordinary test source.
-- **Fast feedback:** validation checks structure and references, while coverage identifies exactly what has and has not been implemented by tests.
-- **Evidence by policy:** each feature or scenario can require unit, integration, Playwright, manual, or no executable testing—and can require screenshot evidence for UI flows.
-- **A reviewable system view:** HTML reports combine the rendered specs, coverage, validation state, source links, GitHub/build metadata, and screenshots.
-- **A focused PR view:** diff reports highlight changed spec sections and compare screenshot evidence between the base and current builds.
-- **CI-ready publishing:** GitHub Actions helpers publish immutable build reports, stable latest reports, PR diff reports, job summaries, and PR comments.
-- **A library API:** projects can parse specs, check coverage, collect screenshots, and render reports from their own tooling.
+- **Readable intent:** ordinary Markdown for the domain model, features, stack, and design.
+- **Verifiable coverage:** validation and coverage show exactly what tests do—and do not—prove.
+- **Useful evidence:** require screenshots for visual flows and skip them where they add no value.
+- **A complete build view:** the feature report joins specs, source links, coverage, and evidence.
+- **A focused review view:** the PR diff isolates changed intent and before/after behavior.
 
-## Demo project
-
-The complete [`feature-spec-md-demo`](https://github.com/anselmdk/feature-spec-md-demo) is a small support-ticket desk with model, feature, stack, and design specs; unit and Playwright tests; screenshot evidence; and the full GitHub Actions publishing flow. Use it as a copyable reference for project structure, scripts, test helpers, and CI configuration.
-
-The package itself also publishes [deterministic mock reports](https://feature-spec-md.anselm.dk/mocks/latest/) that exercise covered and missing states, report layers, metadata, changed spec text, and screenshot comparisons.
+Explore the [demo repository](https://github.com/anselmdk/feature-spec-md-demo), [latest demo report](https://feature-spec-md.anselm.dk/demo/latest/), [build 299 feature report](https://feature-spec-md.anselm.dk/demo/build/299/), [build 299 PR diff](https://feature-spec-md.anselm.dk/demo/pr/24/299/), or [library-owned mock reports](https://feature-spec-md.anselm.dk/mocks/latest/).
 
 ## What you write
 
