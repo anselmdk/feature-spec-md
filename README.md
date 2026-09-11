@@ -39,15 +39,15 @@ The demo project makes high-priority tickets visually distinct in [one real pull
 
 - [Open the demo app repository](https://github.com/anselmdk/feature-spec-md-demo)
 - [Browse the latest demo report](https://feature-spec-md.anselm.dk/demo/latest/)
-- [Open the complete feature report](https://feature-spec-md.anselm.dk/demo/build/297/)
-- [Open the PR diff report](https://feature-spec-md.anselm.dk/demo/pr/24/297/)
+- [Open the complete feature report](https://feature-spec-md.anselm.dk/demo/build/299/)
+- [Open the PR diff report](https://feature-spec-md.anselm.dk/demo/pr/24/299/)
 - [Browse the latest library-owned mock reports](https://feature-spec-md.anselm.dk/mocks/latest/)
 
 ### The feature report: intent and proof in one place
 
 Rules show their covering scenario and test source. A browser scenario shows its Given/When/Then steps, the exact spec lines, evidence status, and the screenshot captured by the test.
 
-[![Feature spec report showing covered rules, a scenario, source lines, and screenshot evidence](docs/assets/feature-spec-report.jpg)](https://feature-spec-md.anselm.dk/mocks/latest/feature-spec-report/)
+[![Feature spec report showing covered rules, a scenario, source lines, and screenshot evidence](docs/assets/feature-spec-report.jpg)](https://feature-spec-md.anselm.dk/demo/build/299/#support-desk-ticket-priority-s001)
 
 _Click the screenshot to explore the live report._
 
@@ -55,7 +55,7 @@ _Click the screenshot to explore the live report._
 
 The PR report compares two published builds. It shows changed Markdown contract text and puts before/after browser evidence in an interactive comparison slider, so visual side effects are visible even when the feature did not directly touch that scenario.
 
-[![Feature spec PR diff showing the interactive before and after screenshot slider](docs/assets/pr-diff-report.jpg)](https://feature-spec-md.anselm.dk/demo/pr/24/297/)
+[![Feature spec PR diff showing the interactive before and after screenshot slider](docs/assets/pr-diff-report.jpg)](https://feature-spec-md.anselm.dk/demo/pr/24/299/)
 
 _Click the screenshot to explore the live diff report._
 
