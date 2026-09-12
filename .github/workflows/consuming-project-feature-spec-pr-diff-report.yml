@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: "^(src|specs|tests|scripts|public)/|^package(-lock)?\\.json$|^vite\\.config\\.|^playwright\\.config\\.|^tsconfig.*\\.json$|\\.(model|feature|stack|design)\\.md$"
+      report-time-zone:
+        description: IANA time zone for the server-rendered report timestamp fallback. Viewer browsers localize the timestamp when supported.
+        required: false
+        type: string
+        default: Europe/Copenhagen
 
 permissions:
   actions: read
@@ -188,6 +193,7 @@ jobs:
           BASE_BUILD_NUMBER: ${{ steps.main_build.outputs.build-number }}
           CURRENT_RUN_URL: ${{ steps.current_build.outputs.run-url }}
           REPORT_STARTED_AT: ${{ steps.changes.outputs.started-at }}
+          REPORT_TIME_ZONE: ${{ inputs.report-time-zone }}
         with:
           script: |
             const prNumber = Number('${{ steps.changes.outputs.pr-number }}');
@@ -258,23 +264,28 @@ jobs:
               JSON.stringify({ current, history }),
               'utf8',
             ).toString('base64');
-            const formatDate = (value) =>
+            const formatDate = (value, timeZone) =>
               new Intl.DateTimeFormat('en-GB', {
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
-                timeZone: 'UTC',
+                timeZone,
                 timeZoneName: 'short',
               }).format(new Date(value));
+            const timeZone = process.env.REPORT_TIME_ZONE || 'Europe/Copenhagen';
+            const localizedDate = (value) =>
+              '<relative-time datetime="' + value + '" format="datetime">' +
+              formatDate(value, timeZone) +
+              '</relative-time>';
             const comparison = (entry) =>
               entry.baseBuildNumber
                 ? ' compared with main build ' + entry.baseBuildNumber
                 : '';
             const historyLines = history.map((entry) =>
               '- Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.specUrl) + ')' +
-              comparison(entry) + ' · ' + formatDate(entry.timestamp) +
+              comparison(entry) + ' · ' + localizedDate(entry.timestamp) +
               ' · report job ' + (entry.durationMinutes ?? 'n/a') + ' minutes' +
               ' · [spec](' + entry.specUrl + ') · [diff](' + entry.diffUrl + ')'
             );
@@ -286,7 +297,7 @@ jobs:
               '[Full spec report](' + specUrl + ') · [Changes since main](' + diffUrl + ')',
               '',
               'Build [' + buildNumber + '](' + runUrl + ')' + comparison(current) +
-                ' · ' + formatDate(timestamp) +
+                ' · ' + localizedDate(timestamp) +
                 ' · report job ' + durationMinutes + ' minutes',
             ];
             if (historyLines.length) {
