@@ -73,6 +73,11 @@ export function parseFtpSizeResponse(response: string) {
   return match ? Number(match[1]) : undefined;
 }
 
+export function parseFtpHeadSize(response: string) {
+  const match = response.match(/^Size:\s*(\d+)\s*$/im);
+  return match ? Number(match[1]) : parseFtpSizeResponse(response);
+}
+
 async function inventoryRemoteDirectory(
   remoteDir: string,
   config: FtpConnectionConfig,
@@ -105,10 +110,8 @@ async function inventoryRemoteDirectory(
 
 async function remoteFileSize(remotePath: string, config: FtpConnectionConfig) {
   try {
-    const response = await runCurl(
-      ftpArgs(config, ["--quote", `SIZE ${remotePath}`], remotePath),
-    );
-    return parseFtpSizeResponse(response);
+    const response = await runCurl(ftpArgs(config, ["--head"], remotePath));
+    return parseFtpHeadSize(response);
   } catch {
     return undefined;
   }
@@ -118,7 +121,7 @@ async function remoteFreeBytes(remoteDir: string, config: FtpConnectionConfig) {
   for (const command of ["SITE AVAIL", "STAT -f"]) {
     try {
       const response = await runCurl(
-        ftpArgs(config, ["--quote", command], remoteDir),
+        ftpArgs(config, ["--quote", command, "--head"], remoteDir),
       );
       const size = parseFtpSizeResponse(response);
       if (size !== undefined) return size;
@@ -178,7 +181,11 @@ async function deleteRemote(
 ) {
   const command = kind === "directory" ? "RMD" : "DELE";
   await runCurl(
-    ftpArgs(config, ["--quote", `${command} ${remotePath}`], remotePath),
+    ftpArgs(
+      config,
+      ["--quote", `${command} ${remotePath}`, "--list-only"],
+      config.remoteDir,
+    ),
   );
 }
 
