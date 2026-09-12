@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
+import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -773,13 +774,14 @@ function renderDiffReport(report: DiffReport) {
     (file) => file.status !== "unchanged" && file.kind !== "report",
   );
   const assetChanges = changed.filter((file) => file.kind === "asset");
+  const generatedAt = new Date().toISOString();
   return renderHtmlPage({
     title: "Feature spec PR diff",
     styles: diffReportStyles(),
     scripts: renderScreenshotToggleScript(),
     body: `
 <h1>Feature spec PR diff for PR #${html(report.prNumber)}</h1>
-<p>Generated ${html(new Date().toISOString())}.</p>
+<p ${renderGeneratedAt(generatedAt)}>Generated ${html(formatGeneratedAt(generatedAt))}.</p>
 <section class="panel"><h2>Compared builds</h2><p>${report.baseBuild ? `${baseLabel(report)}: <a href="${html(report.baseBuildUrl ?? "")}">build ${html(report.baseBuild)}</a>` : "No base build found."}</p><p>PR: <a href="${html(report.currentBuildUrl)}">build ${html(report.currentBuild)}</a></p><p><span class="badge">${report.specDiffs.length} spec change${report.specDiffs.length === 1 ? "" : "s"}</span> <span class="badge">${screenshotChangeCount(report)} screenshot change${screenshotChangeCount(report) === 1 ? "" : "s"}</span></p></section>
 ${renderSpecDiffs(report.specDiffs, report.layers)}
 ${renderScreenshotDiffs(report.screenshotDiffs, report.layers)}

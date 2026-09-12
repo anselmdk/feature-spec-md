@@ -189,6 +189,18 @@ Then account access is granted
     page.getByRole("heading", { name: "Account access" }),
   ).not.toBeVisible();
   await navigator.locator("[data-navigator-trigger]").click();
+  const search = navigator.locator("[data-navigator-search]");
+  await expect(search).toHaveAttribute("placeholder", "Search context");
+  await search.fill("account");
+  await expect(
+    navigator.locator('[data-navigator-target="account"]'),
+  ).toBeVisible();
+  await search.fill("does-not-exist");
+  await expect(navigator.locator("[data-navigator-no-results]")).toBeVisible();
+  await search.fill("");
+  await expect(
+    navigator.locator('[data-navigator-target="layer-capability"]'),
+  ).toBeVisible();
   const layerButton = navigator.locator(
     '[data-navigator-target="layer-capability"]',
   );
