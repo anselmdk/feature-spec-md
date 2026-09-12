@@ -379,13 +379,11 @@ Earlier build links remain available in a collapsed history below the current
 links. PR diff reports are published below `pr/<pr-number>/<build-number>/`.
 
 PNG screenshots are compared by their decoded pixels, including screenshots
-whose generated filenames changed because a spec line moved. By default, an
-image is reported as changed only when more than 0.1% of its pixels differ
-perceptually. Set `--screenshot-change-threshold` (or
-`FEATURE_SPEC_SCREENSHOT_CHANGE_THRESHOLD`) to a ratio from `0` to `1`; use
-`0` to require pixel-level equality. Images with different dimensions are
-always changed. Unsupported or malformed image files fall back to conservative
-byte comparison so report publication remains durable.
+whose generated filenames changed because a spec line moved. Only exact pixel
+equality is treated as unchanged, so even small visual differences remain
+visible. Images with different dimensions are always changed. Unsupported or
+malformed image files fall back to conservative byte comparison so report
+publication remains durable.
 
 ## Playwright screenshot evidence
 

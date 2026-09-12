@@ -106,16 +106,45 @@ describe("GitHub Action screenshot diffs", () => {
     }
   });
 
-  it("uses a configurable changed-pixel ratio for PNGs", async () => {
+  it("ignores same-path PNGs with identical decoded pixels", async () => {
+    const root = await mkdtemp(join(tmpdir(), "feature-spec-md-diff-test-"));
+    const previousDir = join(root, "previous");
+    const currentDir = join(root, "current");
+    const screenshotPath = "screenshots/ACCOUNT-S001-line-25-account.png";
+    const image = solidPng(100, 100);
+
+    try {
+      await mkdir(join(previousDir, "screenshots"), { recursive: true });
+      await mkdir(join(currentDir, "screenshots"), { recursive: true });
+      await writeFile(
+        join(previousDir, screenshotPath),
+        PNG.sync.write(image, { deflateLevel: 1 }),
+      );
+      await writeFile(
+        join(currentDir, screenshotPath),
+        PNG.sync.write(image, { deflateLevel: 9 }),
+      );
+
+      const report = await renderLocalDiffReport({
+        previousDir,
+        currentDir,
+      });
+
+      assert.match(report, /0 screenshot changes/);
+      assert.match(report, /No screenshot changes\./);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports even a one-pixel difference", async () => {
     const root = await mkdtemp(join(tmpdir(), "feature-spec-md-diff-test-"));
     const previousDir = join(root, "previous");
     const currentDir = join(root, "current");
     const screenshotPath = "screenshots/ACCOUNT-S001-line-25-account.png";
     const previous = solidPng(100, 100);
     const current = solidPng(100, 100);
-    for (let pixel = 0; pixel < 20; pixel += 1) {
-      current.data.fill(255, pixel * 4, pixel * 4 + 3);
-    }
+    current.data.fill(255, 0, 3);
 
     try {
       await mkdir(join(previousDir, "screenshots"), { recursive: true });
@@ -129,18 +158,35 @@ describe("GitHub Action screenshot diffs", () => {
         PNG.sync.write(current),
       );
 
-      const defaultReport = await renderLocalDiffReport({
+      const report = await renderLocalDiffReport({
         previousDir,
         currentDir,
-      });
-      const tolerantReport = await renderLocalDiffReport({
-        previousDir,
-        currentDir,
-        screenshotChangeThreshold: 0.003,
       });
 
-      assert.match(defaultReport, /1 screenshot change/);
-      assert.match(tolerantReport, /0 screenshot changes/);
+      assert.match(report, /1 screenshot change/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to byte comparison for malformed PNGs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "feature-spec-md-diff-test-"));
+    const previousDir = join(root, "previous");
+    const currentDir = join(root, "current");
+    const screenshotPath = "screenshots/ACCOUNT-S001-line-25-account.png";
+
+    try {
+      await mkdir(join(previousDir, "screenshots"), { recursive: true });
+      await mkdir(join(currentDir, "screenshots"), { recursive: true });
+      await writeFile(join(previousDir, screenshotPath), "not a PNG before");
+      await writeFile(join(currentDir, screenshotPath), "not a PNG after");
+
+      const report = await renderLocalDiffReport({
+        previousDir,
+        currentDir,
+      });
+
+      assert.match(report, /1 screenshot change/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

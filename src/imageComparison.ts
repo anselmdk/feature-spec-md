@@ -1,13 +1,9 @@
 import { readFile } from "node:fs/promises";
-import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 
-export const defaultScreenshotChangeThreshold = 0.001;
-
-export async function pngsAreVisuallyEquivalent(
+export async function pngsHaveIdenticalPixels(
   previousPath: string,
   currentPath: string,
-  changeThreshold = defaultScreenshotChangeThreshold,
 ) {
   try {
     const [previous, current] = await Promise.all([
@@ -21,21 +17,7 @@ export async function pngsAreVisuallyEquivalent(
       return false;
     }
 
-    const pixelCount = previous.width * previous.height;
-    if (pixelCount === 0) return true;
-    const changedPixels = pixelmatch(
-      previous.data,
-      current.data,
-      undefined,
-      previous.width,
-      previous.height,
-      {
-        // Ignore small color and anti-aliasing differences before applying the
-        // whole-image changed-pixel threshold below.
-        threshold: 0.1,
-      },
-    );
-    return changedPixels / pixelCount <= changeThreshold;
+    return previous.data.equals(current.data);
   } catch {
     // A report must remain publishable when a file has an unexpected encoding.
     // The caller retains the conservative byte-hash result in that case.
