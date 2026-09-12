@@ -97,6 +97,17 @@ downloads used to create PR diff reports. Diff reports compare files locally,
 but download the base and current builds in parallel to avoid serial FTP
 latency dominating the job.
 
+Report PR comments use `Europe/Copenhagen` for their server-rendered timestamp
+fallback. Consuming projects can override this by passing the reusable workflow
+input `report-time-zone` with any IANA time zone, such as `America/New_York`.
+The mock-report comment workflow reads the same setting from the
+`FEATURE_SPEC_REPORT_TIME_ZONE` repository variable.
+
+Comments also emit GitHub's `<relative-time format="datetime">` element with
+the original ISO timestamp. GitHub-capable browsers use that value to render
+the timestamp in the viewer's local time zone; the configured server-rendered
+fallback remains available when client-side localization is unavailable.
+
 Use a mock-specific base URL and remote directory value so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 
 The same data is available from the library for custom dev servers or visual tests:
