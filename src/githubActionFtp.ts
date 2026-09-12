@@ -14,6 +14,9 @@ export type FtpConfig = {
   baseUrl: string;
   buildNumber: string;
   prNumber?: string;
+  concurrency: number;
+  connectTimeoutSeconds: number;
+  maxTimeSeconds: number;
 };
 
 export function ftpConfig(options: GithubActionOptions): FtpConfig {
@@ -36,6 +39,20 @@ export function ftpConfig(options: GithubActionOptions): FtpConfig {
     value(options, "ftp-secure", "FEATURE_SPEC_FTP_SECURE"),
   );
   const port = value(options, "ftp-port", "FEATURE_SPEC_FTP_PORT");
+  const concurrency = positiveInteger(
+    value(options, "ftp-concurrency", "FEATURE_SPEC_FTP_CONCURRENCY") ?? "4",
+    "FTP concurrency",
+    16,
+  );
+  const connectTimeoutSeconds = positiveInteger(
+    value(options, "ftp-connect-timeout", "FEATURE_SPEC_FTP_CONNECT_TIMEOUT") ??
+      "15",
+    "FTP connect timeout",
+  );
+  const maxTimeSeconds = positiveInteger(
+    value(options, "ftp-max-time", "FEATURE_SPEC_FTP_MAX_TIME") ?? "120",
+    "FTP maximum transfer time",
+  );
 
   if (!/^\d+$/.test(buildNumber)) {
     throw new Error(
@@ -58,6 +75,9 @@ export function ftpConfig(options: GithubActionOptions): FtpConfig {
     baseUrl,
     buildNumber,
     prNumber,
+    concurrency,
+    connectTimeoutSeconds,
+    maxTimeSeconds,
   };
 }
 
@@ -71,13 +91,33 @@ export async function uploadDirectory(
     throw new Error(`Report directory contains no files: ${localDir}`);
   }
 
-  for (const file of files) {
-    const remotePath = pathJoin(
+  const queue = files.map((file) => ({
+    file,
+    remotePath: pathJoin(
       remoteDir,
       relative(localDir, file).split(sep).join("/"),
-    );
-    await uploadFile(file, remotePath, config);
-  }
+    ),
+  }));
+  await runWithConcurrency(queue, config.concurrency, async (item) => {
+    await uploadFile(item.file, item.remotePath, config);
+  });
+}
+
+export async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+) {
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (nextIndex < items.length) {
+        const item = items[nextIndex++];
+        if (item === undefined) return;
+        await worker(item);
+      }
+    }),
+  );
 }
 
 export async function uploadFile(
@@ -86,9 +126,7 @@ export async function uploadFile(
   config: FtpConfig,
 ) {
   await runCurl([
-    "--silent",
-    "--show-error",
-    "--fail",
+    ...curlTransferArgs(config),
     "--ftp-create-dirs",
     "-u",
     `${config.user}:${config.password}`,
@@ -105,9 +143,7 @@ export async function downloadRemoteFile(
 ) {
   await mkdir(dirname(localFile), { recursive: true });
   await runCurl([
-    "--silent",
-    "--show-error",
-    "--fail",
+    ...curlTransferArgs(config),
     "-u",
     `${config.user}:${config.password}`,
     "-o",
@@ -122,9 +158,7 @@ export async function listRemoteDirectory(
 ) {
   const directoryUrl = ftpUrl(config, asDirectoryPath(remoteDir));
   const commonArgs = [
-    "--silent",
-    "--show-error",
-    "--fail",
+    ...curlTransferArgs(config),
     "-u",
     `${config.user}:${config.password}`,
   ];
@@ -233,6 +267,23 @@ export async function runCurl(args: string[]) {
   });
 }
 
+function curlTransferArgs(config: FtpConfig) {
+  return [
+    "--silent",
+    "--show-error",
+    "--fail",
+    "--connect-timeout",
+    String(config.connectTimeoutSeconds),
+    "--max-time",
+    String(config.maxTimeSeconds),
+    "--retry",
+    "3",
+    "--retry-all-errors",
+    "--retry-delay",
+    "2",
+  ];
+}
+
 async function walkFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const files = await Promise.all(
@@ -243,7 +294,7 @@ async function walkFiles(dir: string): Promise<string[]> {
       return [];
     }),
   );
-  return files.flat();
+  return files.flat().sort();
 }
 
 function parseDirectoryListing(listing: string) {
@@ -290,4 +341,19 @@ function value(options: GithubActionOptions, key: string, envKey: string) {
 
 function booleanValue(value: string | undefined) {
   return value === "true" || value === "1" || value === "yes";
+}
+
+function positiveInteger(
+  value: string,
+  label: string,
+  maximum = Number.MAX_SAFE_INTEGER,
+) {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(`${label} must be a positive integer: ${value}`);
+  }
+  const result = Number(value);
+  if (result > maximum) {
+    throw new Error(`${label} must be at most ${maximum}: ${value}`);
+  }
+  return result;
 }

@@ -342,6 +342,9 @@ GitHub report publishing:
   --ftp-host                    FTP host, or FEATURE_SPEC_FTP_HOST.
   --ftp-user                    FTP user, or FEATURE_SPEC_FTP_USER.
   --ftp-remote-dir              FTP remote directory, or FEATURE_SPEC_FTP_REMOTE_DIR.
+  --ftp-concurrency             Concurrent file uploads, or FEATURE_SPEC_FTP_CONCURRENCY (default 4).
+  --ftp-connect-timeout         Connection timeout in seconds, or FEATURE_SPEC_FTP_CONNECT_TIMEOUT (default 15).
+  --ftp-max-time                Maximum transfer time in seconds, or FEATURE_SPEC_FTP_MAX_TIME (default 120).
   --report-base-url             Public report base URL, or FEATURE_SPEC_REPORT_BASE_URL.
   --build-number                Build number, or FEATURE_SPEC_BUILD_NUMBER/GITHUB_RUN_NUMBER.
   --pr-number                   Pull request number, or FEATURE_SPEC_PR_NUMBER.

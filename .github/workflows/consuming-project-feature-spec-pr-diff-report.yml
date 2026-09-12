@@ -95,6 +95,7 @@ jobs:
             core.setOutput('pr-number', String(prNumber));
             core.setOutput('head-sha', pr.head.sha);
             core.setOutput('head-ref', pr.head.ref);
+            core.setOutput('started-at', String(Date.now()));
 
       - name: Resolve current consuming project PR build
         id: current_build
@@ -115,14 +116,15 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: process.env.CI_WORKFLOW_ID,
-              event: 'pull_request',
               status: 'success',
               head_sha: '${{ steps.changes.outputs.head-sha }}',
               per_page: 20,
             });
-            const latest = runs[0];
+            const latest = runs.find((run) =>
+              run.event === 'pull_request' || run.event === 'workflow_dispatch'
+            );
             if (!latest) {
-              core.setFailed('No successful pull_request CI build found for PR #${{ steps.changes.outputs.pr-number }} at ${{ steps.changes.outputs.head-sha }}.');
+              core.setFailed('No successful CI build found for PR #${{ steps.changes.outputs.pr-number }} at ${{ steps.changes.outputs.head-sha }}.');
               return;
             }
             core.setOutput('build-number', String(latest.run_number));
@@ -185,6 +187,7 @@ jobs:
           CURRENT_BUILD_NUMBER: ${{ steps.current_build.outputs.build-number }}
           BASE_BUILD_NUMBER: ${{ steps.main_build.outputs.build-number }}
           CURRENT_RUN_URL: ${{ steps.current_build.outputs.run-url }}
+          REPORT_STARTED_AT: ${{ steps.changes.outputs.started-at }}
         with:
           script: |
             const prNumber = Number('${{ steps.changes.outputs.pr-number }}');
@@ -195,6 +198,10 @@ jobs:
             const timestamp = new Date().toISOString();
             const runUrl = process.env.CURRENT_RUN_URL;
             const diffUrl = process.env.DIFF_REPORT_URL;
+            const startedAt = Number(process.env.REPORT_STARTED_AT);
+            const durationMinutes = Number.isFinite(startedAt)
+              ? ((Date.now() - startedAt) / 60000).toFixed(1)
+              : 'n/a';
             const reportBaseUrl = process.env.REPORT_BASE_URL.replace(/\/+$/, '');
             const specUrl = reportBaseUrl + '/build/' + buildNumber + '/';
             const comments = await github.paginate(github.rest.issues.listComments, {
@@ -226,6 +233,7 @@ jobs:
                   runUrl: '',
                   diffUrl: match[3],
                   specUrl: reportBaseUrl + '/build/' + match[1] + '/',
+                  durationMinutes: 'n/a',
                 });
               }
               return entries;
@@ -241,6 +249,7 @@ jobs:
               runUrl,
               diffUrl,
               specUrl,
+              durationMinutes,
             };
             const history = priorEntries
               .filter((entry) => entry.buildNumber !== buildNumber)
@@ -266,6 +275,7 @@ jobs:
             const historyLines = history.map((entry) =>
               '- Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.specUrl) + ')' +
               comparison(entry) + ' · ' + formatDate(entry.timestamp) +
+              ' · report job ' + (entry.durationMinutes ?? 'n/a') + ' minutes' +
               ' · [spec](' + entry.specUrl + ') · [diff](' + entry.diffUrl + ')'
             );
             const lines = [
@@ -276,7 +286,8 @@ jobs:
               '[Full spec report](' + specUrl + ') · [Changes since main](' + diffUrl + ')',
               '',
               'Build [' + buildNumber + '](' + runUrl + ')' + comparison(current) +
-                ' · ' + formatDate(timestamp),
+                ' · ' + formatDate(timestamp) +
+                ' · report job ' + durationMinutes + ' minutes',
             ];
             if (historyLines.length) {
               lines.push(
