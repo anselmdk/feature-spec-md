@@ -116,14 +116,15 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: process.env.CI_WORKFLOW_ID,
-              event: 'pull_request',
               status: 'success',
               head_sha: '${{ steps.changes.outputs.head-sha }}',
               per_page: 20,
             });
-            const latest = runs[0];
+            const latest = runs.find((run) =>
+              run.event === 'pull_request' || run.event === 'workflow_dispatch'
+            );
             if (!latest) {
-              core.setFailed('No successful pull_request CI build found for PR #${{ steps.changes.outputs.pr-number }} at ${{ steps.changes.outputs.head-sha }}.');
+              core.setFailed('No successful CI build found for PR #${{ steps.changes.outputs.pr-number }} at ${{ steps.changes.outputs.head-sha }}.');
               return;
             }
             core.setOutput('build-number', String(latest.run_number));
