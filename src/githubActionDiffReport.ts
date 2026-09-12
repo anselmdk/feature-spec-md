@@ -3,8 +3,8 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
+import { pngsAreVisuallyEquivalent } from "./imageComparison.js";
 import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
-import { pngsHaveIdenticalPixels } from "./imageComparison.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -397,7 +397,7 @@ async function markVisuallyEquivalentPngs(
     const equivalent = identicalBytes
       ? true
       : bothPngs
-        ? await pngsHaveIdenticalPixels(
+        ? await pngsAreVisuallyEquivalent(
             join(previousDir, pair.previousPath),
             join(currentDir, pair.currentPath),
           )
@@ -870,7 +870,7 @@ th{background:var(--surface-muted)}a{color:var(--link)}
 .image-card.before h4{color:var(--danger)}.image-card.after h4{color:var(--success)}
 .image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:100%;height:auto}
 .image-comparison{--position:50%;border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
-.image-comparison-stage{position:relative;display:grid;background:var(--surface-muted);overflow:hidden}
+.image-comparison-stage{position:relative;display:grid;background:var(--surface-muted);overflow:hidden;cursor:ew-resize;touch-action:none}
 .image-comparison-stage img{display:block;grid-area:1/1;width:100%;height:auto}
 .image-comparison-after{clip-path:inset(0 0 0 var(--position))}
 .image-comparison-divider{position:absolute;top:0;bottom:0;left:var(--position);width:3px;background:white;box-shadow:0 0 0 1px rgba(0,0,0,.35);transform:translateX(-50%);pointer-events:none}
@@ -968,7 +968,7 @@ function renderScreenshotToggleScript() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
   const source =
-    "(function(){var button=document.querySelector('.screenshot-toggle-button');var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});if(button)button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}if(button)button.addEventListener('click',function(){expanded=!expanded;apply();});document.querySelectorAll('[data-image-comparison]').forEach(function(comparison){var input=comparison.querySelector('input[type=range]');function update(){comparison.style.setProperty('--position',input.value+'%');}input.addEventListener('input',update);update();});apply();})();";
+    "(function(){var button=document.querySelector('.screenshot-toggle-button');var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});if(button)button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}if(button)button.addEventListener('click',function(){expanded=!expanded;apply();});document.querySelectorAll('[data-image-comparison]').forEach(function(comparison){var input=comparison.querySelector('input[type=range]');var stage=comparison.querySelector('.image-comparison-stage');var dragging=false;function update(){comparison.style.setProperty('--position',input.value+'%');}function setFromPointer(event){var rect=stage.getBoundingClientRect();var value=Math.max(0,Math.min(100,(event.clientX-rect.left)/rect.width*100));input.value=String(Math.round(value));input.dispatchEvent(new Event('input',{bubbles:true}));}input.addEventListener('input',update);stage.addEventListener('pointerdown',function(event){dragging=true;stage.setPointerCapture(event.pointerId);setFromPointer(event);event.preventDefault();});stage.addEventListener('pointermove',function(event){if(dragging)setFromPointer(event);});stage.addEventListener('pointerup',function(event){dragging=false;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});stage.addEventListener('pointercancel',function(event){dragging=false;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});update();});apply();})();";
   return openTag + source + closeTag;
 }
 
