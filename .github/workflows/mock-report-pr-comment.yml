@@ -25,12 +25,19 @@ jobs:
           REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_REPORT_BASE_URL }}
           BUILD_NUMBER: ${{ github.event.workflow_run.run_number }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+          RUN_COMPLETED_AT: ${{ github.event.workflow_run.updated_at }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         with:
           script: |
             const marker = '<!-- feature-spec-md-mock-reports -->';
             const statePrefix = '<!-- feature-spec-md-mock-report-state:';
             const baseUrl = process.env.REPORT_BASE_URL.replace(/\/+$/, '');
+            const startedAt = Date.parse(process.env.RUN_STARTED_AT);
+            const completedAt = Date.parse(process.env.RUN_COMPLETED_AT);
+            const durationMinutes = Number.isFinite(startedAt) && Number.isFinite(completedAt)
+              ? ((completedAt - startedAt) / 60000).toFixed(1)
+              : 'n/a';
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -65,6 +72,7 @@ jobs:
                 buildNumber,
                 timestamp: comment.updated_at,
                 runUrl,
+                durationMinutes: 'n/a',
                 ...urlsForBuild(buildNumber),
               };
             };
@@ -76,6 +84,7 @@ jobs:
               buildNumber: process.env.BUILD_NUMBER,
               timestamp: new Date().toISOString(),
               runUrl: process.env.RUN_URL,
+              durationMinutes,
               ...urlsForBuild(process.env.BUILD_NUMBER),
             };
             const history = priorEntries
@@ -98,6 +107,7 @@ jobs:
             const historyLines = history.map((entry) =>
               '- Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.indexUrl) + ')' +
               ' · ' + formatDate(entry.timestamp) +
+              ' · report job ' + (entry.durationMinutes ?? 'n/a') + ' minutes' +
               ' · [index](' + entry.indexUrl + ')' +
               ' · [current](' + entry.currentUrl + ')' +
               ' · [previous](' + entry.previousUrl + ')' +
@@ -114,7 +124,8 @@ jobs:
                 '[Diff report](' + current.diffUrl + ')',
               '',
               'Build [' + current.buildNumber + '](' + current.runUrl + ')' +
-                ' · ' + formatDate(current.timestamp),
+                ' · ' + formatDate(current.timestamp) +
+                ' · report job ' + durationMinutes + ' minutes',
             ];
             if (historyLines.length) {
               lines.push(
