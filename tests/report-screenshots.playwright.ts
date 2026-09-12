@@ -139,6 +139,27 @@ Then account access is granted
   await expect(themeToggle).toHaveText(originalTheme === "dark" ? "☾" : "☀");
 });
 
+test("reports default to system dark mode and remain toggleable", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ colorScheme: "dark" });
+  const page = await context.newPage();
+
+  try {
+    await page.setContent(renderHtmlReport([]));
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    const themeToggle = page.getByRole("button", {
+      name: "Toggle dark mode",
+    });
+    await expect(themeToggle).toHaveText("☀");
+    await themeToggle.click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(themeToggle).toHaveText("☾");
+  } finally {
+    await context.close();
+  }
+});
+
 test("navigator toggles layers, documents, and scenarios", async ({ page }) => {
   const spec = parseFeatureSpec(
     `---
@@ -195,6 +216,18 @@ Then account access is granted
     page.getByRole("heading", { name: "Account access" }),
   ).not.toBeVisible();
   await navigator.locator("[data-navigator-trigger]").click();
+  const search = navigator.locator("[data-navigator-search]");
+  await expect(search).toHaveAttribute("placeholder", "Search context");
+  await search.fill("account");
+  await expect(
+    navigator.locator('[data-navigator-target="account"]'),
+  ).toBeVisible();
+  await search.fill("does-not-exist");
+  await expect(navigator.locator("[data-navigator-no-results]")).toBeVisible();
+  await search.fill("");
+  await expect(
+    navigator.locator('[data-navigator-target="layer-capability"]'),
+  ).toBeVisible();
   const layerButton = navigator.locator(
     '[data-navigator-target="layer-capability"]',
   );

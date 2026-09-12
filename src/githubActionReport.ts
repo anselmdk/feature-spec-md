@@ -11,6 +11,7 @@ import {
   type GithubActionOptions,
 } from "./githubActionFtp.js";
 import { writeGithubOutput, writeGithubSummary } from "./githubActionOutput.js";
+import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
 import { writePublishedFeatureSpecFiles } from "./reportArtifacts.js";
 import { renderHtmlPage } from "./reportHtml.js";
 
@@ -156,7 +157,7 @@ li { margin: 0.35rem 0; }
 `,
     body: `
 <h1>Feature spec build reports</h1>
-<p>Generated ${escapeHtml(generatedAt)}.</p>
+<p ${renderGeneratedAt(generatedAt)}>Generated ${escapeHtml(formatGeneratedAt(generatedAt))}.</p>
 <p><a href="${escapeHtml(latestReportUrl(baseUrl))}"><strong>Open the latest report</strong></a></p>
 <ol>
 ${rows}
