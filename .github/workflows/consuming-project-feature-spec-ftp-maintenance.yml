@@ -1,0 +1,85 @@
+# Reusable FTP storage diagnostic and cleanup workflow for consuming projects.
+# The report mode is read-only. Cleanup additionally requires confirm=true.
+
+name: Consuming project feature spec FTP maintenance
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: report, dry-run, or cleanup
+        required: false
+        type: string
+        default: report
+      keep-builds:
+        description: Number of newest numbered build directories to retain.
+        required: false
+        type: string
+        default: "10"
+      paths:
+        description: Comma-separated paths relative to the configured FTP root.
+        required: false
+        type: string
+        default: ""
+      confirm:
+        description: Required true for destructive cleanup mode.
+        required: false
+        type: boolean
+        default: false
+      ftp-host:
+        required: true
+        type: string
+      ftp-user:
+        required: true
+        type: string
+      ftp-remote-dir:
+        required: false
+        type: string
+        default: ""
+      ftp-port:
+        required: false
+        type: string
+        default: ""
+      ftp-secure:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      ftp-password:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  maintain:
+    if: inputs.mode != 'cleanup' || inputs.confirm
+    runs-on: ubuntu-latest
+    env:
+      FEATURE_SPEC_FTP_HOST: ${{ inputs.ftp-host }}
+      FEATURE_SPEC_FTP_USER: ${{ inputs.ftp-user }}
+      FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.ftp-password }}
+      FEATURE_SPEC_FTP_REMOTE_DIR: ${{ inputs.ftp-remote-dir }}
+      FEATURE_SPEC_FTP_PORT: ${{ inputs.ftp-port }}
+      FEATURE_SPEC_FTP_SECURE: ${{ inputs.ftp-secure }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install consuming project dependencies
+        run: npm ci
+      - name: Inspect or clean FTP storage
+        run: >-
+          npx --no-install feature-spec-md github-ftp-maintenance
+          --mode "${{ inputs.mode }}"
+          --keep-builds "${{ inputs.keep-builds }}"
+          --paths "${{ inputs.paths }}"
+
+  refuse-unconfirmed-cleanup:
+    if: inputs.mode == 'cleanup' && !inputs.confirm
+    runs-on: ubuntu-latest
+    steps:
+      - run: >-
+          echo "Cleanup was requested without confirm=true; no FTP changes were made." && exit 1

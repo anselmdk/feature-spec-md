@@ -17,6 +17,7 @@ import {
 import { githubReportMetadata } from "./githubReportMetadata.js";
 import { publishGithubActionDiffReport } from "./githubActionDiffReport.js";
 import { publishGithubActionReport } from "./githubActionReport.js";
+import { runFtpMaintenance } from "./githubActionFtpMaintenance.js";
 import { checkSpecDocuments } from "./specDocuments.js";
 import {
   buildSpecImplementationReport,
@@ -45,6 +46,7 @@ async function main() {
   if (command === "github-report") return publishGithubActionReport(options);
   if (command === "github-diff-report")
     return publishGithubActionDiffReport(options);
+  if (command === "github-ftp-maintenance") return runFtpMaintenance(options);
   if (command === "init") return runInit(options);
 
   printHelp();
@@ -318,6 +320,7 @@ Usage:
   feature-spec-md report [--specs "${defaultSpecPattern}"] [--tests "${defaultTestPattern}"] [--screenshots "${defaultScreenshotPattern}"] [--enforce-evidence=false] [--out ${defaultReportPath}]
   feature-spec-md github-report [--report-dir test-results/spec-report] [--publish artifact|ftp]
   feature-spec-md github-diff-report --publish ftp --pr-number 123
+  feature-spec-md github-ftp-maintenance --mode report|dry-run|cleanup
 
 Defaults:
   check                       Requires scenario, rule, and model coverage.
@@ -348,6 +351,13 @@ GitHub report publishing:
   --report-base-url             Public report base URL, or FEATURE_SPEC_REPORT_BASE_URL.
   --build-number                Build number, or FEATURE_SPEC_BUILD_NUMBER/GITHUB_RUN_NUMBER.
   --pr-number                   Pull request number, or FEATURE_SPEC_PR_NUMBER.
+
+FTP maintenance:
+  --mode report                 Inventory only (default is not destructive; mode is required).
+  --mode dry-run                Show cleanup candidates without deleting them.
+  --mode cleanup                Delete old numbered builds and/or exact --paths.
+  --keep-builds                 Numbered builds to retain (default: 10).
+  --paths                       Comma-separated paths relative to the FTP root.
 `);
 }
 
