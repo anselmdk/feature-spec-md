@@ -43,6 +43,26 @@ test("renamed screenshots use an interactive before and after slider", async ({
     await slider.fill("80");
     await expect(comparison).toHaveAttribute("style", /--position: 80%/);
     await expect(afterImage).toHaveCSS("clip-path", "inset(0px 0px 0px 80%)");
+
+    const stage = comparison.locator(".image-comparison-stage");
+    const stageBox = await stage.boundingBox();
+    expect(stageBox).toBeTruthy();
+    await page.mouse.click(
+      stageBox!.x + stageBox!.width * 0.2,
+      stageBox!.y + 20,
+    );
+    await expect(slider).toHaveValue("20");
+    await page.mouse.move(
+      stageBox!.x + stageBox!.width * 0.8,
+      stageBox!.y + 20,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      stageBox!.x + stageBox!.width * 0.4,
+      stageBox!.y + 20,
+    );
+    await page.mouse.up();
+    await expect(slider).toHaveValue("40");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
