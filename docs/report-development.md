@@ -68,6 +68,10 @@ Before publishing, the workflow adds a root `test-results/mock-reports/index.htm
 
 The FTP publisher then uploads the whole `test-results/mock-reports` directory to `build/<github.run_number>/` and updates the build index.
 
+Directory uploads use a bounded worker pool so independent files can transfer
+concurrently without overwhelming the FTP server. Transfers also have
+connection and total-time limits and retry transient curl failures.
+
 Configure these repository settings before enabling the workflow:
 
 | Name                           | Source              |
@@ -80,10 +84,13 @@ Configure these repository settings before enabling the workflow:
 
 Optional settings:
 
-| Name                      | Source              |
-| ------------------------- | ------------------- |
-| `FEATURE_SPEC_FTP_PORT`   | Repository variable |
-| `FEATURE_SPEC_FTP_SECURE` | Repository variable |
+| Name                               | Source                                            |
+| ---------------------------------- | ------------------------------------------------- |
+| `FEATURE_SPEC_FTP_PORT`            | Repository variable                               |
+| `FEATURE_SPEC_FTP_SECURE`          | Repository variable                               |
+| `FEATURE_SPEC_FTP_CONCURRENCY`     | Optional; defaults to `4` concurrent file uploads |
+| `FEATURE_SPEC_FTP_CONNECT_TIMEOUT` | Optional; defaults to `15` seconds                |
+| `FEATURE_SPEC_FTP_MAX_TIME`        | Optional; defaults to `120` seconds per transfer  |
 
 Use a mock-specific base URL and remote directory value so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 
