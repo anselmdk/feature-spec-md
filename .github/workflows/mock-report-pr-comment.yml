@@ -25,12 +25,20 @@ jobs:
           REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_REPORT_BASE_URL }}
           BUILD_NUMBER: ${{ github.event.workflow_run.run_number }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+          RUN_COMPLETED_AT: ${{ github.event.workflow_run.updated_at }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          REPORT_TIME_ZONE: ${{ vars.FEATURE_SPEC_REPORT_TIME_ZONE || 'Europe/Copenhagen' }}
         with:
           script: |
             const marker = '<!-- feature-spec-md-mock-reports -->';
             const statePrefix = '<!-- feature-spec-md-mock-report-state:';
             const baseUrl = process.env.REPORT_BASE_URL.replace(/\/+$/, '');
+            const startedAt = Date.parse(process.env.RUN_STARTED_AT);
+            const completedAt = Date.parse(process.env.RUN_COMPLETED_AT);
+            const durationMinutes = Number.isFinite(startedAt) && Number.isFinite(completedAt)
+              ? ((completedAt - startedAt) / 60000).toFixed(1)
+              : 'n/a';
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -65,6 +73,7 @@ jobs:
                 buildNumber,
                 timestamp: comment.updated_at,
                 runUrl,
+                durationMinutes: 'n/a',
                 ...urlsForBuild(buildNumber),
               };
             };
@@ -76,6 +85,7 @@ jobs:
               buildNumber: process.env.BUILD_NUMBER,
               timestamp: new Date().toISOString(),
               runUrl: process.env.RUN_URL,
+              durationMinutes,
               ...urlsForBuild(process.env.BUILD_NUMBER),
             };
             const history = priorEntries
@@ -85,19 +95,25 @@ jobs:
               JSON.stringify({ current, history }),
               'utf8',
             ).toString('base64');
-            const formatDate = (value) =>
+            const formatDate = (value, timeZone) =>
               new Intl.DateTimeFormat('en-GB', {
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
-                timeZone: 'UTC',
+                timeZone,
                 timeZoneName: 'short',
               }).format(new Date(value));
+            const timeZone = process.env.REPORT_TIME_ZONE || 'Europe/Copenhagen';
+            const localizedDate = (value) =>
+              '<relative-time datetime="' + value + '" format="datetime">' +
+              formatDate(value, timeZone) +
+              '</relative-time>';
             const historyLines = history.map((entry) =>
               '- Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.indexUrl) + ')' +
-              ' · ' + formatDate(entry.timestamp) +
+              ' · ' + localizedDate(entry.timestamp) +
+              ' · report job ' + (entry.durationMinutes ?? 'n/a') + ' minutes' +
               ' · [index](' + entry.indexUrl + ')' +
               ' · [current](' + entry.currentUrl + ')' +
               ' · [previous](' + entry.previousUrl + ')' +
@@ -114,7 +130,8 @@ jobs:
                 '[Diff report](' + current.diffUrl + ')',
               '',
               'Build [' + current.buildNumber + '](' + current.runUrl + ')' +
-                ' · ' + formatDate(current.timestamp),
+                ' · ' + localizedDate(current.timestamp) +
+                ' · report job ' + durationMinutes + ' minutes',
             ];
             if (historyLines.length) {
               lines.push(

@@ -68,6 +68,10 @@ Before publishing, the workflow adds a root `test-results/mock-reports/index.htm
 
 The FTP publisher then uploads the whole `test-results/mock-reports` directory to `build/<github.run_number>/` and updates the build index.
 
+Directory uploads use a bounded worker pool so independent files can transfer
+concurrently without overwhelming the FTP server. Transfers also have
+connection and total-time limits and retry transient curl failures.
+
 Configure these repository settings before enabling the workflow:
 
 | Name                           | Source              |
@@ -80,10 +84,29 @@ Configure these repository settings before enabling the workflow:
 
 Optional settings:
 
-| Name                      | Source              |
-| ------------------------- | ------------------- |
-| `FEATURE_SPEC_FTP_PORT`   | Repository variable |
-| `FEATURE_SPEC_FTP_SECURE` | Repository variable |
+| Name                               | Source                                             |
+| ---------------------------------- | -------------------------------------------------- |
+| `FEATURE_SPEC_FTP_PORT`            | Repository variable                                |
+| `FEATURE_SPEC_FTP_SECURE`          | Repository variable                                |
+| `FEATURE_SPEC_FTP_CONCURRENCY`     | Optional; defaults to `4` concurrent FTP transfers |
+| `FEATURE_SPEC_FTP_CONNECT_TIMEOUT` | Optional; defaults to `15` seconds                 |
+| `FEATURE_SPEC_FTP_MAX_TIME`        | Optional; defaults to `120` seconds per transfer   |
+
+The concurrency setting applies to both report uploads and the remote build
+downloads used to create PR diff reports. Diff reports compare files locally,
+but download the base and current builds in parallel to avoid serial FTP
+latency dominating the job.
+
+Report PR comments use `Europe/Copenhagen` for their server-rendered timestamp
+fallback. Consuming projects can override this by passing the reusable workflow
+input `report-time-zone` with any IANA time zone, such as `America/New_York`.
+The mock-report comment workflow reads the same setting from the
+`FEATURE_SPEC_REPORT_TIME_ZONE` repository variable.
+
+Comments also emit GitHub's `<relative-time format="datetime">` element with
+the original ISO timestamp. GitHub-capable browsers use that value to render
+the timestamp in the viewer's local time zone; the configured server-rendered
+fallback remains available when client-side localization is unavailable.
 
 Use a mock-specific base URL and remote directory value so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 

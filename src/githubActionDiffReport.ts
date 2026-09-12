@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
 import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
+import { pngsHaveIdenticalPixels } from "./imageComparison.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -12,6 +13,7 @@ import {
   listRemoteFilesRecursive,
   pathJoin,
   publicUrl,
+  runWithConcurrency,
   uploadDirectory,
   type GithubActionOptions,
 } from "./githubActionFtp.js";
@@ -256,47 +258,63 @@ async function compareBuilds(
     tmpdir(),
     `feature-spec-md-build-compare-${process.pid}-${baseBuild}-${currentBuild}`,
   );
-  const files: ComparedFile[] = [];
+  const files = new Array<ComparedFile>(allPaths.length);
 
-  for (const filePath of allPaths) {
-    const baseRemote = baseRelative.has(filePath)
-      ? pathJoin(baseRoot, filePath)
-      : undefined;
-    const currentRemote = currentRelative.has(filePath)
-      ? pathJoin(currentRoot, filePath)
-      : undefined;
-    const baseLocal = baseRemote
-      ? join(localRoot, "base", filePath)
-      : undefined;
-    const currentLocal = currentRemote
-      ? join(localRoot, "current", filePath)
-      : undefined;
+  await runWithConcurrency(
+    allPaths.map((filePath, index) => ({ filePath, index })),
+    config.concurrency,
+    async ({ filePath, index }) => {
+      const baseRemote = baseRelative.has(filePath)
+        ? pathJoin(baseRoot, filePath)
+        : undefined;
+      const currentRemote = currentRelative.has(filePath)
+        ? pathJoin(currentRoot, filePath)
+        : undefined;
+      const baseLocal = baseRemote
+        ? join(localRoot, "base", filePath)
+        : undefined;
+      const currentLocal = currentRemote
+        ? join(localRoot, "current", filePath)
+        : undefined;
 
-    if (baseRemote && baseLocal)
-      await downloadRemoteFile(baseRemote, baseLocal, config);
-    if (currentRemote && currentLocal)
-      await downloadRemoteFile(currentRemote, currentLocal, config);
+      await Promise.all([
+        baseRemote && baseLocal
+          ? downloadRemoteFile(baseRemote, baseLocal, config)
+          : undefined,
+        currentRemote && currentLocal
+          ? downloadRemoteFile(currentRemote, currentLocal, config)
+          : undefined,
+      ]);
 
-    const baseInfo = baseLocal ? await fileInfo(baseLocal) : undefined;
-    const currentInfo = currentLocal ? await fileInfo(currentLocal) : undefined;
-    const status = !baseInfo
-      ? "added"
-      : !currentInfo
-        ? "removed"
-        : baseInfo.hash === currentInfo.hash
-          ? "unchanged"
-          : "changed";
+      const baseInfo = baseLocal ? await fileInfo(baseLocal) : undefined;
+      const currentInfo = currentLocal
+        ? await fileInfo(currentLocal)
+        : undefined;
+      const status = !baseInfo
+        ? "added"
+        : !currentInfo
+          ? "removed"
+          : baseInfo.hash === currentInfo.hash
+            ? "unchanged"
+            : "changed";
 
-    files.push({
-      path: filePath,
-      kind: fileKind(filePath),
-      status,
-      previousHash: baseInfo?.hash,
-      currentHash: currentInfo?.hash,
-      previousSize: baseInfo?.size,
-      currentSize: currentInfo?.size,
-    });
-  }
+      files[index] = {
+        path: filePath,
+        kind: fileKind(filePath),
+        status,
+        previousHash: baseInfo?.hash,
+        currentHash: currentInfo?.hash,
+        previousSize: baseInfo?.size,
+        currentSize: currentInfo?.size,
+      };
+    },
+  );
+
+  await markVisuallyEquivalentPngs(
+    files,
+    join(localRoot, "base"),
+    join(localRoot, "current"),
+  );
 
   const previousSpecs = await loadSpecSections(join(localRoot, "base"));
   const currentSpecs = await loadSpecSections(join(localRoot, "current"));
@@ -332,7 +350,7 @@ async function compareLocalFiles(
   const currentSet = new Set(currentFiles);
   const allPaths = Array.from(new Set([...previousSet, ...currentSet])).sort();
 
-  return Promise.all(
+  const files: ComparedFile[] = await Promise.all(
     allPaths.map(async (filePath) => {
       const previousInfo = previousSet.has(filePath)
         ? await fileInfo(join(previousDir, filePath))
@@ -358,6 +376,47 @@ async function compareLocalFiles(
       };
     }),
   );
+  await markVisuallyEquivalentPngs(files, previousDir, currentDir);
+  return files;
+}
+
+async function markVisuallyEquivalentPngs(
+  files: ComparedFile[],
+  previousDir: string,
+  currentDir: string,
+) {
+  for (const pair of pairRenamedScreenshots(files)) {
+    if (pair.status !== "changed" || !pair.previousPath || !pair.currentPath) {
+      continue;
+    }
+    const identicalBytes =
+      pair.previousHash !== undefined && pair.previousHash === pair.currentHash;
+    const bothPngs =
+      pair.previousPath.toLowerCase().endsWith(".png") &&
+      pair.currentPath.toLowerCase().endsWith(".png");
+    const equivalent = identicalBytes
+      ? true
+      : bothPngs
+        ? await pngsHaveIdenticalPixels(
+            join(previousDir, pair.previousPath),
+            join(currentDir, pair.currentPath),
+          )
+        : false;
+    if (!equivalent) continue;
+
+    const previous = files.find(
+      (file) =>
+        file.path === pair.previousPath &&
+        (file.status === "removed" || file.status === "changed"),
+    );
+    const current = files.find(
+      (file) =>
+        file.path === pair.currentPath &&
+        (file.status === "added" || file.status === "changed"),
+    );
+    if (previous) previous.status = "unchanged";
+    if (current) current.status = "unchanged";
+  }
 }
 
 async function listLocalFilesRecursive(root: string) {
