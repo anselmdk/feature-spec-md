@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
+import { pngsHaveIdenticalPixels } from "./imageComparison.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -297,6 +298,12 @@ async function compareBuilds(
     });
   }
 
+  await markVisuallyEquivalentPngs(
+    files,
+    join(localRoot, "base"),
+    join(localRoot, "current"),
+  );
+
   const previousSpecs = await loadSpecSections(join(localRoot, "base"));
   const currentSpecs = await loadSpecSections(join(localRoot, "current"));
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
@@ -331,7 +338,7 @@ async function compareLocalFiles(
   const currentSet = new Set(currentFiles);
   const allPaths = Array.from(new Set([...previousSet, ...currentSet])).sort();
 
-  return Promise.all(
+  const files: ComparedFile[] = await Promise.all(
     allPaths.map(async (filePath) => {
       const previousInfo = previousSet.has(filePath)
         ? await fileInfo(join(previousDir, filePath))
@@ -357,6 +364,47 @@ async function compareLocalFiles(
       };
     }),
   );
+  await markVisuallyEquivalentPngs(files, previousDir, currentDir);
+  return files;
+}
+
+async function markVisuallyEquivalentPngs(
+  files: ComparedFile[],
+  previousDir: string,
+  currentDir: string,
+) {
+  for (const pair of pairRenamedScreenshots(files)) {
+    if (pair.status !== "changed" || !pair.previousPath || !pair.currentPath) {
+      continue;
+    }
+    const identicalBytes =
+      pair.previousHash !== undefined && pair.previousHash === pair.currentHash;
+    const bothPngs =
+      pair.previousPath.toLowerCase().endsWith(".png") &&
+      pair.currentPath.toLowerCase().endsWith(".png");
+    const equivalent = identicalBytes
+      ? true
+      : bothPngs
+        ? await pngsHaveIdenticalPixels(
+            join(previousDir, pair.previousPath),
+            join(currentDir, pair.currentPath),
+          )
+        : false;
+    if (!equivalent) continue;
+
+    const previous = files.find(
+      (file) =>
+        file.path === pair.previousPath &&
+        (file.status === "removed" || file.status === "changed"),
+    );
+    const current = files.find(
+      (file) =>
+        file.path === pair.currentPath &&
+        (file.status === "added" || file.status === "changed"),
+    );
+    if (previous) previous.status = "unchanged";
+    if (current) current.status = "unchanged";
+  }
 }
 
 async function listLocalFilesRecursive(root: string) {
