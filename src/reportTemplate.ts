@@ -1,4 +1,5 @@
 import { html } from "./html.js";
+import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
 import { renderHtmlPage } from "./reportHtml.js";
 import { screenshotKey } from "./screenshots.js";
 import type {
@@ -104,17 +105,18 @@ function featureReportBody({
   title: string;
 }) {
   const documents = allReportDocuments(specs, options);
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
   if (options.layers?.length) {
     return `
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
-<p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+<p ${renderGeneratedAt(generatedAt)}>Generated ${html(formatGeneratedAt(generatedAt))}.</p>
 ${renderIssues(options.validationIssues ?? [])}
 ${renderLayeredDocuments(documents, options, evidence, sourceLinks)}
 `;
   }
   return `
 <h1>${renderReportTitle(title, options.repositoryUrl)}</h1>
-<p>Generated ${html(formatGeneratedAt(options.generatedAt))}.</p>
+<p ${renderGeneratedAt(generatedAt)}>Generated ${html(formatGeneratedAt(generatedAt))}.</p>
 ${renderOpenQuestionsAndAssumptions(documents, sourceLinks)}
 ${renderJourneyOverview(specs, options.coverage, sourceLinks)}
 ${renderIssues(options.validationIssues ?? [])}
@@ -171,7 +173,7 @@ function featureReportStyles() {
 .report-navigator{position:fixed;z-index:19;right:12px;top:12px;width:min(320px,calc(100vw - 24px));border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(31,35,40,.16)}
 .navigator-trigger{appearance:none;display:flex;align-items:center;width:100%;border:0;border-radius:10px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;padding:9px 12px;text-align:left}.navigator-trigger:hover{background:var(--surface-hover)}.navigator-trigger:focus-visible,.navigator-link:focus-visible,.navigator-scenarios:focus-visible{outline:2px solid var(--link);outline-offset:-2px}
 .navigator-current{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}
-.navigator-menu{display:none;border-top:1px solid var(--border);padding:10px}.report-navigator[data-open="true"] .navigator-menu{display:block}
+.navigator-menu{display:none;border-top:1px solid var(--border);padding:10px}.report-navigator[data-open="true"] .navigator-menu{display:block}.navigator-search{width:100%;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font:inherit;font-size:13px;padding:6px 8px;margin-bottom:8px}.navigator-search:focus-visible{outline:2px solid var(--link);outline-offset:1px}.navigator-no-results{color:var(--muted);font-size:13px;padding:8px}
 .navigator-links{max-height:calc(100vh - 100px);overflow:auto;padding:2px}.navigator-layer{margin:6px 0 2px}.navigator-row{display:flex;align-items:center;gap:4px}.navigator-link{appearance:none;display:flex;align-items:center;gap:7px;width:100%;min-width:0;border:0;border-radius:5px;background:transparent;color:var(--fg);cursor:pointer;font:inherit;font-size:13px;padding:6px 8px;text-align:left}.navigator-link:hover,.navigator-scenarios:hover{background:var(--surface-hover)}.navigator-link[aria-current="location"]{background:var(--surface-muted);box-shadow:inset 3px 0 var(--link);font-weight:650}.navigator-toggle-state{flex:0 0 auto;width:13px;color:var(--muted);font-size:10px;text-align:center}.navigator-link[aria-pressed="true"]>.navigator-toggle-state::before{content:"●"}.navigator-link[aria-pressed="false"]>.navigator-toggle-state::before{content:"○"}.navigator-link-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.navigator-document{padding-left:22px;color:var(--muted)}.navigator-document[aria-current="location"]{color:var(--fg)}.navigator-scenarios{appearance:none;flex:0 0 auto;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;font:inherit;font-size:11px;padding:3px 7px}.navigator-scenarios[aria-pressed="true"]{background:var(--surface-muted);color:var(--fg)}
 .feature-policy{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px}.feature-policy .badge{display:inline-flex;gap:5px;align-items:center}
 .scenario{border:1px solid var(--border);border-radius:8px;margin:12px 0;background:var(--surface)}
@@ -281,7 +283,10 @@ function initializeReportNavigator() {
   if (!(navigator instanceof HTMLElement)) return;
   const trigger = navigator.querySelector("[data-navigator-trigger]");
   const currentLabel = navigator.querySelector("[data-navigator-current]");
+  const search = navigator.querySelector("[data-navigator-search]");
+  const noResults = navigator.querySelector("[data-navigator-no-results]");
   const entries = Array.from(navigator.querySelectorAll("[data-navigator-target]"));
+  const layers = Array.from(navigator.querySelectorAll("[data-navigator-layer]"));
   const scenarioButtons = Array.from(navigator.querySelectorAll("[data-navigator-scenarios-target]"));
   const targets = entries
     .map((entry) => document.getElementById(entry.dataset.navigatorTarget))
@@ -292,6 +297,25 @@ function initializeReportNavigator() {
   function setMenuOpen(open) {
     navigator.dataset.open = String(open);
     trigger?.setAttribute("aria-expanded", String(open));
+  }
+
+  function updateSearch() {
+    const query = search instanceof HTMLInputElement ? search.value.trim().toLocaleLowerCase() : "";
+    let matches = 0;
+    layers.forEach((layer) => {
+      const layerEntry = layer.querySelector("[data-navigator-layer-target]");
+      const layerMatches = layerEntry?.textContent?.trim().toLocaleLowerCase().includes(query) ?? false;
+      let layerHasMatch = false;
+      layer.querySelectorAll(".navigator-row").forEach((row) => {
+        const entry = row.querySelector("[data-navigator-target]");
+        const matchesEntry = layerMatches || entry?.textContent?.trim().toLocaleLowerCase().includes(query) || false;
+        row.hidden = !matchesEntry;
+        if (matchesEntry) layerHasMatch = true;
+      });
+      layer.hidden = !layerHasMatch;
+      if (layerHasMatch) matches += 1;
+    });
+    if (noResults instanceof HTMLElement) noResults.hidden = matches > 0;
   }
 
   function updateActiveSection() {
@@ -345,6 +369,7 @@ function initializeReportNavigator() {
   }
 
   trigger?.addEventListener("click", () => setMenuOpen(navigator.dataset.open !== "true"));
+  search?.addEventListener("input", updateSearch);
   entries.forEach((entry, index) => entry.addEventListener("click", (event) => {
     event.preventDefault();
     toggleAndJumpTo(index);
@@ -378,6 +403,7 @@ function initializeReportNavigator() {
   });
   document.addEventListener("toggle", requestActiveUpdate, true);
   updateActiveSection();
+  updateSearch();
 }
 document.addEventListener("DOMContentLoaded", initializeReportNavigator);
 ${closeTag}
@@ -416,37 +442,6 @@ function renderReportTitle(title: string, repositoryUrl: string | undefined) {
     return `${html(prefix)}<a ${attributes}>${html(title.slice(prefix.length))}</a>`;
   }
   return `<a ${attributes}>${html(title)}</a>`;
-}
-
-function formatGeneratedAt(value: string | undefined) {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return value ?? "";
-  const day = date.getDate();
-  const month = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ][date.getMonth()];
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${day}${ordinalSuffix(day)} ${month} ${date.getFullYear()} at ${hours}:${minutes}`;
-}
-
-function ordinalSuffix(day: number) {
-  if (day >= 11 && day <= 13) return "th";
-  if (day % 10 === 1) return "st";
-  if (day % 10 === 2) return "nd";
-  if (day % 10 === 3) return "rd";
-  return "th";
 }
 
 function renderLayeredDocuments(
@@ -500,8 +495,8 @@ function renderReportNavigator(
 ) {
   const entries = layers
     .map(
-      (layer) => `<div class="navigator-layer">
-    <div class="navigator-row">${renderNavigatorLink(`layer-${layer.id}`, layer.title, "navigator-layer-link")}</div>
+      (layer) => `<div class="navigator-layer" data-navigator-layer>
+    <div class="navigator-row">${renderNavigatorLink(`layer-${layer.id}`, layer.title, "navigator-layer-link", true)}</div>
     ${layer.documents
       .map(
         (document) =>
@@ -521,13 +516,21 @@ function renderReportNavigator(
     <span class="navigator-current" data-navigator-current>${html(firstTitle)}</span>
   </button>
   <div class="navigator-menu">
+    <input class="navigator-search" type="search" data-navigator-search aria-label="Search report navigation" placeholder="Search context" autocomplete="off">
     <div class="navigator-links">${entries}</div>
+    <div class="navigator-no-results" data-navigator-no-results hidden>No matching context</div>
   </div>
 </nav>`;
 }
 
-function renderNavigatorLink(id: string, title: string, className: string) {
-  return `<button class="navigator-link ${className}" type="button" data-navigator-target="${html(id)}" aria-pressed="false"><span class="navigator-toggle-state" aria-hidden="true"></span><span class="navigator-link-label">${html(title)}</span></button>`;
+function renderNavigatorLink(
+  id: string,
+  title: string,
+  className: string,
+  layer = false,
+) {
+  const targetAttribute = layer ? " data-navigator-layer-target" : "";
+  return `<button class="navigator-link ${className}" type="button" data-navigator-target="${html(id)}"${targetAttribute} aria-pressed="false"><span class="navigator-toggle-state" aria-hidden="true"></span><span class="navigator-link-label">${html(title)}</span></button>`;
 }
 
 function renderNavigatorScenarioButton(document: ReportDocument) {

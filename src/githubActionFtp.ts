@@ -19,26 +19,46 @@ export type FtpConfig = {
   maxTimeSeconds: number;
 };
 
+export type FtpConnectionConfig = Pick<
+  FtpConfig,
+  | "host"
+  | "user"
+  | "password"
+  | "port"
+  | "secure"
+  | "remoteDir"
+  | "concurrency"
+  | "connectTimeoutSeconds"
+  | "maxTimeSeconds"
+>;
+
+export function ftpConnectionConfig(
+  options: GithubActionOptions,
+): FtpConnectionConfig {
+  return {
+    host: required(options, "ftp-host", "FEATURE_SPEC_FTP_HOST"),
+    user: required(options, "ftp-user", "FEATURE_SPEC_FTP_USER"),
+    password: required(options, "ftp-password", "FEATURE_SPEC_FTP_PASSWORD"),
+    remoteDir:
+      value(options, "ftp-remote-dir", "FEATURE_SPEC_FTP_REMOTE_DIR") ?? "",
+    secure: booleanValue(
+      value(options, "ftp-secure", "FEATURE_SPEC_FTP_SECURE"),
+    ),
+    port: value(options, "ftp-port", "FEATURE_SPEC_FTP_PORT"),
+    concurrency: 4,
+    connectTimeoutSeconds: 15,
+    maxTimeSeconds: 120,
+  };
+}
+
 export function ftpConfig(options: GithubActionOptions): FtpConfig {
-  const host = required(options, "ftp-host", "FEATURE_SPEC_FTP_HOST");
-  const user = required(options, "ftp-user", "FEATURE_SPEC_FTP_USER");
-  const password = required(
-    options,
-    "ftp-password",
-    "FEATURE_SPEC_FTP_PASSWORD",
-  );
+  const connection = ftpConnectionConfig(options);
   const baseUrl = required(options, "base-url", "FEATURE_SPEC_REPORT_BASE_URL");
-  const remoteDir =
-    value(options, "ftp-remote-dir", "FEATURE_SPEC_FTP_REMOTE_DIR") ?? "";
   const buildNumber =
     value(options, "build-number", "FEATURE_SPEC_BUILD_NUMBER") ??
     value(options, "build-number", "GITHUB_RUN_NUMBER") ??
     "local";
   const prNumber = value(options, "pr-number", "FEATURE_SPEC_PR_NUMBER");
-  const secure = booleanValue(
-    value(options, "ftp-secure", "FEATURE_SPEC_FTP_SECURE"),
-  );
-  const port = value(options, "ftp-port", "FEATURE_SPEC_FTP_PORT");
   const concurrency = positiveInteger(
     value(options, "ftp-concurrency", "FEATURE_SPEC_FTP_CONCURRENCY") ?? "4",
     "FTP concurrency",
@@ -66,12 +86,7 @@ export function ftpConfig(options: GithubActionOptions): FtpConfig {
   }
 
   return {
-    host,
-    user,
-    password,
-    port,
-    secure,
-    remoteDir,
+    ...connection,
     baseUrl,
     buildNumber,
     prNumber,
@@ -154,7 +169,7 @@ export async function downloadRemoteFile(
 
 export async function listRemoteDirectory(
   remoteDir: string,
-  config: FtpConfig,
+  config: FtpConnectionConfig,
 ) {
   const directoryUrl = ftpUrl(config, asDirectoryPath(remoteDir));
   const commonArgs = [
@@ -267,7 +282,7 @@ export async function runCurl(args: string[]) {
   });
 }
 
-function curlTransferArgs(config: FtpConfig) {
+function curlTransferArgs(config: FtpConnectionConfig) {
   return [
     "--silent",
     "--show-error",
@@ -310,7 +325,7 @@ function looksLikeFile(name: string) {
   return /\.[a-z0-9]+$/i.test(name);
 }
 
-function ftpUrl(config: FtpConfig, remotePath: string) {
+function ftpUrl(config: FtpConnectionConfig, remotePath: string) {
   const protocol = config.secure ? "ftps" : "ftp";
   const port = config.port ? `:${config.port}` : "";
   const hasTrailingSlash = remotePath.endsWith("/");
