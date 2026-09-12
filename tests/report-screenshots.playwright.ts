@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PNG } from "pngjs";
 import { renderLocalDiffReport } from "../src/githubActionDiffReport.js";
 import { parseFeatureSpec, renderHtmlReport } from "../src/index.js";
 
@@ -21,8 +22,13 @@ test("renamed screenshots use an interactive before and after slider", async ({
     await mkdir(join(previousDir, "screenshots"), { recursive: true });
     await mkdir(join(currentDir, "screenshots"), { recursive: true });
     const pixel = Buffer.from(transparentPixel.split(",")[1] ?? "", "base64");
+    const changedPixel = new PNG({ width: 1, height: 1 });
+    changedPixel.data.set([255, 0, 0, 255]);
     await writeFile(join(previousDir, previousPath), pixel);
-    await writeFile(join(currentDir, currentPath), pixel);
+    await writeFile(
+      join(currentDir, currentPath),
+      PNG.sync.write(changedPixel),
+    );
     await page.setContent(
       await renderLocalDiffReport({ previousDir, currentDir }),
     );

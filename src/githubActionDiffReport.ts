@@ -3,6 +3,10 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
+import {
+  defaultScreenshotChangeThreshold,
+  pngsAreVisuallyEquivalent,
+} from "./imageComparison.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -33,6 +37,7 @@ export type LocalDiffReportOptions = {
   previousAssetUrlPrefix?: string;
   currentAssetUrlPrefix?: string;
   layers?: ReportLayer[];
+  screenshotChangeThreshold?: number;
 };
 
 type ComparedFile = {
@@ -133,7 +138,14 @@ export async function publishGithubActionDiffReport(
       : "none";
 
   const report = baseBuild
-    ? await compareBuilds(config, baseBuild, currentBuild, prNumber, baseLabel)
+    ? await compareBuilds(
+        config,
+        baseBuild,
+        currentBuild,
+        prNumber,
+        baseLabel,
+        screenshotChangeThreshold(options),
+      )
     : emptyReport(config, prNumber, currentBuild);
   report.layers = (await loadProjectConfiguration()).report?.layers;
 
@@ -189,6 +201,7 @@ async function compareLocalBuilds(
   const files = await compareLocalFiles(
     options.previousDir,
     options.currentDir,
+    normalizeScreenshotChangeThreshold(options.screenshotChangeThreshold),
   );
   const previousSpecs = await loadSpecSections(options.previousDir);
   const currentSpecs = await loadSpecSections(options.currentDir);
@@ -237,6 +250,7 @@ async function compareBuilds(
   currentBuild: string,
   prNumber: string,
   baseLabel: DiffReport["baseLabel"],
+  imageChangeThreshold: number,
 ): Promise<DiffReport> {
   const baseRoot = pathJoin(config.remoteDir, "build", baseBuild);
   const currentRoot = pathJoin(config.remoteDir, "build", currentBuild);
@@ -297,6 +311,13 @@ async function compareBuilds(
     });
   }
 
+  await markVisuallyEquivalentPngs(
+    files,
+    join(localRoot, "base"),
+    join(localRoot, "current"),
+    imageChangeThreshold,
+  );
+
   const previousSpecs = await loadSpecSections(join(localRoot, "base"));
   const currentSpecs = await loadSpecSections(join(localRoot, "current"));
   const specDiffs = compareSpecSections(previousSpecs, currentSpecs);
@@ -324,6 +345,7 @@ async function compareBuilds(
 async function compareLocalFiles(
   previousDir: string,
   currentDir: string,
+  imageChangeThreshold: number,
 ): Promise<ComparedFile[]> {
   const previousFiles = await listLocalFilesRecursive(previousDir);
   const currentFiles = await listLocalFilesRecursive(currentDir);
@@ -331,7 +353,7 @@ async function compareLocalFiles(
   const currentSet = new Set(currentFiles);
   const allPaths = Array.from(new Set([...previousSet, ...currentSet])).sort();
 
-  return Promise.all(
+  const files: ComparedFile[] = await Promise.all(
     allPaths.map(async (filePath) => {
       const previousInfo = previousSet.has(filePath)
         ? await fileInfo(join(previousDir, filePath))
@@ -357,6 +379,54 @@ async function compareLocalFiles(
       };
     }),
   );
+  await markVisuallyEquivalentPngs(
+    files,
+    previousDir,
+    currentDir,
+    imageChangeThreshold,
+  );
+  return files;
+}
+
+async function markVisuallyEquivalentPngs(
+  files: ComparedFile[],
+  previousDir: string,
+  currentDir: string,
+  changeThreshold: number,
+) {
+  for (const pair of pairRenamedScreenshots(files)) {
+    if (pair.status !== "changed" || !pair.previousPath || !pair.currentPath) {
+      continue;
+    }
+    const identicalBytes =
+      pair.previousHash !== undefined && pair.previousHash === pair.currentHash;
+    const bothPngs =
+      pair.previousPath.toLowerCase().endsWith(".png") &&
+      pair.currentPath.toLowerCase().endsWith(".png");
+    const equivalent = identicalBytes
+      ? true
+      : bothPngs
+        ? await pngsAreVisuallyEquivalent(
+            join(previousDir, pair.previousPath),
+            join(currentDir, pair.currentPath),
+            changeThreshold,
+          )
+        : false;
+    if (!equivalent) continue;
+
+    const previous = files.find(
+      (file) =>
+        file.path === pair.previousPath &&
+        (file.status === "removed" || file.status === "changed"),
+    );
+    const current = files.find(
+      (file) =>
+        file.path === pair.currentPath &&
+        (file.status === "added" || file.status === "changed"),
+    );
+    if (previous) previous.status = "unchanged";
+    if (current) current.status = "unchanged";
+  }
 }
 
 async function listLocalFilesRecursive(root: string) {
@@ -436,6 +506,26 @@ function optionValue(
   envKey: string,
 ) {
   return options[key] ?? process.env[envKey];
+}
+
+function screenshotChangeThreshold(options: GithubActionDiffReportOptions) {
+  const value = optionValue(
+    options,
+    "screenshot-change-threshold",
+    "FEATURE_SPEC_SCREENSHOT_CHANGE_THRESHOLD",
+  );
+  return normalizeScreenshotChangeThreshold(value);
+}
+
+function normalizeScreenshotChangeThreshold(value: unknown) {
+  if (value === undefined) return defaultScreenshotChangeThreshold;
+  const threshold = Number(value);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new Error(
+      "Screenshot change threshold must be a number between 0 and 1.",
+    );
+  }
+  return threshold;
 }
 
 async function fileInfo(filePath: string) {

@@ -345,6 +345,7 @@ GitHub report publishing:
   --report-base-url             Public report base URL, or FEATURE_SPEC_REPORT_BASE_URL.
   --build-number                Build number, or FEATURE_SPEC_BUILD_NUMBER/GITHUB_RUN_NUMBER.
   --pr-number                   Pull request number, or FEATURE_SPEC_PR_NUMBER.
+  --screenshot-change-threshold Maximum fraction of perceptually changed PNG pixels to treat as unchanged (default 0.001), or FEATURE_SPEC_SCREENSHOT_CHANGE_THRESHOLD.
 `);
 }
 
