@@ -11,6 +11,7 @@ import {
   listRemoteFilesRecursive,
   pathJoin,
   publicUrl,
+  runWithConcurrency,
   uploadDirectory,
   type GithubActionOptions,
 } from "./githubActionFtp.js";
@@ -255,47 +256,57 @@ async function compareBuilds(
     tmpdir(),
     `feature-spec-md-build-compare-${process.pid}-${baseBuild}-${currentBuild}`,
   );
-  const files: ComparedFile[] = [];
+  const files = new Array<ComparedFile>(allPaths.length);
 
-  for (const filePath of allPaths) {
-    const baseRemote = baseRelative.has(filePath)
-      ? pathJoin(baseRoot, filePath)
-      : undefined;
-    const currentRemote = currentRelative.has(filePath)
-      ? pathJoin(currentRoot, filePath)
-      : undefined;
-    const baseLocal = baseRemote
-      ? join(localRoot, "base", filePath)
-      : undefined;
-    const currentLocal = currentRemote
-      ? join(localRoot, "current", filePath)
-      : undefined;
+  await runWithConcurrency(
+    allPaths.map((filePath, index) => ({ filePath, index })),
+    config.concurrency,
+    async ({ filePath, index }) => {
+      const baseRemote = baseRelative.has(filePath)
+        ? pathJoin(baseRoot, filePath)
+        : undefined;
+      const currentRemote = currentRelative.has(filePath)
+        ? pathJoin(currentRoot, filePath)
+        : undefined;
+      const baseLocal = baseRemote
+        ? join(localRoot, "base", filePath)
+        : undefined;
+      const currentLocal = currentRemote
+        ? join(localRoot, "current", filePath)
+        : undefined;
 
-    if (baseRemote && baseLocal)
-      await downloadRemoteFile(baseRemote, baseLocal, config);
-    if (currentRemote && currentLocal)
-      await downloadRemoteFile(currentRemote, currentLocal, config);
+      await Promise.all([
+        baseRemote && baseLocal
+          ? downloadRemoteFile(baseRemote, baseLocal, config)
+          : undefined,
+        currentRemote && currentLocal
+          ? downloadRemoteFile(currentRemote, currentLocal, config)
+          : undefined,
+      ]);
 
-    const baseInfo = baseLocal ? await fileInfo(baseLocal) : undefined;
-    const currentInfo = currentLocal ? await fileInfo(currentLocal) : undefined;
-    const status = !baseInfo
-      ? "added"
-      : !currentInfo
-        ? "removed"
-        : baseInfo.hash === currentInfo.hash
-          ? "unchanged"
-          : "changed";
+      const baseInfo = baseLocal ? await fileInfo(baseLocal) : undefined;
+      const currentInfo = currentLocal
+        ? await fileInfo(currentLocal)
+        : undefined;
+      const status = !baseInfo
+        ? "added"
+        : !currentInfo
+          ? "removed"
+          : baseInfo.hash === currentInfo.hash
+            ? "unchanged"
+            : "changed";
 
-    files.push({
-      path: filePath,
-      kind: fileKind(filePath),
-      status,
-      previousHash: baseInfo?.hash,
-      currentHash: currentInfo?.hash,
-      previousSize: baseInfo?.size,
-      currentSize: currentInfo?.size,
-    });
-  }
+      files[index] = {
+        path: filePath,
+        kind: fileKind(filePath),
+        status,
+        previousHash: baseInfo?.hash,
+        currentHash: currentInfo?.hash,
+        previousSize: baseInfo?.size,
+        currentSize: currentInfo?.size,
+      };
+    },
+  );
 
   const previousSpecs = await loadSpecSections(join(localRoot, "base"));
   const currentSpecs = await loadSpecSections(join(localRoot, "current"));

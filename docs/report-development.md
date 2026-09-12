@@ -84,13 +84,18 @@ Configure these repository settings before enabling the workflow:
 
 Optional settings:
 
-| Name                               | Source                                            |
-| ---------------------------------- | ------------------------------------------------- |
-| `FEATURE_SPEC_FTP_PORT`            | Repository variable                               |
-| `FEATURE_SPEC_FTP_SECURE`          | Repository variable                               |
-| `FEATURE_SPEC_FTP_CONCURRENCY`     | Optional; defaults to `4` concurrent file uploads |
-| `FEATURE_SPEC_FTP_CONNECT_TIMEOUT` | Optional; defaults to `15` seconds                |
-| `FEATURE_SPEC_FTP_MAX_TIME`        | Optional; defaults to `120` seconds per transfer  |
+| Name                               | Source                                             |
+| ---------------------------------- | -------------------------------------------------- |
+| `FEATURE_SPEC_FTP_PORT`            | Repository variable                                |
+| `FEATURE_SPEC_FTP_SECURE`          | Repository variable                                |
+| `FEATURE_SPEC_FTP_CONCURRENCY`     | Optional; defaults to `4` concurrent FTP transfers |
+| `FEATURE_SPEC_FTP_CONNECT_TIMEOUT` | Optional; defaults to `15` seconds                 |
+| `FEATURE_SPEC_FTP_MAX_TIME`        | Optional; defaults to `120` seconds per transfer   |
+
+The concurrency setting applies to both report uploads and the remote build
+downloads used to create PR diff reports. Diff reports compare files locally,
+but download the base and current builds in parallel to avoid serial FTP
+latency dominating the job.
 
 Use a mock-specific base URL and remote directory value so these reports do not overwrite the demo or any consumer report. For example, use a public base URL ending in `/mocks/` and an FTP remote directory ending in `/mocks`.
 
