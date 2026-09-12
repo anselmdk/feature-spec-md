@@ -33,7 +33,7 @@ export function renderHtmlPage({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${html(title)}</title>
-  <script>(function(){var saved;try{saved=localStorage.getItem("feature-spec-md-theme");}catch(error){}var dark=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.dataset.theme=saved|| (dark?"dark":"light");})();</script>
+  <script>(function(){var saved;try{saved=localStorage.getItem("feature-spec-md-theme");}catch(error){}var explicit=saved==="dark"||saved==="light"?saved:null;var dark=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.dataset.theme=explicit|| (dark?"dark":"light");})();</script>
   <style>
     :root {
       color-scheme: light;
