@@ -137,14 +137,42 @@ describe("GitHub Action screenshot diffs", () => {
     }
   });
 
-  it("reports even a one-pixel difference", async () => {
+  it("ignores renamed PNGs with only rasterisation noise", async () => {
+    const root = await mkdtemp(join(tmpdir(), "feature-spec-md-diff-test-"));
+    const previousDir = join(root, "previous");
+    const currentDir = join(root, "current");
+    const previousPath = "screenshots/ACCOUNT-S001-line-25-account.png";
+    const currentPath = "screenshots/ACCOUNT-S001-line-26-account.png";
+    const previous = solidPng(100, 100);
+    const current = solidPng(100, 100);
+    current.data[0] = 1;
+    current.data[1] = 1;
+
+    try {
+      await mkdir(join(previousDir, "screenshots"), { recursive: true });
+      await mkdir(join(currentDir, "screenshots"), { recursive: true });
+      await writeFile(
+        join(previousDir, previousPath),
+        PNG.sync.write(previous),
+      );
+      await writeFile(join(currentDir, currentPath), PNG.sync.write(current));
+
+      const report = await renderLocalDiffReport({ previousDir, currentDir });
+
+      assert.match(report, /0 screenshot changes/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a material screenshot difference", async () => {
     const root = await mkdtemp(join(tmpdir(), "feature-spec-md-diff-test-"));
     const previousDir = join(root, "previous");
     const currentDir = join(root, "current");
     const screenshotPath = "screenshots/ACCOUNT-S001-line-25-account.png";
     const previous = solidPng(100, 100);
     const current = solidPng(100, 100);
-    current.data.fill(255, 0, 3);
+    current.data.fill(255, 0, current.data.length / 2);
 
     try {
       await mkdir(join(previousDir, "screenshots"), { recursive: true });

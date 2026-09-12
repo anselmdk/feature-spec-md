@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
-import { pngsHaveIdenticalPixels } from "./imageComparison.js";
+import { pngsAreVisuallyEquivalent } from "./imageComparison.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -396,7 +396,7 @@ async function markVisuallyEquivalentPngs(
     const equivalent = identicalBytes
       ? true
       : bothPngs
-        ? await pngsHaveIdenticalPixels(
+        ? await pngsAreVisuallyEquivalent(
             join(previousDir, pair.previousPath),
             join(currentDir, pair.currentPath),
           )
