@@ -15,6 +15,7 @@ import type {
   StackSpec,
   TestReference,
   ValidationIssue,
+  ScreenshotViewMode,
 } from "./types.js";
 
 export type ReportOptions = {
@@ -195,6 +196,7 @@ h1 a{color:var(--link);text-decoration:underline;text-underline-offset:3px}h1 a:
 .screenshot.mobile-preview::before{display:block;width:56px;height:4px;margin:0 auto 8px;border-radius:999px;background:var(--muted);content:"Mobile preview";color:transparent}
 .screenshot.mobile-preview img{max-width:100%;margin:0 auto;border:1px solid var(--border);border-radius:15px;background:white}
 .screenshot.mobile-preview figcaption{text-align:center;padding:9px 2px 2px}
+.screenshot-view-toggle{display:block;margin:8px auto;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);cursor:pointer;font:inherit;font-size:12px}.screenshot-view-toggle:hover{background:var(--surface-hover)}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
@@ -219,6 +221,19 @@ function featureReportScripts() {
     'script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js" crossorigin="anonymous">';
   return `${openTag}
 const bulkToggledDetails = new WeakSet();
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-view-toggle]");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const target = button.closest("[data-view-mode]");
+  if (!(target instanceof HTMLElement)) return;
+  const next = target.dataset.viewMode === "mobile" ? "desktop" : "mobile";
+  target.dataset.viewMode = next;
+  target.classList.toggle("mobile-preview", next === "mobile");
+  button.setAttribute("aria-pressed", String(next === "mobile"));
+  button.setAttribute("aria-label", "View screenshot as " + (next === "mobile" ? "desktop" : "mobile"));
+  button.textContent = "View as " + (next === "mobile" ? "desktop" : "mobile");
+});
 
 function updateDetailsToggleButton(button) {
   const section = button.closest("[data-details-section]");
@@ -1269,18 +1284,22 @@ function renderScreenshots(screenshots: SpecScreenshot[]) {
       const title =
         screenshot.title ??
         `Screenshot for ${screenshot.specPath}:${screenshot.line}`;
-      const mobileClass = isMobileScreenshot(screenshot)
-        ? " mobile-preview"
-        : "";
-      return `<figure class="screenshot${mobileClass}"><img src="${html(screenshot.path ?? "")}" alt="${html(title)}" data-lightbox tabindex="0"><figcaption>${html(title)}</figcaption></figure>`;
+      const viewMode =
+        screenshot.viewMode ??
+        filenameViewMode(screenshot.path ?? screenshot.title ?? "");
+      const mobileClass = viewMode === "mobile" ? " mobile-preview" : "";
+      return `<figure class="screenshot${mobileClass}" data-view-mode="${viewMode ?? "desktop"}"><img src="${html(screenshot.path ?? "")}" alt="${html(title)}" data-lightbox tabindex="0"><figcaption>${html(title)}</figcaption>${viewModeToggle(viewMode ?? "desktop")}</figure>`;
     })
     .join("")}</div>`;
 }
 
-function isMobileScreenshot(screenshot: SpecScreenshot) {
-  return /(^|[-_ .])mobile([-. _]|$)/i.test(
-    `${screenshot.path ?? ""} ${screenshot.title ?? ""}`,
-  );
+function filenameViewMode(value: string): ScreenshotViewMode | undefined {
+  return /(^|[-_ .])mobile([-. _]|$)/i.test(value) ? "mobile" : undefined;
+}
+
+function viewModeToggle(viewMode: ScreenshotViewMode) {
+  const next = viewMode === "mobile" ? "desktop" : "mobile";
+  return `<button type="button" class="screenshot-view-toggle" data-view-toggle aria-pressed="${viewMode === "mobile"}" aria-label="View screenshot as ${next}">View as ${next}</button>`;
 }
 
 function coverageBadge(

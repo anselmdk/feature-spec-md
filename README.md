@@ -293,7 +293,10 @@ This gate only fails for scenarios whose resolved screenshot policy is `required
 Reports include a persistent moon/sun light/dark theme toggle in the lower-left
 corner. Screenshot evidence is clickable and opens at its native size in a
 scrollable full-screen viewer. PR diff reports keep before and after images side
-by side, with red and green borders respectively.
+by side, with red and green borders respectively. Screenshot framing is inferred
+from the image width (up to 600px is mobile); every screenshot also has a
+`View as mobile` / `View as desktop` control for correcting the framing while
+reviewing a report.
 
 Projects can group model, stack, design, and feature documents into collapsible
 report layers. Add a `layer` to each document's frontmatter and define the

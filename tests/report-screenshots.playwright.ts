@@ -143,6 +143,10 @@ Then account access is granted
       .getByRole("img", { name: "ACCOUNT-S001 screenshot" })
       .boundingBox(),
   ).toMatchObject({ width: 1, height: 1 });
+  const viewToggle = page.locator("[data-view-toggle]");
+  await expect(viewToggle).toBeVisible();
+  await viewToggle.click();
+  await expect(viewToggle).toHaveAccessibleName("View screenshot as desktop");
 
   await page
     .getByRole("img", { name: "ACCOUNT-S001 screenshot" })

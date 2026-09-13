@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
+import { PNG } from "pngjs";
 import { html } from "./html.js";
 import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
 import { pngsAreVisuallyEquivalent } from "./imageComparison.js";
@@ -20,7 +21,7 @@ import {
 import { writeGithubOutput, writeGithubSummary } from "./githubActionOutput.js";
 import { publishedSpecRoot } from "./reportArtifacts.js";
 import { renderHtmlPage } from "./reportHtml.js";
-import type { ReportLayer } from "./types.js";
+import type { ReportLayer, ScreenshotViewMode } from "./types.js";
 
 export type GithubActionDiffReportOptions = GithubActionOptions;
 
@@ -46,6 +47,7 @@ type ComparedFile = {
   currentHash?: string;
   previousSize?: number;
   currentSize?: number;
+  viewMode?: ScreenshotViewMode;
 };
 
 type DiffLine = {
@@ -60,7 +62,6 @@ type SpecSection = {
   title: string;
   filePath?: string;
   scenarioIds: string[];
-  mobileScenarioIds: string[];
   text: string;
   layer?: string;
 };
@@ -84,7 +85,7 @@ type ScreenshotDiffItem = {
   currentUrl?: string;
   previousSize?: number;
   currentSize?: number;
-  mobile?: boolean;
+  viewMode?: ScreenshotViewMode;
 };
 
 type ScreenshotDiffGroup = {
@@ -308,6 +309,7 @@ async function compareBuilds(
         currentHash: currentInfo?.hash,
         previousSize: baseInfo?.size,
         currentSize: currentInfo?.size,
+        viewMode: await screenshotViewMode(currentLocal ?? baseLocal, filePath),
       };
     },
   );
@@ -375,6 +377,12 @@ async function compareLocalFiles(
         currentHash: currentInfo?.hash,
         previousSize: previousInfo?.size,
         currentSize: currentInfo?.size,
+        viewMode: await screenshotViewMode(
+          currentInfo
+            ? join(currentDir, filePath)
+            : join(previousDir, filePath),
+          filePath,
+        ),
       };
     }),
   );
@@ -465,16 +473,12 @@ async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
       source.matchAll(/^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3})\b/gm),
       (match) => match[1],
     );
-    const mobileScenarioIds = scenarioIds.filter((scenarioId) =>
-      mobileScenarioText(source, scenarioId),
-    );
     const layer = source.match(/^layer:\s*(.+)$/m)?.[1]?.trim();
     sections.push({
       key: filePath,
       title,
       filePath,
       scenarioIds,
-      mobileScenarioIds,
       text: source.trimEnd(),
       layer,
     });
@@ -564,7 +568,6 @@ function extractSpecSections(source: string): SpecSection[] {
       title,
       filePath,
       scenarioIds,
-      mobileScenarioIds: [],
       text,
     });
   }
@@ -747,9 +750,7 @@ function groupScreenshotDiffs(
           : undefined,
       previousSize: file.previousSize,
       currentSize: file.currentSize,
-      mobile: Boolean(
-        scenarioId && spec?.mobileScenarioIds.includes(scenarioId),
-      ),
+      viewMode: file.viewMode,
     });
     groups.set(specLabel, group);
   }
@@ -826,6 +827,7 @@ function pairRenamedScreenshots(files: ComparedFile[]): PairedScreenshot[] {
       currentHash: after.currentHash,
       previousSize: before.previousSize,
       currentSize: after.currentSize,
+      viewMode: after.viewMode ?? before.viewMode,
     });
   }
 
@@ -885,6 +887,7 @@ function diffReportStyles() {
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
 .screenshot-toggle-button{border:1px solid var(--border);border-radius:6px;background:var(--surface-muted);color:var(--fg);cursor:pointer;font:inherit;padding:6px 10px}
 .screenshot-toggle-button:hover{background:var(--surface-hover)}
+.screenshot-view-toggle{display:block;margin:8px auto;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);cursor:pointer;font:inherit;font-size:12px}.screenshot-view-toggle:hover{background:var(--surface-hover)}
 .diff-layer{border-top:1px solid var(--border);padding:10px 0}.diff-layer>summary{cursor:pointer;font-size:16px;margin-bottom:8px}.diff-layer-body{padding-left:12px}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top}
@@ -975,7 +978,8 @@ function renderScreenshotItem(item: ScreenshotDiffItem) {
   if (item.previousUrl && item.currentUrl) {
     return `<details class="screenshot-diff"><summary>${renderScreenshotPath(item)} <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll">${renderImageComparison(item)}</div></details>`;
   }
-  const mobileClass = isMobileScreenshot(item) ? " mobile-preview" : "";
+  const viewMode = item.viewMode ?? filenameViewMode(item.path);
+  const mobileClass = viewMode === "mobile" ? " mobile-preview" : "";
   const before = item.previousUrl
     ? `<div class="image-card before${mobileClass}"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}" data-lightbox tabindex="0"></div>`
     : "";
@@ -997,24 +1001,40 @@ function renderScreenshotPath(item: ScreenshotDiffItem) {
 }
 
 function renderImageComparison(item: ScreenshotDiffItem) {
-  const mobileClass = isMobileScreenshot(item) ? " mobile-preview" : "";
-  return `<div class="image-comparison${mobileClass}" data-image-comparison><div class="image-comparison-stage"><img src="${html(item.previousUrl ?? "")}" alt="Before ${html(item.title)}" class="image-comparison-before" data-lightbox tabindex="0"><img src="${html(item.currentUrl ?? "")}" alt="After ${html(item.title)}" class="image-comparison-after" data-lightbox tabindex="0"><span class="image-comparison-label before">Before</span><span class="image-comparison-label after">After</span><span class="image-comparison-divider" aria-hidden="true"></span></div><label class="image-comparison-control"><span>Drag to compare</span><input type="range" min="0" max="100" value="50" aria-label="Compare before and after ${html(item.title)}"></label></div>`;
+  const viewMode = item.viewMode ?? filenameViewMode(item.path);
+  const mobileClass = viewMode === "mobile" ? " mobile-preview" : "";
+  return `<div class="image-comparison${mobileClass}" data-image-comparison data-view-mode="${viewMode ?? "desktop"}"><div class="image-comparison-stage"><img src="${html(item.previousUrl ?? "")}" alt="Before ${html(item.title)}" class="image-comparison-before" data-lightbox tabindex="0"><img src="${html(item.currentUrl ?? "")}" alt="After ${html(item.title)}" class="image-comparison-after" data-lightbox tabindex="0"><span class="image-comparison-label before">Before</span><span class="image-comparison-label after">After</span><span class="image-comparison-divider" aria-hidden="true"></span></div><label class="image-comparison-control"><span>Drag to compare</span><input type="range" min="0" max="100" value="50" aria-label="Compare before and after ${html(item.title)}"></label>${viewModeToggle(viewMode ?? "desktop")}</div>`;
 }
 
-function isMobileScreenshot(item: ScreenshotDiffItem) {
-  return (
-    Boolean(item.mobile) ||
-    /(^|[-_ .])mobile([-. _]|$)/i.test(
-      `${item.path} ${item.previousPath ?? ""} ${item.currentPath ?? ""} ${item.title}`,
-    )
-  );
+function filenameViewMode(filePath: string): ScreenshotViewMode | undefined {
+  return /(^|[-_ .])mobile([-. _]|$)/i.test(filePath) ? "mobile" : undefined;
+}
+
+async function screenshotViewMode(
+  filePath: string | undefined,
+  relativePath: string,
+): Promise<ScreenshotViewMode | undefined> {
+  if (filePath && relativePath.toLowerCase().endsWith(".png")) {
+    try {
+      const { width } = PNG.sync.read(await readFile(filePath));
+      return width <= 600 ? "mobile" : "desktop";
+    } catch {
+      // Fall through to filename metadata for unsupported or malformed images.
+    }
+  }
+  return filenameViewMode(relativePath);
+}
+
+function viewModeToggle(viewMode: ScreenshotViewMode) {
+  const next = viewMode === "mobile" ? "desktop" : "mobile";
+  return `<button type="button" class="screenshot-view-toggle" data-view-toggle aria-pressed="${viewMode === "mobile"}" aria-label="View screenshot as ${next}">View as ${next}</button>`;
 }
 
 function renderScreenshotToggleScript() {
   const openTag = "<" + "script>";
   const closeTag = "<" + "/script>";
   const source =
-    "(function(){var button=document.querySelector('.screenshot-toggle-button');var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});if(button)button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}if(button)button.addEventListener('click',function(){expanded=!expanded;apply();});document.querySelectorAll('[data-image-comparison]').forEach(function(comparison){var input=comparison.querySelector('input[type=range]');var stage=comparison.querySelector('.image-comparison-stage');var dragging=false;function update(){comparison.style.setProperty('--position',input.value+'%');}function setFromPointer(event){var rect=stage.getBoundingClientRect();var value=Math.max(0,Math.min(100,(event.clientX-rect.left)/rect.width*100));input.value=String(Math.round(value));input.dispatchEvent(new Event('input',{bubbles:true}));}input.addEventListener('input',update);stage.addEventListener('pointerdown',function(event){dragging=true;stage.setPointerCapture(event.pointerId);setFromPointer(event);event.preventDefault();});stage.addEventListener('pointermove',function(event){if(dragging)setFromPointer(event);});stage.addEventListener('pointerup',function(event){dragging=false;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});stage.addEventListener('pointercancel',function(event){dragging=false;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});update();});apply();})();";
+    "(function(){document.addEventListener('click',function(event){var toggle=event.target.closest('[data-view-toggle]');if(!toggle)return;var target=toggle.closest('[data-view-mode]');if(!target)return;var next=target.dataset.viewMode==='mobile'?'desktop':'mobile';target.dataset.viewMode=next;target.classList.toggle('mobile-preview',next==='mobile');toggle.setAttribute('aria-pressed',String(next==='mobile'));toggle.setAttribute('aria-label','View screenshot as '+(next==='mobile'?'desktop':'mobile'));toggle.textContent='View as '+(next==='mobile'?'desktop':'mobile');});var button=document.querySelector('.screenshot-toggle-button');var expanded=false;function apply(){document.querySelectorAll('details.screenshot-diff').forEach(function(item){item.open=expanded;});if(button)button.textContent=expanded?button.getAttribute('data-hide-label'):button.getAttribute('data-show-label');}if(button)button.addEventListener('click',function(){expanded=!expanded;apply();});document.querySelectorAll('[data-image-comparison]').forEach(function(comparison){var input=comparison.querySelector('input[type=range]');var stage=comparison.querySelector('.image-comparison-stage');var dragging=false;function update(){comparison.style.setProperty('--position',input.value+'%');}function setFromPointer(event){var rect=stage.getBoundingClientRect();var value=Math.max(0,Math.min(100,(event.clientX-rect.left)/rect.width*100));input.value=String(Math.round(value));input.dispatchEvent(new Event('input',{bubbles:true}));}input.addEventListener('input',update);stage.addEventListener('pointerdown',function(event){dragging=true;stage.setPointerCapture(event.pointerId);setFromPointer(event);event.preventDefault();});stage.addEventListener('pointermove',function(event){if(dragging)setFromPointer(event);});stage.addEventListener('pointerup',function(event){dragging=false;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});stage.addEventListener('pointercancel',function(event){dragging=false;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});update();});apply();})();";
   return openTag + source + closeTag;
 }
 

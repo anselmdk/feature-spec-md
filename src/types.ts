@@ -220,4 +220,7 @@ export type SpecScreenshot = {
   title?: string;
   testPath?: string;
   comparedWithLine?: number;
+  viewMode?: ScreenshotViewMode;
 };
+
+export type ScreenshotViewMode = "mobile" | "desktop";
