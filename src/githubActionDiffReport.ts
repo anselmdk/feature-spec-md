@@ -60,6 +60,7 @@ type SpecSection = {
   title: string;
   filePath?: string;
   scenarioIds: string[];
+  mobileScenarioIds: string[];
   text: string;
   layer?: string;
 };
@@ -83,6 +84,7 @@ type ScreenshotDiffItem = {
   currentUrl?: string;
   previousSize?: number;
   currentSize?: number;
+  mobile?: boolean;
 };
 
 type ScreenshotDiffGroup = {
@@ -463,12 +465,16 @@ async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
       source.matchAll(/^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3})\b/gm),
       (match) => match[1],
     );
+    const mobileScenarioIds = scenarioIds.filter((scenarioId) =>
+      mobileScenarioText(source, scenarioId),
+    );
     const layer = source.match(/^layer:\s*(.+)$/m)?.[1]?.trim();
     sections.push({
       key: filePath,
       title,
       filePath,
       scenarioIds,
+      mobileScenarioIds,
       text: source.trimEnd(),
       layer,
     });
@@ -558,6 +564,7 @@ function extractSpecSections(source: string): SpecSection[] {
       title,
       filePath,
       scenarioIds,
+      mobileScenarioIds: [],
       text,
     });
   }
@@ -686,6 +693,24 @@ function scenarioSpecMap(specs: SpecSection[]) {
   return map;
 }
 
+function mobileScenarioText(source: string, scenarioId: string) {
+  const start = source.search(
+    new RegExp(`^###\\s+${escapeRegExp(scenarioId)}\\b`, "m"),
+  );
+  if (start < 0) return false;
+  const remainder = source.slice(start);
+  const nextScenario = remainder.search(/^###\s+/m);
+  const scenario =
+    nextScenario > 0 ? remainder.slice(0, nextScenario) : remainder;
+  return /\b(?:mobile|phone|tablet|narrow screen|responsive navigation)\b/i.test(
+    scenario,
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function groupScreenshotDiffs(
   files: ComparedFile[],
   scenarioMap: Map<string, SpecSection>,
@@ -722,6 +747,9 @@ function groupScreenshotDiffs(
           : undefined,
       previousSize: file.previousSize,
       currentSize: file.currentSize,
+      mobile: Boolean(
+        scenarioId && spec?.mobileScenarioIds.includes(scenarioId),
+      ),
     });
     groups.set(specLabel, group);
   }
@@ -974,8 +1002,11 @@ function renderImageComparison(item: ScreenshotDiffItem) {
 }
 
 function isMobileScreenshot(item: ScreenshotDiffItem) {
-  return /(^|[-_ .])mobile([-. _]|$)/i.test(
-    `${item.path} ${item.previousPath ?? ""} ${item.currentPath ?? ""} ${item.title}`,
+  return (
+    Boolean(item.mobile) ||
+    /(^|[-_ .])mobile([-. _]|$)/i.test(
+      `${item.path} ${item.previousPath ?? ""} ${item.currentPath ?? ""} ${item.title}`,
+    )
   );
 }
 
