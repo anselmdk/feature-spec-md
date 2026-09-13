@@ -64,7 +64,6 @@ jobs:
       github.event_name == 'workflow_call' ||
       (
         github.event.workflow_run.event == 'pull_request' &&
-        github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.pull_requests[0]
       )
     runs-on: ubuntu-latest
@@ -104,7 +103,7 @@ jobs:
 
       - name: Resolve current consuming project PR build
         id: current_build
-        if: steps.changes.outputs.changed == 'true'
+        if: steps.changes.outputs.changed == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
         uses: actions/github-script@v8
         env:
           CI_WORKFLOW_ID: ${{ inputs.ci-workflow-id }}
@@ -171,7 +170,7 @@ jobs:
 
       - name: Publish consuming project PR diff report
         id: diff_report
-        if: steps.changes.outputs.changed == 'true'
+        if: steps.changes.outputs.changed == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
         run: npx feature-spec-md github-diff-report --publish ftp
         env:
           FEATURE_SPEC_BUILD_NUMBER: ${{ steps.current_build.outputs.build-number }}
@@ -184,32 +183,38 @@ jobs:
           FEATURE_SPEC_FTP_PASSWORD: ${{ secrets.FEATURE_SPEC_FTP_PASSWORD }}
 
       - name: Comment on consuming project PR
-        if: steps.changes.outputs.changed == 'true' && steps.diff_report.outputs.diff-report-url != ''
+        if: always()
         uses: actions/github-script@v8
         env:
+          PR_NUMBER: ${{ steps.changes.outputs.pr-number || inputs.pr-number || github.event.workflow_run.pull_requests[0].number }}
           REPORT_BASE_URL: ${{ vars.FEATURE_SPEC_REPORT_BASE_URL }}
           DIFF_REPORT_URL: ${{ steps.diff_report.outputs.diff-report-url }}
-          CURRENT_BUILD_NUMBER: ${{ steps.current_build.outputs.build-number }}
+          CURRENT_BUILD_NUMBER: ${{ steps.current_build.outputs.build-number || github.event.workflow_run.run_number }}
           BASE_BUILD_NUMBER: ${{ steps.main_build.outputs.build-number }}
-          CURRENT_RUN_URL: ${{ steps.current_build.outputs.run-url }}
+          CURRENT_RUN_URL: ${{ steps.current_build.outputs.run-url || github.event.workflow_run.html_url }}
           REPORT_STARTED_AT: ${{ steps.changes.outputs.started-at }}
           REPORT_TIME_ZONE: ${{ inputs.report-time-zone }}
+          WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion || 'success' }}
+          REPORT_OUTCOME: ${{ steps.diff_report.outcome }}
+          RELEVANT_CHANGES: ${{ steps.changes.outputs.changed }}
         with:
           script: |
-            const prNumber = Number('${{ steps.changes.outputs.pr-number }}');
+            const prNumber = Number(process.env.PR_NUMBER);
             const marker = '<!-- feature-spec-md-pr-diff -->';
             const statePrefix = '<!-- feature-spec-md-report-state:';
-            const buildNumber = process.env.CURRENT_BUILD_NUMBER;
+            const buildNumber = process.env.CURRENT_BUILD_NUMBER || 'n/a';
             const baseBuildNumber = process.env.BASE_BUILD_NUMBER;
             const timestamp = new Date().toISOString();
             const runUrl = process.env.CURRENT_RUN_URL;
-            const diffUrl = process.env.DIFF_REPORT_URL;
+            const diffUrl = process.env.DIFF_REPORT_URL || '';
             const startedAt = Number(process.env.REPORT_STARTED_AT);
             const durationMinutes = Number.isFinite(startedAt)
               ? ((Date.now() - startedAt) / 60000).toFixed(1)
               : 'n/a';
-            const reportBaseUrl = process.env.REPORT_BASE_URL.replace(/\/+$/, '');
+            const reportBaseUrl = (process.env.REPORT_BASE_URL || '').replace(/\/+$/, '');
             const specUrl = reportBaseUrl + '/build/' + buildNumber + '/';
+            const failed = process.env.WORKFLOW_CONCLUSION !== 'success' || process.env.REPORT_OUTCOME === 'failure';
+            const relevant = process.env.RELEVANT_CHANGES === 'true';
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -256,6 +261,7 @@ jobs:
               diffUrl,
               specUrl,
               durationMinutes,
+              status: failed ? 'failure' : relevant ? 'success' : 'skipped',
             };
             const history = priorEntries
               .filter((entry) => entry.buildNumber !== buildNumber)
@@ -284,7 +290,7 @@ jobs:
                 ? ' compared with main build ' + entry.baseBuildNumber
                 : '';
             const historyLines = history.map((entry) =>
-              '- Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.specUrl) + ')' +
+              '- ' + (entry.status === 'failure' ? '<span style="color: #cf222e">❌ Failed</span>' : entry.status === 'skipped' ? '⏭️ Skipped' : '✅') + ' Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.specUrl) + ')' +
               comparison(entry) + ' · ' + localizedDate(entry.timestamp) +
               ' · report job ' + (entry.durationMinutes ?? 'n/a') + ' minutes' +
               ' · [spec](' + entry.specUrl + ') · [diff](' + entry.diffUrl + ')'
@@ -294,9 +300,13 @@ jobs:
               statePrefix + state + ' -->',
               '## Feature spec reports',
               '',
-              '[Full spec report](' + specUrl + ') · [Changes since main](' + diffUrl + ')',
+              failed
+                ? '<span style="color: #cf222e">❌ Feature spec report failed</span>'
+                : relevant
+                  ? '[Full spec report](' + specUrl + ') · [Changes since main](' + diffUrl + ')'
+                  : '⏭️ No feature-spec changes detected; no report was generated.',
               '',
-              'Build [' + buildNumber + '](' + runUrl + ')' + comparison(current) +
+              (failed ? '<span style="color: #cf222e">❌</span> ' : '') + 'Build [' + buildNumber + '](' + runUrl + ')' + comparison(current) +
                 ' · ' + localizedDate(timestamp) +
                 ' · report job ' + durationMinutes + ' minutes',
             ];
