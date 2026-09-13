@@ -154,12 +154,12 @@ jobs:
             const latest = runs.find((run) => run.run_number < currentBuildNumber);
             core.setOutput('build-number', latest ? String(latest.run_number) : '');
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.changes.outputs.changed == 'true'
         with:
           ref: ${{ steps.changes.outputs.head-sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.changes.outputs.changed == 'true'
         with:
           node-version: ${{ inputs.node-version }}
