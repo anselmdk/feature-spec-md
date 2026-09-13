@@ -19,6 +19,15 @@ describe("GitHub Action screenshot diffs", () => {
     try {
       await mkdir(join(previousDir, "screenshots"), { recursive: true });
       await mkdir(join(currentDir, "screenshots"), { recursive: true });
+      for (const directory of [previousDir, currentDir]) {
+        await mkdir(join(directory, "__feature-spec-md"), {
+          recursive: true,
+        });
+        await writeFile(
+          join(directory, "__feature-spec-md", "account.feature.md"),
+          "# Account access\n\n### ACCOUNT-S001: Administrator navigates on a phone\n\nGiven an administrator opens the phone view\n",
+        );
+      }
       await writeFile(join(previousDir, previousPath), "before image");
       await writeFile(join(currentDir, currentPath), "after image");
 
@@ -34,7 +43,10 @@ describe("GitHub Action screenshot diffs", () => {
         report,
         /ACCOUNT-S001-line-25-the-user-opens-the-account\.png<\/code> <span aria-label="renamed to">→<\/span> <code>screenshots\/ACCOUNT-S001-line-26-the-user-opens-the-account\.png/,
       );
-      assert.match(report, /class="image-comparison" data-image-comparison/);
+      assert.match(
+        report,
+        /class="image-comparison mobile-preview" data-image-comparison/,
+      );
       assert.match(
         report,
         /src="previous\/screenshots\/ACCOUNT-S001-line-25-the-user-opens-the-account\.png"/,

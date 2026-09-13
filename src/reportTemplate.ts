@@ -190,7 +190,11 @@ h1 a{color:var(--link);text-decoration:underline;text-underline-offset:3px}h1 a:
 .step{border-left:3px solid var(--border);margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
 .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
 .screenshot{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface-muted)}
-.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:var(--muted)}
+.screenshot img{display:block;width:auto;max-width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:var(--muted)}
+.screenshot.mobile-preview{justify-self:center;width:min(100%,280px);padding:10px;border:1px solid var(--border);border-radius:24px;background:linear-gradient(145deg,var(--surface-muted),var(--surface));box-shadow:0 8px 20px rgba(31,35,40,.14)}
+.screenshot.mobile-preview::before{display:block;width:56px;height:4px;margin:0 auto 8px;border-radius:999px;background:var(--muted);content:"Mobile preview";color:transparent}
+.screenshot.mobile-preview img{max-width:100%;margin:0 auto;border:1px solid var(--border);border-radius:15px;background:white}
+.screenshot.mobile-preview figcaption{text-align:center;padding:9px 2px 2px}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
@@ -1260,7 +1264,23 @@ function renderLineBadge(
 
 function renderScreenshots(screenshots: SpecScreenshot[]) {
   if (!screenshots.length) return "";
-  return `<div class="screenshots">${screenshots.map((screenshot) => `<figure class="screenshot"><img src="${html(screenshot.path ?? "")}" alt="${html(screenshot.title ?? `Screenshot for ${screenshot.specPath}:${screenshot.line}`)}" data-lightbox tabindex="0"><figcaption>${html(screenshot.title ?? `${screenshot.specPath}:${screenshot.line}`)}</figcaption></figure>`).join("")}</div>`;
+  return `<div class="screenshots">${screenshots
+    .map((screenshot) => {
+      const title =
+        screenshot.title ??
+        `Screenshot for ${screenshot.specPath}:${screenshot.line}`;
+      const mobileClass = isMobileScreenshot(screenshot)
+        ? " mobile-preview"
+        : "";
+      return `<figure class="screenshot${mobileClass}"><img src="${html(screenshot.path ?? "")}" alt="${html(title)}" data-lightbox tabindex="0"><figcaption>${html(title)}</figcaption></figure>`;
+    })
+    .join("")}</div>`;
+}
+
+function isMobileScreenshot(screenshot: SpecScreenshot) {
+  return /(^|[-_ .])mobile([-. _]|$)/i.test(
+    `${screenshot.path ?? ""} ${screenshot.title ?? ""}`,
+  );
 }
 
 function coverageBadge(

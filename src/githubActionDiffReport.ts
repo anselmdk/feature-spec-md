@@ -3,8 +3,8 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { html } from "./html.js";
-import { pngsAreVisuallyEquivalent } from "./imageComparison.js";
 import { formatGeneratedAt, renderGeneratedAt } from "./reportDate.js";
+import { pngsAreVisuallyEquivalent } from "./imageComparison.js";
 import { loadProjectConfiguration } from "./config.js";
 import {
   downloadRemoteFile,
@@ -60,6 +60,7 @@ type SpecSection = {
   title: string;
   filePath?: string;
   scenarioIds: string[];
+  mobileScenarioIds: string[];
   text: string;
   layer?: string;
 };
@@ -83,6 +84,7 @@ type ScreenshotDiffItem = {
   currentUrl?: string;
   previousSize?: number;
   currentSize?: number;
+  mobile?: boolean;
 };
 
 type ScreenshotDiffGroup = {
@@ -463,12 +465,16 @@ async function loadPublishedSpecSections(root: string): Promise<SpecSection[]> {
       source.matchAll(/^###\s+([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-S\d{3})\b/gm),
       (match) => match[1],
     );
+    const mobileScenarioIds = scenarioIds.filter((scenarioId) =>
+      mobileScenarioText(source, scenarioId),
+    );
     const layer = source.match(/^layer:\s*(.+)$/m)?.[1]?.trim();
     sections.push({
       key: filePath,
       title,
       filePath,
       scenarioIds,
+      mobileScenarioIds,
       text: source.trimEnd(),
       layer,
     });
@@ -558,6 +564,7 @@ function extractSpecSections(source: string): SpecSection[] {
       title,
       filePath,
       scenarioIds,
+      mobileScenarioIds: [],
       text,
     });
   }
@@ -686,6 +693,24 @@ function scenarioSpecMap(specs: SpecSection[]) {
   return map;
 }
 
+function mobileScenarioText(source: string, scenarioId: string) {
+  const start = source.search(
+    new RegExp(`^###\\s+${escapeRegExp(scenarioId)}\\b`, "m"),
+  );
+  if (start < 0) return false;
+  const remainder = source.slice(start);
+  const nextScenario = remainder.search(/^###\s+/m);
+  const scenario =
+    nextScenario > 0 ? remainder.slice(0, nextScenario) : remainder;
+  return /\b(?:mobile|phone|tablet|narrow screen|responsive navigation)\b/i.test(
+    scenario,
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function groupScreenshotDiffs(
   files: ComparedFile[],
   scenarioMap: Map<string, SpecSection>,
@@ -722,6 +747,9 @@ function groupScreenshotDiffs(
           : undefined,
       previousSize: file.previousSize,
       currentSize: file.currentSize,
+      mobile: Boolean(
+        scenarioId && spec?.mobileScenarioIds.includes(scenarioId),
+      ),
     });
     groups.set(specLabel, group);
   }
@@ -810,7 +838,8 @@ function pairRenamedScreenshots(files: ComparedFile[]): PairedScreenshot[] {
 function screenshotIdentity(filePath: string) {
   return safeRelativePath(filePath)
     .replace(/\.(png|jpe?g|webp|gif|svg)$/i, "")
-    .replace(/-line-\d+-/i, "-line-*-");
+    .replace(/-line-\d+-/i, "-line-*-")
+    .replace(/-(current|previous)$/i, "");
 }
 
 function scenarioIdFromScreenshotPath(filePath: string) {
@@ -868,10 +897,16 @@ th{background:var(--surface-muted)}a{color:var(--link)}
 .image-card{border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
 .image-card.before{border:3px solid var(--danger)}.image-card.after{border:3px solid var(--success)}
 .image-card.before h4{color:var(--danger)}.image-card.after h4{color:var(--success)}
-.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:100%;height:auto}
+.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:auto;max-width:100%;height:auto}
+.image-pair .mobile-preview{justify-self:center;width:min(100%,280px);padding:10px;border:1px solid var(--border);border-radius:24px;background:linear-gradient(145deg,var(--surface-muted),var(--surface));box-shadow:0 8px 20px rgba(31,35,40,.14)}
+.image-pair .mobile-preview::before,.image-comparison.mobile-preview::before{display:block;width:56px;height:4px;margin:0 auto 8px;border-radius:999px;background:var(--muted);content:"Mobile preview";color:transparent}
+.image-pair .mobile-preview img{margin:0 auto;border:1px solid var(--border);border-radius:15px;background:white}
 .image-comparison{--position:50%;border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
+.image-comparison.mobile-preview{max-width:280px;margin:12px auto;padding:10px;border-radius:24px;background:linear-gradient(145deg,var(--surface-muted),var(--surface));box-shadow:0 8px 20px rgba(31,35,40,.14)}
+.image-comparison.mobile-preview .image-comparison-stage{justify-items:center;border:1px solid var(--border);border-radius:15px;background:white}
+.image-comparison.mobile-preview .image-comparison-control{padding:10px 0 0}
 .image-comparison-stage{position:relative;display:grid;background:var(--surface-muted);overflow:hidden;cursor:ew-resize;touch-action:none}
-.image-comparison-stage img{display:block;grid-area:1/1;width:100%;height:auto}
+.image-comparison-stage img{display:block;grid-area:1/1;width:auto;max-width:100%;height:auto}
 .image-comparison-after{clip-path:inset(0 0 0 var(--position))}
 .image-comparison-divider{position:absolute;top:0;bottom:0;left:var(--position);width:3px;background:white;box-shadow:0 0 0 1px rgba(0,0,0,.35);transform:translateX(-50%);pointer-events:none}
 .image-comparison-label{position:absolute;top:10px;border-radius:999px;background:rgba(0,0,0,.72);color:white;font-size:12px;font-weight:700;padding:3px 8px;pointer-events:none}.image-comparison-label.before{left:10px}.image-comparison-label.after{right:10px}
@@ -940,11 +975,12 @@ function renderScreenshotItem(item: ScreenshotDiffItem) {
   if (item.previousUrl && item.currentUrl) {
     return `<details class="screenshot-diff"><summary>${renderScreenshotPath(item)} <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll">${renderImageComparison(item)}</div></details>`;
   }
+  const mobileClass = isMobileScreenshot(item) ? " mobile-preview" : "";
   const before = item.previousUrl
-    ? `<div class="image-card before"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}" data-lightbox tabindex="0"></div>`
+    ? `<div class="image-card before${mobileClass}"><h4>Before</h4><img src="${html(item.previousUrl)}" alt="Before ${html(item.title)}" data-lightbox tabindex="0"></div>`
     : "";
   const after = item.currentUrl
-    ? `<div class="image-card after"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}" data-lightbox tabindex="0"></div>`
+    ? `<div class="image-card after${mobileClass}"><h4>After</h4><img src="${html(item.currentUrl)}" alt="After ${html(item.title)}" data-lightbox tabindex="0"></div>`
     : "";
   return `<details class="screenshot-diff"><summary>${renderScreenshotPath(item)} <span class="badge ${item.status}">${html(item.status)}</span> <span class="muted">${html(sizeChange({ previousSize: item.previousSize, currentSize: item.currentSize }))}</span></summary><div class="image-pair-scroll"><div class="image-pair">${before}${after}</div></div></details>`;
 }
@@ -961,7 +997,17 @@ function renderScreenshotPath(item: ScreenshotDiffItem) {
 }
 
 function renderImageComparison(item: ScreenshotDiffItem) {
-  return `<div class="image-comparison" data-image-comparison><div class="image-comparison-stage"><img src="${html(item.previousUrl ?? "")}" alt="Before ${html(item.title)}" class="image-comparison-before" data-lightbox tabindex="0"><img src="${html(item.currentUrl ?? "")}" alt="After ${html(item.title)}" class="image-comparison-after" data-lightbox tabindex="0"><span class="image-comparison-label before">Before</span><span class="image-comparison-label after">After</span><span class="image-comparison-divider" aria-hidden="true"></span></div><label class="image-comparison-control"><span>Drag to compare</span><input type="range" min="0" max="100" value="50" aria-label="Compare before and after ${html(item.title)}"></label></div>`;
+  const mobileClass = isMobileScreenshot(item) ? " mobile-preview" : "";
+  return `<div class="image-comparison${mobileClass}" data-image-comparison><div class="image-comparison-stage"><img src="${html(item.previousUrl ?? "")}" alt="Before ${html(item.title)}" class="image-comparison-before" data-lightbox tabindex="0"><img src="${html(item.currentUrl ?? "")}" alt="After ${html(item.title)}" class="image-comparison-after" data-lightbox tabindex="0"><span class="image-comparison-label before">Before</span><span class="image-comparison-label after">After</span><span class="image-comparison-divider" aria-hidden="true"></span></div><label class="image-comparison-control"><span>Drag to compare</span><input type="range" min="0" max="100" value="50" aria-label="Compare before and after ${html(item.title)}"></label></div>`;
+}
+
+function isMobileScreenshot(item: ScreenshotDiffItem) {
+  return (
+    Boolean(item.mobile) ||
+    /(^|[-_ .])mobile([-. _]|$)/i.test(
+      `${item.path} ${item.previousPath ?? ""} ${item.currentPath ?? ""} ${item.title}`,
+    )
+  );
 }
 
 function renderScreenshotToggleScript() {

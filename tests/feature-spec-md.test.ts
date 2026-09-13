@@ -957,7 +957,7 @@ An account owns members.
             {
               specPath: "account.feature.md",
               line: step.line,
-              path: "screenshots/account-s001-line-22.png",
+              path: "screenshots/account-s001-line-22-mobile.png",
               title: "Given a returning person is on the access page",
             },
           ],
@@ -970,7 +970,8 @@ An account owns members.
       ]);
       const html = renderHtmlReport([spec], { screenshots });
 
-      assert.match(html, /screenshots\/account-s001-line-22\.png/);
+      assert.match(html, /screenshots\/account-s001-line-22-mobile\.png/);
+      assert.match(html, /class="screenshot mobile-preview"/);
       assert.match(html, /data-has-images="true"/);
       assert.doesNotMatch(html, /visual changes?/);
       assert.doesNotMatch(html, /unchanged screens?/);
