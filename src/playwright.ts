@@ -24,15 +24,33 @@ export type SpecEvidenceScreenshot = {
   comparedWithLine?: number;
 };
 
-export type PlaywrightSpecEvidenceOptions = {
+export type PlaywrightSpecEvidenceOptions<
+  Page extends PlaywrightPageLike = PlaywrightPageLike,
+> = {
   specs: string[];
   reportDir?: string;
   screenshotsDirName?: string;
   cwd?: string;
+  prepareScreenshot?: (
+    context: PlaywrightSpecEvidencePreparationContext<Page>,
+  ) => Promise<void>;
+};
+
+export type PlaywrightSpecEvidencePreparationContext<
+  Page extends PlaywrightPageLike = PlaywrightPageLike,
+> = {
+  page: Page;
+  step: SpecEvidenceStep;
+  testInfo: PlaywrightTestInfoLike;
 };
 
 export type PlaywrightPageLike = {
-  screenshot(options: { fullPage?: boolean; path: string }): Promise<unknown>;
+  screenshot(options: {
+    animations?: "disabled" | "allow";
+    caret?: "hide" | "initial";
+    fullPage?: boolean;
+    path: string;
+  }): Promise<unknown>;
 };
 
 export type PlaywrightTestInfoLike = {
@@ -53,10 +71,9 @@ type ScreenState = {
   line?: number;
 };
 
-export function createPlaywrightSpecEvidence(
-  test: PlaywrightTestLike,
-  options: PlaywrightSpecEvidenceOptions,
-) {
+export function createPlaywrightSpecEvidence<
+  Page extends PlaywrightPageLike = PlaywrightPageLike,
+>(test: PlaywrightTestLike, options: PlaywrightSpecEvidenceOptions<Page>) {
   const cwd = options.cwd ?? process.cwd();
   const reportDir = path.resolve(
     cwd,
@@ -70,7 +87,7 @@ export function createPlaywrightSpecEvidence(
 
   return {
     async specStep(
-      page: PlaywrightPageLike,
+      page: Page,
       testInfo: PlaywrightTestInfoLike,
       scenarioId: string,
       stepText: string,
@@ -87,6 +104,7 @@ export function createPlaywrightSpecEvidence(
         }
 
         await body();
+        await options.prepareScreenshot?.({ page, step, testInfo });
 
         await captureStepEvidence({
           entriesByWorker,
@@ -244,7 +262,12 @@ async function capturePageBuffer(
     `${process.pid}-${Date.now()}-${slug(label)}.png`,
   );
   try {
-    await page.screenshot({ fullPage: true, path: tempPath });
+    await page.screenshot({
+      animations: "disabled",
+      caret: "hide",
+      fullPage: true,
+      path: tempPath,
+    });
     return await readFile(tempPath);
   } finally {
     await rm(tempPath, { force: true });
