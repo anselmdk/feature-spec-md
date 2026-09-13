@@ -12,9 +12,9 @@ describe("GitHub Action screenshot diffs", () => {
     const previousDir = join(root, "previous");
     const currentDir = join(root, "current");
     const previousPath =
-      "screenshots/ACCOUNT-S001-line-25-the-user-opens-the-account.png";
+      "screenshots/ACCOUNT-S001-line-25-the-user-opens-the-account-mobile.png";
     const currentPath =
-      "screenshots/ACCOUNT-S001-line-26-the-user-opens-the-account.png";
+      "screenshots/ACCOUNT-S001-line-26-the-user-opens-the-account-mobile.png";
 
     try {
       await mkdir(join(previousDir, "screenshots"), { recursive: true });
@@ -32,16 +32,19 @@ describe("GitHub Action screenshot diffs", () => {
       assert.match(report, /1 screenshot change/);
       assert.match(
         report,
-        /ACCOUNT-S001-line-25-the-user-opens-the-account\.png<\/code> <span aria-label="renamed to">→<\/span> <code>screenshots\/ACCOUNT-S001-line-26-the-user-opens-the-account\.png/,
-      );
-      assert.match(report, /class="image-comparison" data-image-comparison/);
-      assert.match(
-        report,
-        /src="previous\/screenshots\/ACCOUNT-S001-line-25-the-user-opens-the-account\.png"/,
+        /ACCOUNT-S001-line-25-the-user-opens-the-account-mobile\.png<\/code> <span aria-label="renamed to">→<\/span> <code>screenshots\/ACCOUNT-S001-line-26-the-user-opens-the-account-mobile\.png/,
       );
       assert.match(
         report,
-        /src="current\/screenshots\/ACCOUNT-S001-line-26-the-user-opens-the-account\.png"/,
+        /class="image-comparison mobile-preview" data-image-comparison/,
+      );
+      assert.match(
+        report,
+        /src="previous\/screenshots\/ACCOUNT-S001-line-25-the-user-opens-the-account-mobile\.png"/,
+      );
+      assert.match(
+        report,
+        /src="current\/screenshots\/ACCOUNT-S001-line-26-the-user-opens-the-account-mobile\.png"/,
       );
       assert.match(report, /aria-label="Compare before and after/);
     } finally {
