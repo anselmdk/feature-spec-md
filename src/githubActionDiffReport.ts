@@ -810,7 +810,8 @@ function pairRenamedScreenshots(files: ComparedFile[]): PairedScreenshot[] {
 function screenshotIdentity(filePath: string) {
   return safeRelativePath(filePath)
     .replace(/\.(png|jpe?g|webp|gif|svg)$/i, "")
-    .replace(/-line-\d+-/i, "-line-*-");
+    .replace(/-line-\d+-/i, "-line-*-")
+    .replace(/-(current|previous)$/i, "");
 }
 
 function scenarioIdFromScreenshotPath(filePath: string) {
@@ -868,10 +869,10 @@ th{background:var(--surface-muted)}a{color:var(--link)}
 .image-card{border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
 .image-card.before{border:3px solid var(--danger)}.image-card.after{border:3px solid var(--success)}
 .image-card.before h4{color:var(--danger)}.image-card.after h4{color:var(--success)}
-.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:100%;height:auto}
+.image-card h4{margin:0;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border)}.image-card img{display:block;width:auto;max-width:100%;height:auto}
 .image-comparison{--position:50%;border:1px solid var(--border);border-radius:8px;background:var(--surface-muted);overflow:hidden}
 .image-comparison-stage{position:relative;display:grid;background:var(--surface-muted);overflow:hidden}
-.image-comparison-stage img{display:block;grid-area:1/1;width:100%;height:auto}
+.image-comparison-stage img{display:block;grid-area:1/1;width:auto;max-width:100%;height:auto}
 .image-comparison-after{clip-path:inset(0 0 0 var(--position))}
 .image-comparison-divider{position:absolute;top:0;bottom:0;left:var(--position);width:3px;background:white;box-shadow:0 0 0 1px rgba(0,0,0,.35);transform:translateX(-50%);pointer-events:none}
 .image-comparison-label{position:absolute;top:10px;border-radius:999px;background:rgba(0,0,0,.72);color:white;font-size:12px;font-weight:700;padding:3px 8px;pointer-events:none}.image-comparison-label.before{left:10px}.image-comparison-label.after{right:10px}

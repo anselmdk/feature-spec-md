@@ -87,7 +87,7 @@ export function renderHtmlPage({
     .image-lightbox::backdrop { background: var(--overlay); }
     .lightbox-close { position: fixed; z-index: 2; top: 14px; right: 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 999px; background: rgba(0,0,0,.72); color: white; cursor: pointer; font: inherit; font-weight: 700; padding: 8px 13px; }
     .lightbox-viewport { width: 100%; height: 100%; overflow: auto; padding: 56px 24px 24px; }
-    .lightbox-viewport img { display: block; width: auto; height: auto; max-width: none; max-height: none; margin: 0 auto; background: white; }
+    .lightbox-viewport img { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; background: white; }
 ${indentTemplateBlock(defaults.styleText, 4)}
   </style>
 </head>

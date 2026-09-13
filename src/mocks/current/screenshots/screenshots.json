@@ -10,6 +10,14 @@
     },
     {
       "specPath": "src/mocks/current/specs/ticket-inbox.feature.md",
+      "line": 28,
+      "changed": true,
+      "path": "screenshots/SUPPORT-INBOX-S001-line-28-mobile.svg",
+      "title": "Inbox with priority badges on mobile",
+      "testPath": "src/mocks/current/tests/supportDesk.spec.ts"
+    },
+    {
+      "specPath": "src/mocks/current/specs/ticket-inbox.feature.md",
       "line": 29,
       "changed": false,
       "title": "Inbox remains visually unchanged after selecting the first ticket",

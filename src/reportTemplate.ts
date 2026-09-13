@@ -190,7 +190,7 @@ h1 a{color:var(--link);text-decoration:underline;text-underline-offset:3px}h1 a:
 .step{border-left:3px solid var(--border);margin:12px 0;padding:2px 0 2px 12px}.step p{margin:8px 0}
 .screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:10px 0 14px}
 .screenshot{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface-muted)}
-.screenshot img{display:block;width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:var(--muted)}
+.screenshot img{display:block;width:auto;max-width:100%;height:auto}.screenshot figcaption{font-size:12px;padding:8px;color:var(--muted)}
 .coverage-refs{display:inline-flex;gap:2px;margin-left:4px}.coverage-ref{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .line-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .flag-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}

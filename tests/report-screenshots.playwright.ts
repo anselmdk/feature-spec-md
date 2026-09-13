@@ -115,12 +115,22 @@ Then account access is granted
   await expect(
     page.getByRole("img", { name: "ACCOUNT-S001 screenshot" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "ACCOUNT-S001 screenshot" }),
+  ).toHaveJSProperty("naturalWidth", 1);
+  expect(
+    await page
+      .getByRole("img", { name: "ACCOUNT-S001 screenshot" })
+      .boundingBox(),
+  ).toMatchObject({ width: 1, height: 1 });
 
-  await page.getByRole("img", { name: "ACCOUNT-S001 screenshot" }).click();
+  await page
+    .getByRole("img", { name: "ACCOUNT-S001 screenshot" })
+    .press("Enter");
   await expect(page.locator("dialog.image-lightbox")).toBeVisible();
   await expect(page.locator(".lightbox-viewport img")).toHaveCSS(
     "max-width",
-    "none",
+    "100%",
   );
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.locator("dialog.image-lightbox")).not.toBeVisible();
