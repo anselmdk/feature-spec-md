@@ -387,7 +387,21 @@ publication remains durable.
 
 ## Playwright screenshot evidence
 
-The package exports a Playwright helper from `@anselmdk/feature-spec-md/playwright`. It maps scenario step text back to the spec line, wraps the implementation in a Playwright `test.step`, captures a screenshot after the step, attaches it to the test, and writes a screenshot manifest such as `test-results/spec-report/screenshots-0.json`.
+The package exports a Playwright helper from `@anselmdk/feature-spec-md/playwright`. It maps scenario step text back to the spec line, wraps the implementation in a Playwright `test.step`, captures a screenshot after the step, attaches it to the test, and writes a screenshot manifest such as `test-results/spec-report/screenshots-0.json`. Screenshots disable animations and hide the text caret so transient rendering does not create false diffs.
+
+Applications that load data asynchronously can provide `prepareScreenshot` when creating the helper. The hook runs after each step body and immediately before its screenshot, so the consuming project can wait for its own durable readiness condition (for example completed requests and loaded web fonts). The library does not guess that condition because intentional loading-state scenarios must remain capturable.
+
+```ts
+import type { Page } from "@playwright/test";
+
+const evidence = createPlaywrightSpecEvidence<Page>(test, {
+  specs: ["specs/**/*.feature.md"],
+  prepareScreenshot: async ({ page }) => {
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => document.fonts.ready);
+  },
+});
+```
 
 That manifest can then be passed to `feature-spec-md report` with `--screenshots "test-results/spec-report/screenshots-*.json"` so the HTML report can show scenario evidence next to the relevant spec step. With `--enforce-evidence`, missing screenshots fail only for scenarios declared as `screenshots: required`.
 

@@ -1045,12 +1045,20 @@ An account owns members.
             return body();
           },
         },
-        { specs: ["specs/**/*.feature.md"], cwd: root },
+        {
+          specs: ["specs/**/*.feature.md"],
+          cwd: root,
+          async prepareScreenshot({ step }) {
+            calls.push(`prepare:${step.scenarioId}:${step.line}`);
+          },
+        },
       );
 
       await helper.specStep(
         {
           async screenshot(options) {
+            assert.equal(options.animations, "disabled");
+            assert.equal(options.caret, "hide");
             calls.push(options.path);
             await writeFile(options.path, "fake image", "utf8");
           },
@@ -1070,6 +1078,11 @@ An account owns members.
       );
 
       assert.equal(calls.includes("body"), true);
+      assert.equal(
+        calls.indexOf(`prepare:ACCOUNT-S001:${firstStepLine}`) >
+          calls.indexOf("body"),
+        true,
+      );
       const screenshots = await collectSpecScreenshots([
         path.join(root, "test-results/spec-report/screenshots-0.json"),
       ]);
