@@ -25,11 +25,19 @@ describe("GitHub Action screenshot diffs", () => {
         });
         await writeFile(
           join(directory, "__feature-spec-md", "account.feature.md"),
-          "# Account access\n\n### ACCOUNT-S001: Administrator navigates on a phone\n\nGiven an administrator opens the phone view\n",
+          "# Account access\n\n### ACCOUNT-S001: Administrator opens the account\n\nGiven an administrator opens the account view\n",
         );
       }
-      await writeFile(join(previousDir, previousPath), "before image");
-      await writeFile(join(currentDir, currentPath), "after image");
+      await writeFile(
+        join(previousDir, previousPath),
+        PNG.sync.write(solidPng(390, 844)),
+      );
+      const current = solidPng(390, 844);
+      for (let offset = 0; offset < current.data.length; offset += 4) {
+        current.data[offset] = 255;
+        current.data[offset + 3] = 255;
+      }
+      await writeFile(join(currentDir, currentPath), PNG.sync.write(current));
 
       const report = await renderLocalDiffReport({
         previousDir,
