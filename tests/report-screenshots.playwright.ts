@@ -21,16 +21,35 @@ test("renamed screenshots use an interactive before and after slider", async ({
   try {
     await mkdir(join(previousDir, "screenshots"), { recursive: true });
     await mkdir(join(currentDir, "screenshots"), { recursive: true });
-    const pixel = Buffer.from(transparentPixel.split(",")[1] ?? "", "base64");
-    const changedPixel = new PNG({ width: 1, height: 1 });
-    changedPixel.data.set([255, 0, 0, 255]);
-    await writeFile(join(previousDir, previousPath), pixel);
+    const previousImage = new PNG({ width: 960, height: 540 });
+    previousImage.data.fill(255);
+    const currentImage = new PNG({ width: 390, height: 844 });
+    currentImage.data.fill(128);
+    await writeFile(
+      join(previousDir, previousPath),
+      PNG.sync.write(previousImage),
+    );
     await writeFile(
       join(currentDir, currentPath),
-      PNG.sync.write(changedPixel),
+      PNG.sync.write(currentImage),
+    );
+    await page.route("http://test.local/previous/**", (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: PNG.sync.write(previousImage),
+      }),
+    );
+    await page.route("http://test.local/current/**", (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: PNG.sync.write(currentImage),
+      }),
     );
     await page.setContent(
-      await renderLocalDiffReport({ previousDir, currentDir }),
+      (await renderLocalDiffReport({ previousDir, currentDir })).replace(
+        "<head>",
+        '<head><base href="http://test.local/">',
+      ),
     );
 
     await page.getByRole("button", { name: "Show all screenshots" }).click();
@@ -45,6 +64,7 @@ test("renamed screenshots use an interactive before and after slider", async ({
     await expect(afterImage).toHaveCSS("clip-path", "inset(0px 0px 0px 80%)");
 
     const stage = comparison.locator(".image-comparison-stage");
+    await expect(stage).toHaveCSS("aspect-ratio", "960 / 540");
     const stageBox = await stage.boundingBox();
     expect(stageBox).toBeTruthy();
     await page.mouse.click(
