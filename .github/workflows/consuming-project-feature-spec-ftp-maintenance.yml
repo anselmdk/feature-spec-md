@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       mode:
-        description: report, dry-run, or cleanup
+        description: smoke-test, report, dry-run, or cleanup
         required: false
         type: string
         default: report
@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: "10"
+      max-builds-to-scan:
+        description: Optional limit on newest numbered build directories to scan; report and dry-run only.
+        required: false
+        type: string
+        default: ""
       paths:
         description: Comma-separated paths relative to the configured FTP root.
         required: false
@@ -55,6 +60,7 @@ jobs:
   maintain:
     if: inputs.mode != 'cleanup' || inputs.confirm
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       FEATURE_SPEC_FTP_HOST: ${{ inputs.ftp-host }}
       FEATURE_SPEC_FTP_USER: ${{ inputs.ftp-user }}
@@ -71,11 +77,25 @@ jobs:
       - name: Install consuming project dependencies
         run: npm ci
       - name: Inspect or clean FTP storage
+        if: inputs.mode != 'smoke-test'
         run: >-
           npx --no-install feature-spec-md github-ftp-maintenance
           --mode "${{ inputs.mode }}"
           --keep-builds "${{ inputs.keep-builds }}"
+          --max-builds-to-scan "${{ inputs.max-builds-to-scan }}"
           --paths "${{ inputs.paths }}"
+          --ftp-maintenance-concurrency "16"
+          --ftp-maintenance-connect-timeout "10"
+          --ftp-maintenance-max-time "20"
+
+      - name: Smoke test FTP storage maintenance
+        if: inputs.mode == 'smoke-test'
+        run: >-
+          npx --no-install feature-spec-md github-ftp-maintenance
+          --mode "smoke-test"
+          --ftp-maintenance-concurrency "1"
+          --ftp-maintenance-connect-timeout "5"
+          --ftp-maintenance-max-time "10"
 
   refuse-unconfirmed-cleanup:
     if: inputs.mode == 'cleanup' && !inputs.confirm

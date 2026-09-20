@@ -4,11 +4,16 @@ import {
   listRemoteDirectory,
   pathJoin,
   runCurl,
+  runWithConcurrency,
   type FtpConnectionConfig,
   type GithubActionOptions,
 } from "./githubActionFtp.js";
 
-export type FtpMaintenanceMode = "report" | "dry-run" | "cleanup";
+export type FtpMaintenanceMode =
+  | "smoke-test"
+  | "report"
+  | "dry-run"
+  | "cleanup";
 
 export type FtpInventoryEntry = {
   path: string;
@@ -19,18 +24,73 @@ export type FtpInventoryEntry = {
 export type FtpMaintenanceOptions = GithubActionOptions;
 
 export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
-  const config = ftpConnectionConfig(options);
+  const connection = ftpConnectionConfig(options);
+  const config = {
+    ...connection,
+    concurrency: maintenanceInteger(
+      options["ftp-maintenance-concurrency"] ??
+        process.env.FEATURE_SPEC_FTP_MAINTENANCE_CONCURRENCY,
+      8,
+      "FTP maintenance concurrency",
+    ),
+    connectTimeoutSeconds: maintenanceInteger(
+      options["ftp-maintenance-connect-timeout"] ??
+        process.env.FEATURE_SPEC_FTP_MAINTENANCE_CONNECT_TIMEOUT,
+      10,
+      "FTP maintenance connect timeout",
+    ),
+    maxTimeSeconds: maintenanceInteger(
+      options["ftp-maintenance-max-time"] ??
+        process.env.FEATURE_SPEC_FTP_MAINTENANCE_MAX_TIME,
+      30,
+      "FTP maintenance maximum time",
+    ),
+  } satisfies FtpConnectionConfig;
   const mode = maintenanceMode(
     options.mode ?? process.env.FEATURE_SPEC_FTP_MODE ?? "report",
   );
+  if (mode === "smoke-test") {
+    const listing = await listRemoteDirectory(config.remoteDir, config, {
+      fallbackToDefaultListing: false,
+    });
+    const entries = listing
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const summary = [
+      "## FTP storage smoke test",
+      "",
+      `- Root: \`${config.remoteDir || "/"}\``,
+      `- Transport: **${config.secure ? "FTPS" : "FTP"}**`,
+      `- Root listing: **reachable** (${entries.length} entries returned)`,
+      "- Result: **credentials, transport, and root listing work**",
+    ].join("\n");
+    await writeSummary(summary, options);
+    console.log(summary);
+    return { summary, inventory: [], cleanupPaths: [], freeBytes: undefined };
+  }
   const keepBuilds = positiveInteger(
     options["keep-builds"] ?? process.env.FEATURE_SPEC_FTP_KEEP_BUILDS,
     10,
   );
+  const maxBuildsToScan = optionalPositiveInteger(
+    options["max-builds-to-scan"] ??
+      process.env.FEATURE_SPEC_FTP_MAX_BUILDS_TO_SCAN,
+    "Maximum builds to scan",
+  );
   const requestedPaths = csv(
     options.paths ?? process.env.FEATURE_SPEC_FTP_PATHS,
   );
-  const inventory = await inventoryRemoteDirectory(config.remoteDir, config);
+  if (mode === "cleanup" && maxBuildsToScan !== undefined) {
+    throw new Error(
+      "--max-builds-to-scan is only supported for report and dry-run modes.",
+    );
+  }
+  const inventory = await inventoryRemoteDirectory(
+    config.remoteDir,
+    config,
+    maxBuildsToScan,
+  );
   const freeBytes = await remoteFreeBytes(config.remoteDir, config);
   const cleanupPaths =
     mode === "report"
@@ -57,6 +117,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     config,
     mode,
     keepBuilds,
+    maxBuildsToScan,
     requestedPaths,
     inventory,
     cleanupPaths,
@@ -81,30 +142,47 @@ export function parseFtpHeadSize(response: string) {
 async function inventoryRemoteDirectory(
   remoteDir: string,
   config: FtpConnectionConfig,
+  maxBuildsToScan?: number,
 ): Promise<FtpInventoryEntry[]> {
   const entries: FtpInventoryEntry[] = [];
   await visit(remoteDir);
   return entries.sort((a, b) => a.path.localeCompare(b.path));
 
   async function visit(directory: string) {
-    const listing = await listRemoteDirectory(directory, config);
+    const listing = await listRemoteDirectory(directory, config, {
+      fallbackToDefaultListing: false,
+    });
     const names = listing
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => line.split(/\s+/).at(-1) ?? "")
       .filter((name) => name && name !== "." && name !== "..");
-    for (const name of new Set(names)) {
-      const child = pathJoin(directory, name);
-      try {
-        await listRemoteDirectory(child, config);
-        entries.push({ path: child, kind: "directory", sizeBytes: 0 });
-        await visit(child);
-      } catch {
-        const sizeBytes = (await remoteFileSize(child, config)) ?? 0;
-        entries.push({ path: child, kind: "file", sizeBytes });
-      }
-    }
+    const buildRoot = pathJoin(remoteDir, "build");
+    const selectedNames =
+      directory === buildRoot && maxBuildsToScan !== undefined
+        ? Array.from(new Set(names))
+            .filter((name) => /^\d+$/.test(name))
+            .sort((a, b) => Number(b) - Number(a))
+            .slice(0, maxBuildsToScan)
+        : Array.from(new Set(names));
+    await runWithConcurrency(
+      selectedNames,
+      config.concurrency,
+      async (name) => {
+        const child = pathJoin(directory, name);
+        try {
+          await listRemoteDirectory(child, config, {
+            fallbackToDefaultListing: false,
+          });
+          entries.push({ path: child, kind: "directory", sizeBytes: 0 });
+          await visit(child);
+        } catch {
+          const sizeBytes = (await remoteFileSize(child, config)) ?? 0;
+          entries.push({ path: child, kind: "file", sizeBytes });
+        }
+      },
+    );
   }
 }
 
@@ -115,6 +193,23 @@ async function remoteFileSize(remotePath: string, config: FtpConnectionConfig) {
   } catch {
     return undefined;
   }
+}
+
+function maintenanceInteger(
+  value: string | undefined,
+  fallback: number,
+  label: string,
+) {
+  if (value === undefined) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < 1) {
+    throw new Error(`${label} must be a positive integer: ${value}`);
+  }
+  return Number(value);
+}
+
+function optionalPositiveInteger(value: string | undefined, label: string) {
+  if (value === undefined || value === "") return undefined;
+  return maintenanceInteger(value, 1, label);
 }
 
 async function remoteFreeBytes(remoteDir: string, config: FtpConnectionConfig) {
@@ -193,6 +288,7 @@ function formatSummary(input: {
   config: FtpConnectionConfig;
   mode: FtpMaintenanceMode;
   keepBuilds: number;
+  maxBuildsToScan?: number;
   requestedPaths: string[];
   inventory: FtpInventoryEntry[];
   cleanupPaths: string[];
@@ -204,6 +300,7 @@ function formatSummary(input: {
     "",
     `- Mode: **${input.mode}**`,
     `- Root: \`${input.config.remoteDir || "/"}\``,
+    `- Build scan: **${input.maxBuildsToScan === undefined ? "all numbered builds" : `newest ${input.maxBuildsToScan} numbered build${input.maxBuildsToScan === 1 ? "" : "s"}`}**`,
     `- Files: **${input.inventory.filter((entry) => entry.kind === "file").length}**`,
     `- Used: **${formatBytes(totalBytes(input.inventory))}**`,
     `- Available: **${input.freeBytes === undefined ? "not reported by server" : formatBytes(input.freeBytes)}**`,
@@ -299,7 +396,12 @@ function safeChildPath(root: string, value: string) {
 }
 
 function maintenanceMode(value: string | undefined): FtpMaintenanceMode {
-  if (value === "report" || value === "dry-run" || value === "cleanup")
+  if (
+    value === "smoke-test" ||
+    value === "report" ||
+    value === "dry-run" ||
+    value === "cleanup"
+  )
     return value;
   throw new Error(`Unknown FTP maintenance mode: ${value ?? ""}`);
 }
