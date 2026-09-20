@@ -81,6 +81,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
   const requestedPaths = csv(
     options.paths ?? process.env.FEATURE_SPEC_FTP_PATHS,
   );
+  const inventoryRoots = maintenanceInventoryRoots(mode, requestedPaths);
   if (mode === "cleanup" && maxBuildsToScan !== undefined) {
     throw new Error(
       "--max-builds-to-scan is only supported for report and dry-run modes.",
@@ -90,6 +91,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     config.remoteDir,
     config,
     maxBuildsToScan,
+    inventoryRoots,
   );
   const freeBytes = await remoteFreeBytes(config.remoteDir, config);
   const cleanupPaths =
@@ -111,7 +113,12 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
 
   const afterInventory =
     mode === "cleanup"
-      ? await inventoryRemoteDirectory(config.remoteDir, config)
+      ? await inventoryRemoteDirectory(
+          config.remoteDir,
+          config,
+          undefined,
+          inventoryRoots,
+        )
       : inventory;
   const summary = formatSummary({
     config,
@@ -119,6 +126,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     keepBuilds,
     maxBuildsToScan,
     requestedPaths,
+    inventoryRoots,
     inventory,
     cleanupPaths,
     freeBytes,
@@ -139,10 +147,21 @@ export function parseFtpHeadSize(response: string) {
   return match ? Number(match[1]) : parseFtpSizeResponse(response);
 }
 
+export function maintenanceInventoryRoots(
+  mode: FtpMaintenanceMode,
+  requestedPaths: string[],
+) {
+  if (mode === "report" || mode === "smoke-test") return undefined;
+  return Array.from(
+    new Set(["build", ...requestedPaths.map((item) => item.split("/")[0])]),
+  );
+}
+
 async function inventoryRemoteDirectory(
   remoteDir: string,
   config: FtpConnectionConfig,
   maxBuildsToScan?: number,
+  inventoryRoots?: string[],
 ): Promise<FtpInventoryEntry[]> {
   const entries: FtpInventoryEntry[] = [];
   await visit(remoteDir);
@@ -159,13 +178,17 @@ async function inventoryRemoteDirectory(
       .map((line) => line.split(/\s+/).at(-1) ?? "")
       .filter((name) => name && name !== "." && name !== "..");
     const buildRoot = pathJoin(remoteDir, "build");
+    const scopedNames =
+      directory === remoteDir && inventoryRoots !== undefined
+        ? names.filter((name) => inventoryRoots.includes(name))
+        : names;
     const selectedNames =
       directory === buildRoot && maxBuildsToScan !== undefined
-        ? Array.from(new Set(names))
+        ? Array.from(new Set(scopedNames))
             .filter((name) => /^\d+$/.test(name))
             .sort((a, b) => Number(b) - Number(a))
             .slice(0, maxBuildsToScan)
-        : Array.from(new Set(names));
+        : Array.from(new Set(scopedNames));
     await runWithConcurrency(
       selectedNames,
       config.concurrency,
@@ -290,6 +313,7 @@ function formatSummary(input: {
   keepBuilds: number;
   maxBuildsToScan?: number;
   requestedPaths: string[];
+  inventoryRoots?: string[];
   inventory: FtpInventoryEntry[];
   cleanupPaths: string[];
   freeBytes?: number;
@@ -300,6 +324,7 @@ function formatSummary(input: {
     "",
     `- Mode: **${input.mode}**`,
     `- Root: \`${input.config.remoteDir || "/"}\``,
+    `- Scan scope: **${input.inventoryRoots?.map((item) => `\`${item}\``).join(", ") ?? "all top-level paths"}**`,
     `- Build scan: **${input.maxBuildsToScan === undefined ? "all numbered builds" : `newest ${input.maxBuildsToScan} numbered build${input.maxBuildsToScan === 1 ? "" : "s"}`}**`,
     `- Files: **${input.inventory.filter((entry) => entry.kind === "file").length}**`,
     `- Used: **${formatBytes(totalBytes(input.inventory))}**`,

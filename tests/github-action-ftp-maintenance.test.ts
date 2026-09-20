@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
+  maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
 } from "../src/githubActionFtpMaintenance.js";
@@ -12,6 +13,18 @@ describe("FTP maintenance helpers", () => {
     assert.equal(parseFtpSizeResponse("213    42\r\n"), 42);
     assert.equal(parseFtpSizeResponse("550 Not supported\n"), undefined);
     assert.equal(parseFtpHeadSize("Size: 2048\n"), 2048);
+  });
+
+  it("scopes cleanup planning to builds and explicitly requested roots", () => {
+    assert.deepEqual(
+      maintenanceInventoryRoots("report", ["pr/145"]),
+      undefined,
+    );
+    assert.deepEqual(
+      maintenanceInventoryRoots("dry-run", ["pr/145", "build/532"]),
+      ["build", "pr"],
+    );
+    assert.deepEqual(maintenanceInventoryRoots("cleanup", []), ["build"]);
   });
 
   it("defines the bounded smoke-test workflow mode", async () => {
