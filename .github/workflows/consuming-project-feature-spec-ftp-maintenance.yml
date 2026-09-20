@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       mode:
-        description: report, dry-run, or cleanup
+        description: smoke-test, report, dry-run, or cleanup
         required: false
         type: string
         default: report
@@ -72,6 +72,7 @@ jobs:
       - name: Install consuming project dependencies
         run: npm ci
       - name: Inspect or clean FTP storage
+        if: inputs.mode != 'smoke-test'
         run: >-
           npx --no-install feature-spec-md github-ftp-maintenance
           --mode "${{ inputs.mode }}"
@@ -80,6 +81,15 @@ jobs:
           --ftp-maintenance-concurrency "16"
           --ftp-maintenance-connect-timeout "10"
           --ftp-maintenance-max-time "20"
+
+      - name: Smoke test FTP storage maintenance
+        if: inputs.mode == 'smoke-test'
+        run: >-
+          npx --no-install feature-spec-md github-ftp-maintenance
+          --mode "smoke-test"
+          --ftp-maintenance-concurrency "1"
+          --ftp-maintenance-connect-timeout "5"
+          --ftp-maintenance-max-time "10"
 
   refuse-unconfirmed-cleanup:
     if: inputs.mode == 'cleanup' && !inputs.confirm

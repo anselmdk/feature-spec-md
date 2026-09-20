@@ -9,7 +9,11 @@ import {
   type GithubActionOptions,
 } from "./githubActionFtp.js";
 
-export type FtpMaintenanceMode = "report" | "dry-run" | "cleanup";
+export type FtpMaintenanceMode =
+  | "smoke-test"
+  | "report"
+  | "dry-run"
+  | "cleanup";
 
 export type FtpInventoryEntry = {
   path: string;
@@ -45,6 +49,26 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
   const mode = maintenanceMode(
     options.mode ?? process.env.FEATURE_SPEC_FTP_MODE ?? "report",
   );
+  if (mode === "smoke-test") {
+    const listing = await listRemoteDirectory(config.remoteDir, config, {
+      fallbackToDefaultListing: false,
+    });
+    const entries = listing
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const summary = [
+      "## FTP storage smoke test",
+      "",
+      `- Root: \`${config.remoteDir || "/"}\``,
+      `- Transport: **${config.secure ? "FTPS" : "FTP"}**`,
+      `- Root listing: **reachable** (${entries.length} entries returned)`,
+      "- Result: **credentials, transport, and root listing work**",
+    ].join("\n");
+    await writeSummary(summary, options);
+    console.log(summary);
+    return { summary, inventory: [], cleanupPaths: [], freeBytes: undefined };
+  }
   const keepBuilds = positiveInteger(
     options["keep-builds"] ?? process.env.FEATURE_SPEC_FTP_KEEP_BUILDS,
     10,
@@ -341,7 +365,12 @@ function safeChildPath(root: string, value: string) {
 }
 
 function maintenanceMode(value: string | undefined): FtpMaintenanceMode {
-  if (value === "report" || value === "dry-run" || value === "cleanup")
+  if (
+    value === "smoke-test" ||
+    value === "report" ||
+    value === "dry-run" ||
+    value === "cleanup"
+  )
     return value;
   throw new Error(`Unknown FTP maintenance mode: ${value ?? ""}`);
 }
