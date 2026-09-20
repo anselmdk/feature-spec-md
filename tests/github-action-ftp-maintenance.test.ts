@@ -6,6 +6,7 @@ import {
   maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
+  selectMaintenanceNames,
 } from "../src/githubActionFtpMaintenance.js";
 
 describe("FTP maintenance helpers", () => {
@@ -36,6 +37,19 @@ describe("FTP maintenance helpers", () => {
     assert.equal(
       ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
       "RMD /booking.specs.title.dk/build/532",
+    );
+  });
+
+  it("includes explicitly requested builds outside a bounded newest-build scan", () => {
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["531", "532", "533", "534"],
+        "booking.specs.title.dk/build",
+        "booking.specs.title.dk",
+        2,
+        ["build/532"],
+      ),
+      ["534", "533", "532"],
     );
   });
 

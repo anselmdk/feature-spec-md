@@ -96,6 +96,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     config,
     maxBuildsToScan,
     inventoryRoots,
+    requestedPaths,
   );
   const freeBytes = await remoteFreeBytes(config.remoteDir, config);
   const cleanupPaths =
@@ -122,6 +123,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
           config,
           maxBuildsToScan,
           inventoryRoots,
+          requestedPaths,
         )
       : inventory;
   const summary = formatSummary({
@@ -166,6 +168,7 @@ async function inventoryRemoteDirectory(
   config: FtpConnectionConfig,
   maxBuildsToScan?: number,
   inventoryRoots?: string[],
+  requestedPaths: string[] = [],
 ): Promise<FtpInventoryEntry[]> {
   const entries: FtpInventoryEntry[] = [];
   await visit(remoteDir);
@@ -186,13 +189,13 @@ async function inventoryRemoteDirectory(
       directory === remoteDir && inventoryRoots !== undefined
         ? names.filter((name) => inventoryRoots.includes(name))
         : names;
-    const selectedNames =
-      directory === buildRoot && maxBuildsToScan !== undefined
-        ? Array.from(new Set(scopedNames))
-            .filter((name) => /^\d+$/.test(name))
-            .sort((a, b) => Number(b) - Number(a))
-            .slice(0, maxBuildsToScan)
-        : Array.from(new Set(scopedNames));
+    const selectedNames = selectMaintenanceNames(
+      scopedNames,
+      directory,
+      remoteDir,
+      directory === buildRoot ? maxBuildsToScan : undefined,
+      requestedPaths,
+    );
     await runWithConcurrency(
       selectedNames,
       config.concurrency,
@@ -205,12 +208,45 @@ async function inventoryRemoteDirectory(
           entries.push({ path: child, kind: "directory", sizeBytes: 0 });
           await visit(child);
         } catch {
-          const sizeBytes = (await remoteFileSize(child, config)) ?? 0;
-          entries.push({ path: child, kind: "file", sizeBytes });
+          const sizeBytes = await remoteFileSize(child, config);
+          if (sizeBytes !== undefined) {
+            entries.push({ path: child, kind: "file", sizeBytes });
+          }
         }
       },
     );
   }
+}
+
+export function selectMaintenanceNames(
+  names: string[],
+  directory: string,
+  remoteDir: string,
+  maximumNumberedEntries: number | undefined,
+  requestedPaths: string[],
+) {
+  const availableNames = Array.from(new Set(names));
+  const boundedNames =
+    maximumNumberedEntries === undefined
+      ? availableNames
+      : availableNames
+          .filter((name) => /^\d+$/.test(name))
+          .sort((a, b) => Number(b) - Number(a))
+          .slice(0, maximumNumberedEntries);
+  const relativeDirectory =
+    directory === remoteDir
+      ? ""
+      : directory.startsWith(`${remoteDir}/`)
+        ? directory.slice(remoteDir.length + 1)
+        : directory;
+  const prefix = relativeDirectory ? `${relativeDirectory}/` : "";
+  const requestedNames = requestedPaths.flatMap((requestedPath) => {
+    if (!requestedPath.startsWith(prefix)) return [];
+    const remainder = requestedPath.slice(prefix.length);
+    const child = remainder.split("/")[0];
+    return child ? [child] : [];
+  });
+  return Array.from(new Set([...boundedNames, ...requestedNames]));
 }
 
 async function remoteFileSize(remotePath: string, config: FtpConnectionConfig) {
