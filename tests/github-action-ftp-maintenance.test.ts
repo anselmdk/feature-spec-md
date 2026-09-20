@@ -6,6 +6,7 @@ import {
   maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
+  parseMaintenanceListingNames,
   selectMaintenanceNames,
 } from "../src/githubActionFtpMaintenance.js";
 
@@ -15,6 +16,16 @@ describe("FTP maintenance helpers", () => {
     assert.equal(parseFtpSizeResponse("213    42\r\n"), 42);
     assert.equal(parseFtpSizeResponse("550 Not supported\n"), undefined);
     assert.equal(parseFtpHeadSize("Size: 2048\n"), 2048);
+  });
+
+  it("normalizes FTP listings that return paths instead of basenames", () => {
+    assert.deepEqual(
+      parseMaintenanceListingNames(
+        "booking.specs.title.dk/build/538/index.html\n" +
+          "booking.specs.title.dk/build/538/__feature-spec-md/\n",
+      ),
+      ["index.html", "__feature-spec-md"],
+    );
   });
 
   it("scopes cleanup planning to builds and explicitly requested roots", () => {

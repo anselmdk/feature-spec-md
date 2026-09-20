@@ -178,12 +178,7 @@ async function inventoryRemoteDirectory(
     const listing = await listRemoteDirectory(directory, config, {
       fallbackToDefaultListing: false,
     });
-    const names = listing
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => line.split(/\s+/).at(-1) ?? "")
-      .filter((name) => name && name !== "." && name !== "..");
+    const names = parseMaintenanceListingNames(listing);
     const buildRoot = pathJoin(remoteDir, "build");
     const scopedNames =
       directory === remoteDir && inventoryRoots !== undefined
@@ -218,6 +213,16 @@ async function inventoryRemoteDirectory(
       },
     );
   }
+}
+
+export function parseMaintenanceListingNames(listing: string) {
+  return listing
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/\s+/).at(-1) ?? "")
+    .map((name) => name.split("/").filter(Boolean).at(-1) ?? "")
+    .filter((name) => name && name !== "." && name !== "..");
 }
 
 export function selectMaintenanceNames(
