@@ -170,6 +170,7 @@ export async function downloadRemoteFile(
 export async function listRemoteDirectory(
   remoteDir: string,
   config: FtpConnectionConfig,
+  options: { fallbackToDefaultListing?: boolean } = {},
 ) {
   const directoryUrl = ftpUrl(config, asDirectoryPath(remoteDir));
   const commonArgs = [
@@ -180,7 +181,8 @@ export async function listRemoteDirectory(
 
   try {
     return await runCurl([...commonArgs, "--list-only", directoryUrl]);
-  } catch {
+  } catch (error) {
+    if (options.fallbackToDefaultListing === false) throw error;
     return runCurl([...commonArgs, directoryUrl]);
   }
 }

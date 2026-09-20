@@ -55,6 +55,7 @@ jobs:
   maintain:
     if: inputs.mode != 'cleanup' || inputs.confirm
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       FEATURE_SPEC_FTP_HOST: ${{ inputs.ftp-host }}
       FEATURE_SPEC_FTP_USER: ${{ inputs.ftp-user }}
@@ -76,6 +77,9 @@ jobs:
           --mode "${{ inputs.mode }}"
           --keep-builds "${{ inputs.keep-builds }}"
           --paths "${{ inputs.paths }}"
+          --ftp-maintenance-concurrency "16"
+          --ftp-maintenance-connect-timeout "10"
+          --ftp-maintenance-max-time "20"
 
   refuse-unconfirmed-cleanup:
     if: inputs.mode == 'cleanup' && !inputs.confirm

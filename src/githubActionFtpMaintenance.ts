@@ -4,6 +4,7 @@ import {
   listRemoteDirectory,
   pathJoin,
   runCurl,
+  runWithConcurrency,
   type FtpConnectionConfig,
   type GithubActionOptions,
 } from "./githubActionFtp.js";
@@ -19,7 +20,28 @@ export type FtpInventoryEntry = {
 export type FtpMaintenanceOptions = GithubActionOptions;
 
 export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
-  const config = ftpConnectionConfig(options);
+  const connection = ftpConnectionConfig(options);
+  const config = {
+    ...connection,
+    concurrency: maintenanceInteger(
+      options["ftp-maintenance-concurrency"] ??
+        process.env.FEATURE_SPEC_FTP_MAINTENANCE_CONCURRENCY,
+      8,
+      "FTP maintenance concurrency",
+    ),
+    connectTimeoutSeconds: maintenanceInteger(
+      options["ftp-maintenance-connect-timeout"] ??
+        process.env.FEATURE_SPEC_FTP_MAINTENANCE_CONNECT_TIMEOUT,
+      10,
+      "FTP maintenance connect timeout",
+    ),
+    maxTimeSeconds: maintenanceInteger(
+      options["ftp-maintenance-max-time"] ??
+        process.env.FEATURE_SPEC_FTP_MAINTENANCE_MAX_TIME,
+      30,
+      "FTP maintenance maximum time",
+    ),
+  } satisfies FtpConnectionConfig;
   const mode = maintenanceMode(
     options.mode ?? process.env.FEATURE_SPEC_FTP_MODE ?? "report",
   );
@@ -87,24 +109,32 @@ async function inventoryRemoteDirectory(
   return entries.sort((a, b) => a.path.localeCompare(b.path));
 
   async function visit(directory: string) {
-    const listing = await listRemoteDirectory(directory, config);
+    const listing = await listRemoteDirectory(directory, config, {
+      fallbackToDefaultListing: false,
+    });
     const names = listing
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => line.split(/\s+/).at(-1) ?? "")
       .filter((name) => name && name !== "." && name !== "..");
-    for (const name of new Set(names)) {
-      const child = pathJoin(directory, name);
-      try {
-        await listRemoteDirectory(child, config);
-        entries.push({ path: child, kind: "directory", sizeBytes: 0 });
-        await visit(child);
-      } catch {
-        const sizeBytes = (await remoteFileSize(child, config)) ?? 0;
-        entries.push({ path: child, kind: "file", sizeBytes });
-      }
-    }
+    await runWithConcurrency(
+      Array.from(new Set(names)),
+      config.concurrency,
+      async (name) => {
+        const child = pathJoin(directory, name);
+        try {
+          await listRemoteDirectory(child, config, {
+            fallbackToDefaultListing: false,
+          });
+          entries.push({ path: child, kind: "directory", sizeBytes: 0 });
+          await visit(child);
+        } catch {
+          const sizeBytes = (await remoteFileSize(child, config)) ?? 0;
+          entries.push({ path: child, kind: "file", sizeBytes });
+        }
+      },
+    );
   }
 }
 
@@ -115,6 +145,18 @@ async function remoteFileSize(remotePath: string, config: FtpConnectionConfig) {
   } catch {
     return undefined;
   }
+}
+
+function maintenanceInteger(
+  value: string | undefined,
+  fallback: number,
+  label: string,
+) {
+  if (value === undefined) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < 1) {
+    throw new Error(`${label} must be a positive integer: ${value}`);
+  }
+  return Number(value);
 }
 
 async function remoteFreeBytes(remoteDir: string, config: FtpConnectionConfig) {
