@@ -301,14 +301,22 @@ async function deleteRemote(
   kind: FtpInventoryEntry["kind"],
   config: FtpConnectionConfig,
 ) {
+  const command = ftpDeleteCommand(remotePath, kind);
+  try {
+    await runCurl(ftpArgs(config, ["--quote", command, "--list-only"], ""));
+  } catch (error) {
+    throw new Error(
+      `Failed to delete FTP ${kind} ${remotePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export function ftpDeleteCommand(
+  remotePath: string,
+  kind: FtpInventoryEntry["kind"],
+) {
   const command = kind === "directory" ? "RMD" : "DELE";
-  await runCurl(
-    ftpArgs(
-      config,
-      ["--quote", `${command} ${remotePath}`, "--list-only"],
-      config.remoteDir,
-    ),
-  );
+  return `${command} /${pathJoin(remotePath)}`;
 }
 
 function formatSummary(input: {

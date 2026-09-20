@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
+  ftpDeleteCommand,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
@@ -25,6 +26,17 @@ describe("FTP maintenance helpers", () => {
       ["build", "pr"],
     );
     assert.deepEqual(maintenanceInventoryRoots("cleanup", []), ["build"]);
+  });
+
+  it("deletes normalized absolute paths from the FTP login root", () => {
+    assert.equal(
+      ftpDeleteCommand("/booking.specs.title.dk/build/532/index.html", "file"),
+      "DELE /booking.specs.title.dk/build/532/index.html",
+    );
+    assert.equal(
+      ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
+      "RMD /booking.specs.title.dk/build/532",
+    );
   });
 
   it("defines the bounded smoke-test workflow mode", async () => {
