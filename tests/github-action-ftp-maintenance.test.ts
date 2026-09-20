@@ -51,6 +51,16 @@ describe("FTP maintenance helpers", () => {
       ),
       ["534", "533", "532"],
     );
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["533", "534"],
+        "booking.specs.title.dk/build",
+        "booking.specs.title.dk",
+        2,
+        ["build/532"],
+      ),
+      ["534", "533"],
+    );
   });
 
   it("defines the bounded smoke-test workflow mode", async () => {

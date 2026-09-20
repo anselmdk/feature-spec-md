@@ -209,9 +209,11 @@ async function inventoryRemoteDirectory(
           await visit(child);
         } catch {
           const sizeBytes = await remoteFileSize(child, config);
-          if (sizeBytes !== undefined) {
-            entries.push({ path: child, kind: "file", sizeBytes });
-          }
+          entries.push({
+            path: child,
+            kind: "file",
+            sizeBytes: sizeBytes ?? 0,
+          });
         }
       },
     );
@@ -246,7 +248,12 @@ export function selectMaintenanceNames(
     const child = remainder.split("/")[0];
     return child ? [child] : [];
   });
-  return Array.from(new Set([...boundedNames, ...requestedNames]));
+  return Array.from(
+    new Set([
+      ...boundedNames,
+      ...requestedNames.filter((name) => availableNames.includes(name)),
+    ]),
+  );
 }
 
 async function remoteFileSize(remotePath: string, config: FtpConnectionConfig) {
@@ -326,9 +333,6 @@ async function deletePaths(
     for (const entry of descendants) {
       await deleteRemote(entry.path, entry.kind, config);
     }
-    if (!descendants.length) {
-      await deleteRemote(target, "file", config);
-    }
   }
 }
 
@@ -387,7 +391,7 @@ function formatSummary(input: {
     "### Cleanup",
     "",
     input.cleanupPaths.length
-      ? `The following paths ${input.mode === "cleanup" ? "were deleted" : "would be deleted"}:`
+      ? `The following paths ${input.mode === "cleanup" ? "were deleted or were already absent" : "would be deleted"}:`
       : "No cleanup paths selected.",
     ...input.cleanupPaths.map((path) => `- \`${path}\``),
   ];
