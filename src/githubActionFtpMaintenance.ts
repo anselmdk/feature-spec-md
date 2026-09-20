@@ -82,9 +82,13 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     options.paths ?? process.env.FEATURE_SPEC_FTP_PATHS,
   );
   const inventoryRoots = maintenanceInventoryRoots(mode, requestedPaths);
-  if (mode === "cleanup" && maxBuildsToScan !== undefined) {
+  if (
+    mode === "cleanup" &&
+    maxBuildsToScan !== undefined &&
+    (!requestedPaths.length || keepBuilds < maxBuildsToScan)
+  ) {
     throw new Error(
-      "--max-builds-to-scan is only supported for report and dry-run modes.",
+      "Bounded cleanup requires --paths and --keep-builds greater than or equal to --max-builds-to-scan.",
     );
   }
   const inventory = await inventoryRemoteDirectory(
@@ -116,7 +120,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       ? await inventoryRemoteDirectory(
           config.remoteDir,
           config,
-          undefined,
+          maxBuildsToScan,
           inventoryRoots,
         )
       : inventory;

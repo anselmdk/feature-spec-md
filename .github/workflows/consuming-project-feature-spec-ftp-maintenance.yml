@@ -22,7 +22,7 @@ on:
         type: string
         default: "30"
       max-builds-to-scan:
-        description: Optional limit on newest numbered build directories to scan; report and dry-run only.
+        description: Optional limit on newest numbered builds; cleanup additionally requires explicit paths and keep-builds at least this value.
         required: false
         type: string
         default: ""
