@@ -35,6 +35,15 @@ describe("FTP maintenance helpers", () => {
     assert.match(workflow, /deleted by cleanup job/);
   });
 
+  it("uses the consuming project's supported Node.js version", async () => {
+    const workflow = await readFile(
+      ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",
+      "utf8",
+    );
+    assert.match(workflow, /node-version:[\s\S]*?default: "24"/);
+    assert.match(workflow, /node-version: \$\{\{ inputs\.node-version \}\}/);
+  });
+
   it("makes PR comment history retention configurable", async () => {
     const workflow = await readFile(
       ".github/workflows/consuming-project-feature-spec-pr-diff-report.yml",
