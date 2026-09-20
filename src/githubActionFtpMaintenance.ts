@@ -65,13 +65,13 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       `- Root listing: **reachable** (${entries.length} entries returned)`,
       "- Result: **credentials, transport, and root listing work**",
     ].join("\n");
-    await writeSummary(summary, options);
+    await writeSummary(summary, options, []);
     console.log(summary);
     return { summary, inventory: [], cleanupPaths: [], freeBytes: undefined };
   }
   const keepBuilds = positiveInteger(
     options["keep-builds"] ?? process.env.FEATURE_SPEC_FTP_KEEP_BUILDS,
-    10,
+    30,
   );
   const maxBuildsToScan = optionalPositiveInteger(
     options["max-builds-to-scan"] ??
@@ -124,7 +124,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     freeBytes,
     afterInventory,
   });
-  await writeSummary(summary, options);
+  await writeSummary(summary, options, cleanupPaths);
   console.log(summary);
   return { summary, inventory, cleanupPaths, freeBytes };
 }
@@ -433,13 +433,18 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
 }
 
-async function writeSummary(summary: string, options: GithubActionOptions) {
+async function writeSummary(
+  summary: string,
+  options: GithubActionOptions,
+  cleanupPaths: string[],
+) {
   const file = options["summary-file"] ?? process.env.GITHUB_STEP_SUMMARY;
   if (file) await appendFile(file, `${summary}\n`);
   const output = options["output-file"] ?? process.env.GITHUB_OUTPUT;
   if (output)
     await appendFile(
       output,
-      `ftp-summary<<FEATURE_SPEC_FTP_SUMMARY\n${summary}\nFEATURE_SPEC_FTP_SUMMARY\n`,
+      `ftp-summary<<FEATURE_SPEC_FTP_SUMMARY\n${summary}\nFEATURE_SPEC_FTP_SUMMARY\n` +
+        `ftp-cleanup-paths<<FEATURE_SPEC_FTP_CLEANUP_PATHS\n${JSON.stringify(cleanupPaths)}\nFEATURE_SPEC_FTP_CLEANUP_PATHS\n`,
     );
 }

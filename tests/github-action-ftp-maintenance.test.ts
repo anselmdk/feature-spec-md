@@ -24,4 +24,23 @@ describe("FTP maintenance helpers", () => {
     assert.match(workflow, /max-builds-to-scan:/);
     assert.match(workflow, /timeout-minutes: 15/);
   });
+
+  it("exposes configurable report retention and cleanup comment reconciliation", async () => {
+    const workflow = await readFile(
+      ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",
+      "utf8",
+    );
+    assert.match(workflow, /default: "30"/);
+    assert.match(workflow, /ftp-cleanup-paths/);
+    assert.match(workflow, /deleted by cleanup job/);
+  });
+
+  it("makes PR comment history retention configurable", async () => {
+    const workflow = await readFile(
+      ".github/workflows/consuming-project-feature-spec-pr-diff-report.yml",
+      "utf8",
+    );
+    assert.match(workflow, /report-history-limit:/);
+    assert.match(workflow, /slice\(0, historyLimit\)/);
+  });
 });

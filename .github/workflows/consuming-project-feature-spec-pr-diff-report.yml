@@ -50,6 +50,11 @@ on:
         required: false
         type: string
         default: Europe/Copenhagen
+      report-history-limit:
+        description: Number of prior report entries to retain in the pull-request comment.
+        required: false
+        type: string
+        default: "30"
 
 permissions:
   actions: read
@@ -194,6 +199,7 @@ jobs:
           CURRENT_RUN_URL: ${{ steps.current_build.outputs.run-url || github.event.workflow_run.html_url }}
           REPORT_STARTED_AT: ${{ steps.changes.outputs.started-at }}
           REPORT_TIME_ZONE: ${{ inputs.report-time-zone }}
+          REPORT_HISTORY_LIMIT: ${{ inputs.report-history-limit }}
           WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion || 'success' }}
           REPORT_OUTCOME: ${{ steps.diff_report.outcome }}
           RELEVANT_CHANGES: ${{ steps.changes.outputs.changed }}
@@ -263,9 +269,14 @@ jobs:
               durationMinutes,
               status: failed ? 'failure' : relevant ? 'success' : 'skipped',
             };
+            const historyLimit = Number(process.env.REPORT_HISTORY_LIMIT || '30');
+            if (!Number.isInteger(historyLimit) || historyLimit < 1) {
+              core.setFailed('report-history-limit must be a positive integer.');
+              return;
+            }
             const history = priorEntries
               .filter((entry) => entry.buildNumber !== buildNumber)
-              .slice(0, 30);
+              .slice(0, historyLimit);
             const state = Buffer.from(
               JSON.stringify({ current, history }),
               'utf8',
@@ -289,11 +300,14 @@ jobs:
               entry.baseBuildNumber
                 ? ' compared with main build ' + entry.baseBuildNumber
                 : '';
+            const reportLink = (label, url, deleted) =>
+              deleted ? '~~[' + label + '](' + url + ')~~' : '[' + label + '](' + url + ')';
             const historyLines = history.map((entry) =>
-              '- ' + (entry.status === 'failure' ? '<span style="color: #cf222e">❌ Failed</span>' : entry.status === 'skipped' ? '⏭️ Skipped' : '✅') + ' Build [' + entry.buildNumber + '](' + (entry.runUrl || entry.specUrl) + ')' +
+              '- ' + (entry.status === 'failure' ? '<span style="color: #cf222e">❌ Failed</span>' : entry.status === 'skipped' ? '⏭️ Skipped' : '✅') + ' Build ' + reportLink(entry.buildNumber, entry.runUrl || entry.specUrl, entry.deleted) +
               comparison(entry) + ' · ' + localizedDate(entry.timestamp) +
               ' · report job ' + (entry.durationMinutes ?? 'n/a') + ' minutes' +
-              ' · [spec](' + entry.specUrl + ') · [diff](' + entry.diffUrl + ')'
+              ' · ' + reportLink('spec', entry.specUrl, entry.deleted) + ' · ' + reportLink('diff', entry.diffUrl, entry.deleted) +
+              (entry.deleted ? ' *(deleted by cleanup job)*' : '')
             );
             const lines = [
               marker,
