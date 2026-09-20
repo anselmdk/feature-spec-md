@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: "10"
+      max-builds-to-scan:
+        description: Optional limit on newest numbered build directories to scan; report and dry-run only.
+        required: false
+        type: string
+        default: ""
       paths:
         description: Comma-separated paths relative to the configured FTP root.
         required: false
@@ -55,7 +60,7 @@ jobs:
   maintain:
     if: inputs.mode != 'cleanup' || inputs.confirm
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     env:
       FEATURE_SPEC_FTP_HOST: ${{ inputs.ftp-host }}
       FEATURE_SPEC_FTP_USER: ${{ inputs.ftp-user }}
@@ -77,6 +82,7 @@ jobs:
           npx --no-install feature-spec-md github-ftp-maintenance
           --mode "${{ inputs.mode }}"
           --keep-builds "${{ inputs.keep-builds }}"
+          --max-builds-to-scan "${{ inputs.max-builds-to-scan }}"
           --paths "${{ inputs.paths }}"
           --ftp-maintenance-concurrency "16"
           --ftp-maintenance-connect-timeout "10"

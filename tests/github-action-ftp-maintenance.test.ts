@@ -21,5 +21,7 @@ describe("FTP maintenance helpers", () => {
     );
     assert.match(workflow, /smoke-test, report, dry-run, or cleanup/);
     assert.match(workflow, /--ftp-maintenance-max-time "10"/);
+    assert.match(workflow, /max-builds-to-scan:/);
+    assert.match(workflow, /timeout-minutes: 15/);
   });
 });
