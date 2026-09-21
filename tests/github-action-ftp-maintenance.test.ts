@@ -94,6 +94,31 @@ describe("FTP maintenance helpers", () => {
     );
   });
 
+  it("limits bounded explicit cleanup to the requested pull-request tree", () => {
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["144", "145", "146"],
+        "booking.specs.title.dk/pr",
+        "booking.specs.title.dk",
+        undefined,
+        ["build/532", "pr/145"],
+        true,
+      ),
+      ["145"],
+    );
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["531", "532", "533"],
+        "booking.specs.title.dk/pr/145",
+        "booking.specs.title.dk",
+        undefined,
+        ["build/532", "pr/145"],
+        true,
+      ),
+      ["531", "532", "533"],
+    );
+  });
+
   it("defines the bounded smoke-test workflow mode", async () => {
     const workflow = await readFile(
       ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",

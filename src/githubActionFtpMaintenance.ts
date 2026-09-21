@@ -206,6 +206,7 @@ async function inventoryRemoteDirectory(
       remoteDir,
       directory === buildRoot ? maxBuildsToScan : undefined,
       requestedPaths,
+      maxBuildsToScan !== undefined && requestedPaths.length > 0,
     );
     await runWithConcurrency(
       selectedNames,
@@ -247,6 +248,7 @@ export function selectMaintenanceNames(
   remoteDir: string,
   maximumNumberedEntries: number | undefined,
   requestedPaths: string[],
+  restrictToRequestedPaths = false,
 ) {
   const availableNames = Array.from(new Set(names));
   const boundedNames =
@@ -269,6 +271,20 @@ export function selectMaintenanceNames(
     const child = remainder.split("/")[0];
     return child ? [child] : [];
   });
+  const withinRequestedPath = requestedPaths.some(
+    (requestedPath) =>
+      relativeDirectory === requestedPath ||
+      relativeDirectory.startsWith(`${requestedPath}/`),
+  );
+  if (
+    restrictToRequestedPaths &&
+    maximumNumberedEntries === undefined &&
+    !withinRequestedPath
+  ) {
+    return Array.from(
+      new Set(requestedNames.filter((name) => availableNames.includes(name))),
+    );
+  }
   return Array.from(
     new Set([
       ...boundedNames,
