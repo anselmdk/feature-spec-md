@@ -169,13 +169,17 @@ jobs:
             const marker = '<!-- feature-spec-md-pr-diff -->';
             const statePattern = /<!-- feature-spec-md-report-state:([A-Za-z0-9+/=]+) -->/;
             const updateBody = (body) => {
-              let next = body.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) => {
+              let next = body.replace(/~~~~(\[[^\]]+\]\([^)]+\))~~~~/g, '~~$1~~');
+              next = next.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url, offset, source) => {
                 const build = url.match(/\/build\/(\d+)(?:\/|$)/)?.[1];
                 const prReport = url.match(/\/pr\/(\d+)\/(\d+)(?:\/|$)/);
                 const deleted =
                   (build && deletedBuilds.has(build)) ||
                   (prReport && (deletedPullRequests.has(prReport[1]) || deletedBuilds.has(prReport[2])));
-                return deleted ? `~~[${label}](${url})~~` : match;
+                const alreadyStruck =
+                  source.slice(Math.max(0, offset - 2), offset) === '~~' &&
+                  source.slice(offset + match.length, offset + match.length + 2) === '~~';
+                return deleted && !alreadyStruck ? `~~[${label}](${url})~~` : match;
               });
               next = next.split('\n').map((line) => {
                 const hasDeletedLink = line.includes('~~[') && /\/(?:build\/\d+|pr\/\d+\/\d+)(?:\/|\))/.test(line);
@@ -197,12 +201,14 @@ jobs:
               }
             };
 
-            const pulls = await github.paginate(github.rest.pulls.list, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'all',
-              per_page: 100,
-            });
+            const pulls = deletedPullRequests.size
+              ? [...deletedPullRequests].map((number) => ({ number: Number(number) }))
+              : await github.paginate(github.rest.pulls.list, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'all',
+                  per_page: 100,
+                });
             for (const pull of pulls) {
               const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,

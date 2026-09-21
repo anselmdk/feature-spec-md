@@ -142,6 +142,9 @@ describe("FTP maintenance helpers", () => {
     assert.match(workflow, /pr-number:/);
     assert.match(workflow, /paths\.add\(`pr\/\$\{prNumber\}`\)/);
     assert.match(workflow, /const prReport = url\.match/);
+    assert.match(workflow, /const alreadyStruck =/);
+    assert.match(workflow, /~~~~/);
+    assert.match(workflow, /deletedPullRequests\.size/);
   });
 
   it("uses the consuming project's supported Node.js version", async () => {
