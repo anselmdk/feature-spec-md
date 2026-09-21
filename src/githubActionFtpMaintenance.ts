@@ -515,8 +515,10 @@ async function deletePaths(
     const entries = Array.from(selected.values()).filter(
       (entry) => entry.path.split("/").length === depth,
     );
+    const files = entries.filter((entry) => entry.kind === "file");
+    const directories = entries.filter((entry) => entry.kind === "directory");
     await runWithConcurrency(
-      batches(entries, 100),
+      [...batches(files, 100), ...directories.map((entry) => [entry])],
       config.concurrency,
       async (batch) => {
         await deleteRemoteBatch(batch, config);
