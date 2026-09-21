@@ -486,25 +486,42 @@ async function deletePaths(
     const entries = Array.from(selected.values()).filter(
       (entry) => entry.path.split("/").length === depth,
     );
-    await runWithConcurrency(entries, config.concurrency, async (entry) => {
-      await deleteRemote(entry.path, entry.kind, config);
-    });
+    await runWithConcurrency(
+      batches(entries, 100),
+      config.concurrency,
+      async (batch) => {
+        await deleteRemoteBatch(batch, config);
+      },
+    );
   }
 }
 
-async function deleteRemote(
-  remotePath: string,
-  kind: FtpInventoryEntry["kind"],
+async function deleteRemoteBatch(
+  entries: FtpInventoryEntry[],
   config: FtpConnectionConfig,
 ) {
-  const command = ftpDeleteCommand(remotePath, kind);
+  const args = entries.flatMap((entry) => [
+    "--quote",
+    ftpDeleteCommand(entry.path, entry.kind),
+  ]);
   try {
-    await runCurl(ftpArgs(config, ["--quote", command, "--list-only"], ""));
+    await runCurl(ftpArgs(config, [...args, "--list-only"], ""));
   } catch (error) {
     throw new Error(
-      `Failed to delete FTP ${kind} ${remotePath}: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to delete FTP batch (${entries.map((entry) => entry.path).join(", ")}): ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+export function batches<T>(items: T[], size: number) {
+  if (!Number.isInteger(size) || size < 1) {
+    throw new Error(`Batch size must be a positive integer: ${size}`);
+  }
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
 }
 
 export function ftpDeleteCommand(

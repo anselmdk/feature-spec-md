@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
+  batches,
   cleanupCandidates,
   ftpDeleteCommand,
   maintenanceInventoryRoots,
@@ -81,6 +82,10 @@ describe("FTP maintenance helpers", () => {
       ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
       "RMD /booking.specs.title.dk/build/532",
     );
+  });
+
+  it("groups FTP deletion commands into bounded sessions", () => {
+    assert.deepEqual(batches([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   });
 
   it("includes explicitly requested builds outside a bounded newest-build scan", () => {
