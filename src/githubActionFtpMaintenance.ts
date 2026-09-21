@@ -306,14 +306,10 @@ async function listMaintenanceNames(
   directory: string,
   config: FtpConnectionConfig,
 ) {
-  try {
-    const listing = await listRemoteDirectory(directory, config, {
-      fallbackToDefaultListing: false,
-    });
-    return parseMaintenanceListingNames(listing);
-  } catch {
-    return [];
-  }
+  const listing = await listRemoteDirectory(directory, config, {
+    fallbackToDefaultListing: false,
+  });
+  return parseMaintenanceListingNames(listing);
 }
 
 export function selectExpiredBuildBatch(
@@ -620,6 +616,15 @@ function ftpArgs(
     "--silent",
     "--show-error",
     "--fail",
+    "--connect-timeout",
+    String(config.connectTimeoutSeconds),
+    "--max-time",
+    String(config.maxTimeSeconds),
+    "--retry",
+    "1",
+    "--retry-all-errors",
+    "--retry-delay",
+    "1",
     "-u",
     `${config.user}:${config.password}`,
     ...args,
