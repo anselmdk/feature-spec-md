@@ -126,6 +126,18 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
           requestedPaths,
         )
       : inventory;
+  if (mode === "cleanup") {
+    const remainingPaths = cleanupPaths.filter((target) =>
+      afterInventory.some(
+        (entry) => entry.path === target || entry.path.startsWith(`${target}/`),
+      ),
+    );
+    if (remainingPaths.length) {
+      throw new Error(
+        `FTP cleanup did not remove: ${remainingPaths.join(", ")}`,
+      );
+    }
+  }
   const summary = formatSummary({
     config,
     mode,
@@ -159,7 +171,11 @@ export function maintenanceInventoryRoots(
 ) {
   if (mode === "report" || mode === "smoke-test") return undefined;
   return Array.from(
-    new Set(["build", ...requestedPaths.map((item) => item.split("/")[0])]),
+    new Set([
+      "build",
+      "pr",
+      ...requestedPaths.map((item) => item.split("/")[0]),
+    ]),
   );
 }
 
@@ -302,7 +318,7 @@ async function remoteFreeBytes(remoteDir: string, config: FtpConnectionConfig) {
   return undefined;
 }
 
-function cleanupCandidates(
+export function cleanupCandidates(
   inventory: FtpInventoryEntry[],
   root: string,
   keepBuilds: number,
@@ -319,9 +335,23 @@ function cleanupCandidates(
     .filter((name) => /^\d+$/.test(name));
   const oldBuilds = Array.from(new Set(builds))
     .sort((a, b) => Number(b) - Number(a))
-    .slice(keepBuilds)
-    .map((name) => pathJoin(buildRoot, name));
-  return Array.from(new Set([...oldBuilds, ...exact]));
+    .slice(keepBuilds);
+  const oldBuildSet = new Set(oldBuilds);
+  const oldBuildPaths = oldBuilds.map((name) => pathJoin(buildRoot, name));
+  const normalizedRoot = pathJoin(root);
+  const oldPullRequestReportPaths = inventory
+    .filter((entry) => entry.kind === "directory")
+    .map((entry) => {
+      const relative = entry.path.startsWith(`${normalizedRoot}/`)
+        ? entry.path.slice(normalizedRoot.length + 1)
+        : entry.path;
+      const match = relative.match(/^pr\/\d+\/(\d+)$/);
+      return match && oldBuildSet.has(match[1]) ? entry.path : undefined;
+    })
+    .filter((path): path is string => path !== undefined);
+  return Array.from(
+    new Set([...oldBuildPaths, ...oldPullRequestReportPaths, ...exact]),
+  );
 }
 
 async function deletePaths(

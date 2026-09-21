@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
+  cleanupCandidates,
   ftpDeleteCommand,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
@@ -37,7 +38,26 @@ describe("FTP maintenance helpers", () => {
       maintenanceInventoryRoots("dry-run", ["pr/145", "build/532"]),
       ["build", "pr"],
     );
-    assert.deepEqual(maintenanceInventoryRoots("cleanup", []), ["build"]);
+    assert.deepEqual(maintenanceInventoryRoots("cleanup", []), ["build", "pr"]);
+  });
+
+  it("removes full and pull-request report directories for expired builds", () => {
+    assert.deepEqual(
+      cleanupCandidates(
+        [
+          { path: "reports/build/101", kind: "directory", sizeBytes: 0 },
+          { path: "reports/build/100", kind: "directory", sizeBytes: 0 },
+          { path: "reports/build/99", kind: "directory", sizeBytes: 0 },
+          { path: "reports/pr/7/101", kind: "directory", sizeBytes: 0 },
+          { path: "reports/pr/7/99", kind: "directory", sizeBytes: 0 },
+          { path: "reports/pr/8/99", kind: "directory", sizeBytes: 0 },
+        ],
+        "/reports",
+        2,
+        [],
+      ),
+      ["reports/build/99", "reports/pr/7/99", "reports/pr/8/99"],
+    );
   });
 
   it("deletes normalized absolute paths from the FTP login root", () => {
@@ -91,9 +111,12 @@ describe("FTP maintenance helpers", () => {
       ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",
       "utf8",
     );
-    assert.match(workflow, /default: "30"/);
+    assert.match(workflow, /default: "100"/);
     assert.match(workflow, /ftp-cleanup-paths/);
     assert.match(workflow, /deleted by cleanup job/);
+    assert.match(workflow, /pr-number:/);
+    assert.match(workflow, /paths\.add\(`pr\/\$\{prNumber\}`\)/);
+    assert.match(workflow, /const prReport = url\.match/);
   });
 
   it("uses the consuming project's supported Node.js version", async () => {

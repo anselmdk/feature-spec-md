@@ -20,7 +20,7 @@ on:
         description: Number of newest numbered build directories to retain.
         required: false
         type: string
-        default: "30"
+        default: "100"
       max-builds-to-scan:
         description: Optional limit on newest numbered builds; cleanup additionally requires explicit paths and keep-builds at least this value.
         required: false
@@ -28,6 +28,11 @@ on:
         default: ""
       paths:
         description: Comma-separated paths relative to the configured FTP root.
+        required: false
+        type: string
+        default: ""
+      pr-number:
+        description: Closed pull request whose full and diff report directories should be removed.
         required: false
         type: string
         default: ""
@@ -83,6 +88,49 @@ jobs:
           cache: npm
       - name: Install consuming project dependencies
         run: npm ci
+      - name: Resolve cleanup paths
+        if: inputs.mode == 'cleanup'
+        id: cleanup_paths
+        uses: actions/github-script@v8
+        env:
+          INPUT_PATHS: ${{ inputs.paths }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        with:
+          script: |
+            const paths = new Set(
+              (process.env.INPUT_PATHS || '').split(',').map((path) => path.trim()).filter(Boolean),
+            );
+            const prNumber = process.env.PR_NUMBER;
+            if (prNumber) {
+              if (!/^\d+$/.test(prNumber)) {
+                core.setFailed('pr-number must be a positive integer.');
+                return;
+              }
+              paths.add(`pr/${prNumber}`);
+              const marker = '<!-- feature-spec-md-pr-diff -->';
+              const statePattern = /<!-- feature-spec-md-report-state:([A-Za-z0-9+/=]+) -->/;
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(prNumber),
+              });
+              const comment = comments.find((item) =>
+                item.user?.type === 'Bot' && item.body?.includes(marker),
+              );
+              const stateMatch = comment?.body?.match(statePattern);
+              if (stateMatch) {
+                try {
+                  const state = JSON.parse(Buffer.from(stateMatch[1], 'base64').toString('utf8'));
+                  for (const entry of [state.current, ...(state.history ?? [])]) {
+                    const buildNumber = String(entry?.buildNumber ?? '');
+                    if (/^\d+$/.test(buildNumber)) paths.add(`build/${buildNumber}`);
+                  }
+                } catch (error) {
+                  core.warning(`Could not decode feature-spec report state for PR #${prNumber}: ${error}`);
+                }
+              }
+            }
+            core.setOutput('paths', [...paths].join(','));
       - name: Inspect or clean FTP storage
         if: inputs.mode != 'smoke-test'
         id: maintain
@@ -91,7 +139,7 @@ jobs:
           --mode "${{ inputs.mode }}"
           --keep-builds "${{ inputs.keep-builds }}"
           --max-builds-to-scan "${{ inputs.max-builds-to-scan }}"
-          --paths "${{ inputs.paths }}"
+          --paths "${{ steps.cleanup_paths.outputs.paths || inputs.paths }}"
           --ftp-maintenance-concurrency "16"
           --ftp-maintenance-connect-timeout "10"
           --ftp-maintenance-max-time "20"
@@ -103,22 +151,34 @@ jobs:
           CLEANUP_PATHS: ${{ steps.maintain.outputs.ftp-cleanup-paths }}
         with:
           script: |
+            const cleanupPaths = JSON.parse(process.env.CLEANUP_PATHS);
             const deletedBuilds = new Set(
-              JSON.parse(process.env.CLEANUP_PATHS)
-                .map((path) => path.match(/(?:^|\/)build\/(\d+)(?:\/|$)/)?.[1])
+              cleanupPaths.flatMap((path) => {
+                const build = path.match(/(?:^|\/)build\/(\d+)(?:\/|$)/)?.[1];
+                const prBuild = path.match(/(?:^|\/)pr\/\d+\/(\d+)(?:\/|$)/)?.[1];
+                return build || prBuild ? [build || prBuild] : [];
+              }),
+            );
+            const deletedPullRequests = new Set(
+              cleanupPaths
+                .map((path) => path.match(/(?:^|\/)pr\/(\d+)(?:\/)?$/)?.[1])
                 .filter(Boolean),
             );
-            if (!deletedBuilds.size) return;
+            if (!deletedBuilds.size && !deletedPullRequests.size) return;
 
             const marker = '<!-- feature-spec-md-pr-diff -->';
             const statePattern = /<!-- feature-spec-md-report-state:([A-Za-z0-9+/=]+) -->/;
             const updateBody = (body) => {
               let next = body.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) => {
                 const build = url.match(/\/build\/(\d+)(?:\/|$)/)?.[1];
-                return build && deletedBuilds.has(build) ? `~~[${label}](${url})~~` : match;
+                const prReport = url.match(/\/pr\/(\d+)\/(\d+)(?:\/|$)/);
+                const deleted =
+                  (build && deletedBuilds.has(build)) ||
+                  (prReport && (deletedPullRequests.has(prReport[1]) || deletedBuilds.has(prReport[2])));
+                return deleted ? `~~[${label}](${url})~~` : match;
               });
               next = next.split('\n').map((line) => {
-                const hasDeletedLink = line.includes('~~[') && /\/build\/\d+\//.test(line);
+                const hasDeletedLink = line.includes('~~[') && /\/(?:build\/\d+|pr\/\d+\/\d+)(?:\/|\))/.test(line);
                 return hasDeletedLink && !line.includes('deleted by cleanup job')
                   ? `${line} *(deleted by cleanup job)*`
                   : line;
