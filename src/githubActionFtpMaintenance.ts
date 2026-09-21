@@ -131,32 +131,9 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     await deletePaths(cleanupPaths, inventory, config);
   }
 
-  const afterInventory =
-    mode === "cleanup"
-      ? cleanupPaths.length
-        ? await inventoryRemoteDirectory(
-            config.remoteDir,
-            config,
-            undefined,
-            maintenanceInventoryRoots(
-              mode,
-              cleanupPaths.map((path) =>
-                relativeChildPath(config.remoteDir, path),
-              ),
-            ),
-            cleanupPaths.map((path) =>
-              relativeChildPath(config.remoteDir, path),
-            ),
-            true,
-          )
-        : []
-      : inventory;
+  const afterInventory = mode === "cleanup" ? [] : inventory;
   if (mode === "cleanup") {
-    const remainingPaths = cleanupPaths.filter((target) =>
-      afterInventory.some(
-        (entry) => entry.path === target || entry.path.startsWith(`${target}/`),
-      ),
-    );
+    const remainingPaths = await existingRemotePaths(cleanupPaths, config);
     if (remainingPaths.length) {
       throw new Error(
         `FTP cleanup did not remove: ${remainingPaths.join(", ")}`,
@@ -523,18 +500,48 @@ async function deletePaths(
       filesByParent.set(parent, [...(filesByParent.get(parent) ?? []), entry]);
     }
     await runWithConcurrency(
-      [
-        ...Array.from(filesByParent.values()).flatMap((siblings) =>
-          batches(siblings, 100),
-        ),
-        ...directories.map((entry) => [entry]),
-      ],
+      Array.from(filesByParent.values()).flatMap((siblings) =>
+        batches(siblings, 100),
+      ),
       config.concurrency,
       async (batch) => {
         await deleteRemoteBatch(batch, config);
       },
     );
+    // Some FTP servers serialize directory mutations per account while still
+    // accepting concurrent commands. Remove directories one at a time so a
+    // successful response reliably corresponds to a durable removal.
+    for (const directory of directories) {
+      await deleteRemoteBatch([directory], config);
+    }
   }
+}
+
+async function existingRemotePaths(
+  paths: string[],
+  config: FtpConnectionConfig,
+) {
+  const groups = groupFtpPathsByParent(paths);
+  const existing: string[] = [];
+  await runWithConcurrency(groups, config.concurrency, async (group) => {
+    const available = new Set(await listMaintenanceNames(group.parent, config));
+    for (const item of group.items) {
+      if (available.has(item.name)) existing.push(item.path);
+    }
+  });
+  return existing.sort();
+}
+
+export function groupFtpPathsByParent(paths: string[]) {
+  const groups = new Map<string, Array<{ name: string; path: string }>>();
+  for (const path of paths) {
+    const normalized = pathJoin(path);
+    const name = normalized.split("/").at(-1);
+    if (!name) throw new Error(`Cannot inspect an empty FTP path: ${path}`);
+    const parent = ftpParentPath(normalized);
+    groups.set(parent, [...(groups.get(parent) ?? []), { name, path }]);
+  }
+  return Array.from(groups, ([parent, items]) => ({ parent, items }));
 }
 
 async function deleteRemoteBatch(

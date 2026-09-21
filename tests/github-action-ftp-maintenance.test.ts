@@ -6,6 +6,7 @@ import {
   cleanupCandidates,
   concurrencyLimiter,
   ftpDeleteCommand,
+  groupFtpPathsByParent,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
@@ -87,6 +88,29 @@ describe("FTP maintenance helpers", () => {
 
   it("groups FTP deletion commands into bounded sessions", () => {
     assert.deepEqual(batches([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  });
+
+  it("groups exact cleanup verification by shallow parent listing", () => {
+    assert.deepEqual(
+      groupFtpPathsByParent([
+        "reports/build/101",
+        "reports/build/100",
+        "reports/pr/7/101",
+      ]),
+      [
+        {
+          parent: "reports/build",
+          items: [
+            { name: "101", path: "reports/build/101" },
+            { name: "100", path: "reports/build/100" },
+          ],
+        },
+        {
+          parent: "reports/pr/7",
+          items: [{ name: "101", path: "reports/pr/7/101" }],
+        },
+      ],
+    );
   });
 
   it("shares one concurrency limit across recursive FTP work", async () => {
