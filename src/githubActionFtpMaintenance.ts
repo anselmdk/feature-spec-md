@@ -517,8 +517,18 @@ async function deletePaths(
     );
     const files = entries.filter((entry) => entry.kind === "file");
     const directories = entries.filter((entry) => entry.kind === "directory");
+    const filesByParent = new Map<string, FtpInventoryEntry[]>();
+    for (const entry of files) {
+      const parent = ftpParentPath(entry.path);
+      filesByParent.set(parent, [...(filesByParent.get(parent) ?? []), entry]);
+    }
     await runWithConcurrency(
-      [...batches(files, 100), ...directories.map((entry) => [entry])],
+      [
+        ...Array.from(filesByParent.values()).flatMap((siblings) =>
+          batches(siblings, 100),
+        ),
+        ...directories.map((entry) => [entry]),
+      ],
       config.concurrency,
       async (batch) => {
         await deleteRemoteBatch(batch, config);
@@ -531,12 +541,16 @@ async function deleteRemoteBatch(
   entries: FtpInventoryEntry[],
   config: FtpConnectionConfig,
 ) {
+  const parent = ftpParentPath(entries[0]?.path ?? "");
+  if (entries.some((entry) => ftpParentPath(entry.path) !== parent)) {
+    throw new Error("FTP deletion batches must contain sibling paths.");
+  }
   const args = entries.flatMap((entry) => [
     "--quote",
     ftpDeleteCommand(entry.path, entry.kind),
   ]);
   try {
-    await runCurl(ftpArgs(config, [...args, "--list-only"], ""));
+    await runCurl(ftpArgs(config, [...args, "--list-only"], `${parent}/`));
   } catch (error) {
     throw new Error(
       `Failed to delete FTP batch (${entries.map((entry) => entry.path).join(", ")}): ${error instanceof Error ? error.message : String(error)}`,
@@ -560,7 +574,17 @@ export function ftpDeleteCommand(
   kind: FtpInventoryEntry["kind"],
 ) {
   const command = kind === "directory" ? "RMD" : "DELE";
-  return `${command} /${pathJoin(remotePath)}`;
+  const name = pathJoin(remotePath).split("/").at(-1);
+  if (!name) throw new Error(`Cannot delete an empty FTP path: ${remotePath}`);
+  // Curl's + prefix sends the command after it has changed into the parent
+  // directory encoded by the transfer URL.
+  return `+${command} ${name}`;
+}
+
+function ftpParentPath(remotePath: string) {
+  const parts = pathJoin(remotePath).split("/");
+  parts.pop();
+  return parts.join("/");
 }
 
 function formatSummary(input: {
@@ -660,6 +684,7 @@ function ftpArgs(
     .filter(Boolean)
     .map(encodeURIComponent)
     .join("/");
+  const directorySlash = remotePath.endsWith("/") && encodedPath ? "/" : "";
   return [
     "--silent",
     "--show-error",
@@ -676,7 +701,7 @@ function ftpArgs(
     "-u",
     `${config.user}:${config.password}`,
     ...args,
-    `${protocol}://${config.host}${port}/${encodedPath}`,
+    `${protocol}://${config.host}${port}/${encodedPath}${directorySlash}`,
   ];
 }
 

@@ -74,14 +74,14 @@ describe("FTP maintenance helpers", () => {
     );
   });
 
-  it("deletes normalized absolute paths from the FTP login root", () => {
+  it("deletes basenames after curl changes into their parent directory", () => {
     assert.equal(
       ftpDeleteCommand("/booking.specs.title.dk/build/532/index.html", "file"),
-      "DELE /booking.specs.title.dk/build/532/index.html",
+      "+DELE index.html",
     );
     assert.equal(
       ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
-      "RMD /booking.specs.title.dk/build/532",
+      "+RMD 532",
     );
   });
 
