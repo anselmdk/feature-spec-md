@@ -65,13 +65,13 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       `- Root listing: **reachable** (${entries.length} entries returned)`,
       "- Result: **credentials, transport, and root listing work**",
     ].join("\n");
-    await writeSummary(summary, options);
+    await writeSummary(summary, options, []);
     console.log(summary);
     return { summary, inventory: [], cleanupPaths: [], freeBytes: undefined };
   }
   const keepBuilds = positiveInteger(
     options["keep-builds"] ?? process.env.FEATURE_SPEC_FTP_KEEP_BUILDS,
-    10,
+    30,
   );
   const maxBuildsToScan = optionalPositiveInteger(
     options["max-builds-to-scan"] ??
@@ -81,15 +81,22 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
   const requestedPaths = csv(
     options.paths ?? process.env.FEATURE_SPEC_FTP_PATHS,
   );
-  if (mode === "cleanup" && maxBuildsToScan !== undefined) {
+  const inventoryRoots = maintenanceInventoryRoots(mode, requestedPaths);
+  if (
+    mode === "cleanup" &&
+    maxBuildsToScan !== undefined &&
+    (!requestedPaths.length || keepBuilds < maxBuildsToScan)
+  ) {
     throw new Error(
-      "--max-builds-to-scan is only supported for report and dry-run modes.",
+      "Bounded cleanup requires --paths and --keep-builds greater than or equal to --max-builds-to-scan.",
     );
   }
   const inventory = await inventoryRemoteDirectory(
     config.remoteDir,
     config,
     maxBuildsToScan,
+    inventoryRoots,
+    requestedPaths,
   );
   const freeBytes = await remoteFreeBytes(config.remoteDir, config);
   const cleanupPaths =
@@ -111,7 +118,13 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
 
   const afterInventory =
     mode === "cleanup"
-      ? await inventoryRemoteDirectory(config.remoteDir, config)
+      ? await inventoryRemoteDirectory(
+          config.remoteDir,
+          config,
+          maxBuildsToScan,
+          inventoryRoots,
+          requestedPaths,
+        )
       : inventory;
   const summary = formatSummary({
     config,
@@ -119,12 +132,13 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     keepBuilds,
     maxBuildsToScan,
     requestedPaths,
+    inventoryRoots,
     inventory,
     cleanupPaths,
     freeBytes,
     afterInventory,
   });
-  await writeSummary(summary, options);
+  await writeSummary(summary, options, cleanupPaths);
   console.log(summary);
   return { summary, inventory, cleanupPaths, freeBytes };
 }
@@ -139,10 +153,22 @@ export function parseFtpHeadSize(response: string) {
   return match ? Number(match[1]) : parseFtpSizeResponse(response);
 }
 
+export function maintenanceInventoryRoots(
+  mode: FtpMaintenanceMode,
+  requestedPaths: string[],
+) {
+  if (mode === "report" || mode === "smoke-test") return undefined;
+  return Array.from(
+    new Set(["build", ...requestedPaths.map((item) => item.split("/")[0])]),
+  );
+}
+
 async function inventoryRemoteDirectory(
   remoteDir: string,
   config: FtpConnectionConfig,
   maxBuildsToScan?: number,
+  inventoryRoots?: string[],
+  requestedPaths: string[] = [],
 ): Promise<FtpInventoryEntry[]> {
   const entries: FtpInventoryEntry[] = [];
   await visit(remoteDir);
@@ -152,20 +178,19 @@ async function inventoryRemoteDirectory(
     const listing = await listRemoteDirectory(directory, config, {
       fallbackToDefaultListing: false,
     });
-    const names = listing
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => line.split(/\s+/).at(-1) ?? "")
-      .filter((name) => name && name !== "." && name !== "..");
+    const names = parseMaintenanceListingNames(listing);
     const buildRoot = pathJoin(remoteDir, "build");
-    const selectedNames =
-      directory === buildRoot && maxBuildsToScan !== undefined
-        ? Array.from(new Set(names))
-            .filter((name) => /^\d+$/.test(name))
-            .sort((a, b) => Number(b) - Number(a))
-            .slice(0, maxBuildsToScan)
-        : Array.from(new Set(names));
+    const scopedNames =
+      directory === remoteDir && inventoryRoots !== undefined
+        ? names.filter((name) => inventoryRoots.includes(name))
+        : names;
+    const selectedNames = selectMaintenanceNames(
+      scopedNames,
+      directory,
+      remoteDir,
+      directory === buildRoot ? maxBuildsToScan : undefined,
+      requestedPaths,
+    );
     await runWithConcurrency(
       selectedNames,
       config.concurrency,
@@ -178,12 +203,62 @@ async function inventoryRemoteDirectory(
           entries.push({ path: child, kind: "directory", sizeBytes: 0 });
           await visit(child);
         } catch {
-          const sizeBytes = (await remoteFileSize(child, config)) ?? 0;
-          entries.push({ path: child, kind: "file", sizeBytes });
+          const sizeBytes = await remoteFileSize(child, config);
+          entries.push({
+            path: child,
+            kind: "file",
+            sizeBytes: sizeBytes ?? 0,
+          });
         }
       },
     );
   }
+}
+
+export function parseMaintenanceListingNames(listing: string) {
+  return listing
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/\s+/).at(-1) ?? "")
+    .map((name) => name.split("/").filter(Boolean).at(-1) ?? "")
+    .filter((name) => name && name !== "." && name !== "..");
+}
+
+export function selectMaintenanceNames(
+  names: string[],
+  directory: string,
+  remoteDir: string,
+  maximumNumberedEntries: number | undefined,
+  requestedPaths: string[],
+) {
+  const availableNames = Array.from(new Set(names));
+  const boundedNames =
+    maximumNumberedEntries === undefined
+      ? availableNames
+      : availableNames
+          .filter((name) => /^\d+$/.test(name))
+          .sort((a, b) => Number(b) - Number(a))
+          .slice(0, maximumNumberedEntries);
+  const relativeDirectory =
+    directory === remoteDir
+      ? ""
+      : directory.startsWith(`${remoteDir}/`)
+        ? directory.slice(remoteDir.length + 1)
+        : directory;
+  const prefix = relativeDirectory ? `${relativeDirectory}/` : "";
+  const requestedNames = requestedPaths.flatMap((requestedPath) => {
+    if (!requestedPath.startsWith(prefix)) return [];
+    const remainder = requestedPath.slice(prefix.length);
+    const child = remainder.split("/")[0];
+    return child ? [child] : [];
+  });
+  return Array.from(
+    new Set([
+      ...boundedNames,
+      ...requestedNames.filter((name) => availableNames.includes(name)),
+    ]),
+  );
 }
 
 async function remoteFileSize(remotePath: string, config: FtpConnectionConfig) {
@@ -263,9 +338,6 @@ async function deletePaths(
     for (const entry of descendants) {
       await deleteRemote(entry.path, entry.kind, config);
     }
-    if (!descendants.length) {
-      await deleteRemote(target, "file", config);
-    }
   }
 }
 
@@ -274,14 +346,22 @@ async function deleteRemote(
   kind: FtpInventoryEntry["kind"],
   config: FtpConnectionConfig,
 ) {
+  const command = ftpDeleteCommand(remotePath, kind);
+  try {
+    await runCurl(ftpArgs(config, ["--quote", command, "--list-only"], ""));
+  } catch (error) {
+    throw new Error(
+      `Failed to delete FTP ${kind} ${remotePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export function ftpDeleteCommand(
+  remotePath: string,
+  kind: FtpInventoryEntry["kind"],
+) {
   const command = kind === "directory" ? "RMD" : "DELE";
-  await runCurl(
-    ftpArgs(
-      config,
-      ["--quote", `${command} ${remotePath}`, "--list-only"],
-      config.remoteDir,
-    ),
-  );
+  return `${command} /${pathJoin(remotePath)}`;
 }
 
 function formatSummary(input: {
@@ -290,6 +370,7 @@ function formatSummary(input: {
   keepBuilds: number;
   maxBuildsToScan?: number;
   requestedPaths: string[];
+  inventoryRoots?: string[];
   inventory: FtpInventoryEntry[];
   cleanupPaths: string[];
   freeBytes?: number;
@@ -300,6 +381,7 @@ function formatSummary(input: {
     "",
     `- Mode: **${input.mode}**`,
     `- Root: \`${input.config.remoteDir || "/"}\``,
+    `- Scan scope: **${input.inventoryRoots?.map((item) => `\`${item}\``).join(", ") ?? "all top-level paths"}**`,
     `- Build scan: **${input.maxBuildsToScan === undefined ? "all numbered builds" : `newest ${input.maxBuildsToScan} numbered build${input.maxBuildsToScan === 1 ? "" : "s"}`}**`,
     `- Files: **${input.inventory.filter((entry) => entry.kind === "file").length}**`,
     `- Used: **${formatBytes(totalBytes(input.inventory))}**`,
@@ -314,7 +396,7 @@ function formatSummary(input: {
     "### Cleanup",
     "",
     input.cleanupPaths.length
-      ? `The following paths ${input.mode === "cleanup" ? "were deleted" : "would be deleted"}:`
+      ? `The following paths ${input.mode === "cleanup" ? "were deleted or were already absent" : "would be deleted"}:`
       : "No cleanup paths selected.",
     ...input.cleanupPaths.map((path) => `- \`${path}\``),
   ];
@@ -433,13 +515,18 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
 }
 
-async function writeSummary(summary: string, options: GithubActionOptions) {
+async function writeSummary(
+  summary: string,
+  options: GithubActionOptions,
+  cleanupPaths: string[],
+) {
   const file = options["summary-file"] ?? process.env.GITHUB_STEP_SUMMARY;
   if (file) await appendFile(file, `${summary}\n`);
   const output = options["output-file"] ?? process.env.GITHUB_OUTPUT;
   if (output)
     await appendFile(
       output,
-      `ftp-summary<<FEATURE_SPEC_FTP_SUMMARY\n${summary}\nFEATURE_SPEC_FTP_SUMMARY\n`,
+      `ftp-summary<<FEATURE_SPEC_FTP_SUMMARY\n${summary}\nFEATURE_SPEC_FTP_SUMMARY\n` +
+        `ftp-cleanup-paths<<FEATURE_SPEC_FTP_CLEANUP_PATHS\n${JSON.stringify(cleanupPaths)}\nFEATURE_SPEC_FTP_CLEANUP_PATHS\n`,
     );
 }

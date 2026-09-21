@@ -6,6 +6,11 @@ name: Consuming project feature spec FTP maintenance
 on:
   workflow_call:
     inputs:
+      node-version:
+        description: Node.js version used to install the consuming project's dependencies.
+        required: false
+        type: string
+        default: "24"
       mode:
         description: smoke-test, report, dry-run, or cleanup
         required: false
@@ -15,9 +20,9 @@ on:
         description: Number of newest numbered build directories to retain.
         required: false
         type: string
-        default: "10"
+        default: "30"
       max-builds-to-scan:
-        description: Optional limit on newest numbered build directories to scan; report and dry-run only.
+        description: Optional limit on newest numbered builds; cleanup additionally requires explicit paths and keep-builds at least this value.
         required: false
         type: string
         default: ""
@@ -55,6 +60,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   maintain:
@@ -72,12 +79,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: ${{ inputs.node-version }}
           cache: npm
       - name: Install consuming project dependencies
         run: npm ci
       - name: Inspect or clean FTP storage
         if: inputs.mode != 'smoke-test'
+        id: maintain
         run: >-
           npx --no-install feature-spec-md github-ftp-maintenance
           --mode "${{ inputs.mode }}"
@@ -87,6 +95,74 @@ jobs:
           --ftp-maintenance-concurrency "16"
           --ftp-maintenance-connect-timeout "10"
           --ftp-maintenance-max-time "20"
+
+      - name: Mark deleted report links in pull-request comments
+        if: inputs.mode == 'cleanup' && steps.maintain.outputs.ftp-cleanup-paths != '[]'
+        uses: actions/github-script@v8
+        env:
+          CLEANUP_PATHS: ${{ steps.maintain.outputs.ftp-cleanup-paths }}
+        with:
+          script: |
+            const deletedBuilds = new Set(
+              JSON.parse(process.env.CLEANUP_PATHS)
+                .map((path) => path.match(/(?:^|\/)build\/(\d+)(?:\/|$)/)?.[1])
+                .filter(Boolean),
+            );
+            if (!deletedBuilds.size) return;
+
+            const marker = '<!-- feature-spec-md-pr-diff -->';
+            const statePattern = /<!-- feature-spec-md-report-state:([A-Za-z0-9+/=]+) -->/;
+            const updateBody = (body) => {
+              let next = body.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) => {
+                const build = url.match(/\/build\/(\d+)(?:\/|$)/)?.[1];
+                return build && deletedBuilds.has(build) ? `~~[${label}](${url})~~` : match;
+              });
+              next = next.split('\n').map((line) => {
+                const hasDeletedLink = line.includes('~~[') && /\/build\/\d+\//.test(line);
+                return hasDeletedLink && !line.includes('deleted by cleanup job')
+                  ? `${line} *(deleted by cleanup job)*`
+                  : line;
+              }).join('\n');
+              const stateMatch = next.match(statePattern);
+              if (!stateMatch) return next;
+              try {
+                const state = JSON.parse(Buffer.from(stateMatch[1], 'base64').toString('utf8'));
+                for (const entry of [state.current, ...(state.history ?? [])]) {
+                  if (entry && deletedBuilds.has(String(entry.buildNumber))) entry.deleted = true;
+                }
+                const encoded = Buffer.from(JSON.stringify(state), 'utf8').toString('base64');
+                return next.replace(statePattern, `<!-- feature-spec-md-report-state:${encoded} -->`);
+              } catch {
+                return next;
+              }
+            };
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100,
+            });
+            for (const pull of pulls) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pull.number,
+              });
+              const comment = comments.find((item) =>
+                item.user?.type === 'Bot' && item.body?.includes(marker),
+              );
+              if (!comment) continue;
+              const body = updateBody(comment.body);
+              if (body !== comment.body) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                  body,
+                });
+              }
+            }
 
       - name: Smoke test FTP storage maintenance
         if: inputs.mode == 'smoke-test'
