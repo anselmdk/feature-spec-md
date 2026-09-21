@@ -499,6 +499,14 @@ async function deletePaths(
       const parent = ftpParentPath(entry.path);
       filesByParent.set(parent, [...(filesByParent.get(parent) ?? []), entry]);
     }
+    const directoriesByParent = new Map<string, FtpInventoryEntry[]>();
+    for (const entry of directories) {
+      const parent = ftpParentPath(entry.path);
+      directoriesByParent.set(parent, [
+        ...(directoriesByParent.get(parent) ?? []),
+        entry,
+      ]);
+    }
     await runWithConcurrency(
       Array.from(filesByParent.values()).flatMap((siblings) =>
         batches(siblings, 100),
@@ -509,12 +517,20 @@ async function deletePaths(
       },
     );
     // Some FTP servers serialize directory mutations per account while still
-    // accepting concurrent commands. Remove directories one at a time so a
-    // successful response reliably corresponds to a durable removal.
-    for (const directory of directories) {
-      await deleteRemoteBatch([directory], config);
+    // accepting rapidly opened sessions. Keep sibling removals on one control
+    // connection and pace transitions between parent directories.
+    const directoryBatches = Array.from(directoriesByParent.values()).flatMap(
+      (siblings) => batches(siblings, 100),
+    );
+    for (const batch of directoryBatches) {
+      await deleteRemoteBatch(batch, config);
+      await delay(250);
     }
   }
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function existingRemotePaths(
