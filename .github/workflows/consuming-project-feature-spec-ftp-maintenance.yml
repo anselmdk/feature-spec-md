@@ -22,10 +22,15 @@ on:
         type: string
         default: "100"
       max-builds-to-scan:
-        description: Optional limit on newest numbered builds; cleanup additionally requires explicit paths and keep-builds at least this value.
+        description: Optional limit on newest numbered builds scanned by report mode.
         required: false
         type: string
         default: ""
+      max-builds-to-delete:
+        description: Maximum expired build directories removed by one retention cleanup run.
+        required: false
+        type: string
+        default: "10"
       paths:
         description: Comma-separated paths relative to the configured FTP root.
         required: false
@@ -139,6 +144,7 @@ jobs:
           --mode "${{ inputs.mode }}"
           --keep-builds "${{ inputs.keep-builds }}"
           --max-builds-to-scan "${{ inputs.max-builds-to-scan }}"
+          --max-builds-to-delete "${{ inputs.max-builds-to-delete }}"
           --paths "${{ steps.cleanup_paths.outputs.paths || inputs.paths }}"
           --ftp-maintenance-concurrency "16"
           --ftp-maintenance-connect-timeout "10"
@@ -153,18 +159,24 @@ jobs:
           script: |
             const cleanupPaths = JSON.parse(process.env.CLEANUP_PATHS);
             const deletedBuilds = new Set(
-              cleanupPaths.flatMap((path) => {
-                const build = path.match(/(?:^|\/)build\/(\d+)(?:\/|$)/)?.[1];
-                const prBuild = path.match(/(?:^|\/)pr\/\d+\/(\d+)(?:\/|$)/)?.[1];
-                return build || prBuild ? [build || prBuild] : [];
-              }),
+              cleanupPaths
+                .map((path) => path.match(/(?:^|\/)build\/(\d+)(?:\/|$)/)?.[1])
+                .filter(Boolean),
+            );
+            const deletedPullRequestReports = new Set(
+              cleanupPaths
+                .map((path) => {
+                  const match = path.match(/(?:^|\/)pr\/(\d+)\/(\d+)(?:\/|$)/);
+                  return match ? `${match[1]}/${match[2]}` : undefined;
+                })
+                .filter(Boolean),
             );
             const deletedPullRequests = new Set(
               cleanupPaths
                 .map((path) => path.match(/(?:^|\/)pr\/(\d+)(?:\/)?$/)?.[1])
                 .filter(Boolean),
             );
-            if (!deletedBuilds.size && !deletedPullRequests.size) return;
+            if (!deletedBuilds.size && !deletedPullRequestReports.size && !deletedPullRequests.size) return;
 
             const marker = '<!-- feature-spec-md-pr-diff -->';
             const statePattern = /<!-- feature-spec-md-report-state:([A-Za-z0-9+/=]+) -->/;
@@ -175,7 +187,9 @@ jobs:
                 const prReport = url.match(/\/pr\/(\d+)\/(\d+)(?:\/|$)/);
                 const deleted =
                   (build && deletedBuilds.has(build)) ||
-                  (prReport && (deletedPullRequests.has(prReport[1]) || deletedBuilds.has(prReport[2])));
+                  (prReport &&
+                    (deletedPullRequests.has(prReport[1]) ||
+                      deletedPullRequestReports.has(`${prReport[1]}/${prReport[2]}`)));
                 const alreadyStruck =
                   source.slice(Math.max(0, offset - 2), offset) === '~~' &&
                   source.slice(offset + match.length, offset + match.length + 2) === '~~';
@@ -201,14 +215,11 @@ jobs:
               }
             };
 
-            const pulls = deletedPullRequests.size
-              ? [...deletedPullRequests].map((number) => ({ number: Number(number) }))
-              : await github.paginate(github.rest.pulls.list, {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  state: 'all',
-                  per_page: 100,
-                });
+            const affectedPullRequests = new Set([
+              ...deletedPullRequests,
+              ...[...deletedPullRequestReports].map((report) => report.split('/')[0]),
+            ]);
+            const pulls = [...affectedPullRequests].map((number) => ({ number: Number(number) }));
             for (const pull of pulls) {
               const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,

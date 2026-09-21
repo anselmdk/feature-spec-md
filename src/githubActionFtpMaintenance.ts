@@ -78,36 +78,51 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       process.env.FEATURE_SPEC_FTP_MAX_BUILDS_TO_SCAN,
     "Maximum builds to scan",
   );
+  const maxBuildsToDelete = positiveInteger(
+    options["max-builds-to-delete"] ??
+      process.env.FEATURE_SPEC_FTP_MAX_BUILDS_TO_DELETE,
+    10,
+  );
   const requestedPaths = csv(
     options.paths ?? process.env.FEATURE_SPEC_FTP_PATHS,
   );
-  const inventoryRoots = maintenanceInventoryRoots(mode, requestedPaths);
-  if (
-    mode === "cleanup" &&
-    maxBuildsToScan !== undefined &&
-    (!requestedPaths.length || keepBuilds < maxBuildsToScan)
-  ) {
-    throw new Error(
-      "Bounded cleanup requires --paths and --keep-builds greater than or equal to --max-builds-to-scan.",
-    );
-  }
-  const inventory = await inventoryRemoteDirectory(
-    config.remoteDir,
-    config,
-    maxBuildsToScan,
-    inventoryRoots,
-    requestedPaths,
-  );
+  const retentionCleanup =
+    (mode === "cleanup" || mode === "dry-run") && !requestedPaths.length;
+  const retentionPaths = retentionCleanup
+    ? await discoverRetentionCleanupPaths(
+        config.remoteDir,
+        config,
+        keepBuilds,
+        maxBuildsToDelete,
+      )
+    : [];
+  const effectivePaths = retentionCleanup
+    ? retentionPaths.map((path) => relativeChildPath(config.remoteDir, path))
+    : requestedPaths;
+  const inventoryRoots = maintenanceInventoryRoots(mode, effectivePaths);
+  const inventory =
+    retentionCleanup && !effectivePaths.length
+      ? []
+      : await inventoryRemoteDirectory(
+          config.remoteDir,
+          config,
+          retentionCleanup ? undefined : maxBuildsToScan,
+          inventoryRoots,
+          effectivePaths,
+          effectivePaths.length > 0,
+        );
   const freeBytes = await remoteFreeBytes(config.remoteDir, config);
   const cleanupPaths =
     mode === "report"
       ? []
-      : cleanupCandidates(
-          inventory,
-          config.remoteDir,
-          keepBuilds,
-          requestedPaths,
-        );
+      : retentionCleanup
+        ? retentionPaths
+        : cleanupCandidates(
+            inventory,
+            config.remoteDir,
+            keepBuilds,
+            requestedPaths,
+          );
 
   if (mode === "cleanup" && !requestedPaths.length && keepBuilds < 1) {
     throw new Error("Cleanup requires --keep-builds of at least 1 or --paths.");
@@ -118,13 +133,23 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
 
   const afterInventory =
     mode === "cleanup"
-      ? await inventoryRemoteDirectory(
-          config.remoteDir,
-          config,
-          maxBuildsToScan,
-          inventoryRoots,
-          requestedPaths,
-        )
+      ? cleanupPaths.length
+        ? await inventoryRemoteDirectory(
+            config.remoteDir,
+            config,
+            undefined,
+            maintenanceInventoryRoots(
+              mode,
+              cleanupPaths.map((path) =>
+                relativeChildPath(config.remoteDir, path),
+              ),
+            ),
+            cleanupPaths.map((path) =>
+              relativeChildPath(config.remoteDir, path),
+            ),
+            true,
+          )
+        : []
       : inventory;
   if (mode === "cleanup") {
     const remainingPaths = cleanupPaths.filter((target) =>
@@ -142,6 +167,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     config,
     mode,
     keepBuilds,
+    maxBuildsToDelete,
     maxBuildsToScan,
     requestedPaths,
     inventoryRoots,
@@ -185,15 +211,18 @@ async function inventoryRemoteDirectory(
   maxBuildsToScan?: number,
   inventoryRoots?: string[],
   requestedPaths: string[] = [],
+  restrictToRequestedPaths = false,
 ): Promise<FtpInventoryEntry[]> {
   const entries: FtpInventoryEntry[] = [];
   await visit(remoteDir);
   return entries.sort((a, b) => a.path.localeCompare(b.path));
 
-  async function visit(directory: string) {
-    const listing = await listRemoteDirectory(directory, config, {
-      fallbackToDefaultListing: false,
-    });
+  async function visit(directory: string, knownListing?: string) {
+    const listing =
+      knownListing ??
+      (await listRemoteDirectory(directory, config, {
+        fallbackToDefaultListing: false,
+      }));
     const names = parseMaintenanceListingNames(listing);
     const buildRoot = pathJoin(remoteDir, "build");
     const scopedNames =
@@ -206,7 +235,7 @@ async function inventoryRemoteDirectory(
       remoteDir,
       directory === buildRoot ? maxBuildsToScan : undefined,
       requestedPaths,
-      maxBuildsToScan !== undefined && requestedPaths.length > 0,
+      restrictToRequestedPaths,
     );
     await runWithConcurrency(
       selectedNames,
@@ -214,11 +243,11 @@ async function inventoryRemoteDirectory(
       async (name) => {
         const child = pathJoin(directory, name);
         try {
-          await listRemoteDirectory(child, config, {
+          const childListing = await listRemoteDirectory(child, config, {
             fallbackToDefaultListing: false,
           });
           entries.push({ path: child, kind: "directory", sizeBytes: 0 });
-          await visit(child);
+          await visit(child, childListing);
         } catch {
           const sizeBytes = await remoteFileSize(child, config);
           entries.push({
@@ -230,6 +259,72 @@ async function inventoryRemoteDirectory(
       },
     );
   }
+}
+
+async function discoverRetentionCleanupPaths(
+  remoteDir: string,
+  config: FtpConnectionConfig,
+  keepBuilds: number,
+  maxBuildsToDelete: number,
+) {
+  const buildRoot = pathJoin(remoteDir, "build");
+  const buildNames = await listMaintenanceNames(buildRoot, config);
+  const expiredBuilds = selectExpiredBuildBatch(
+    buildNames,
+    keepBuilds,
+    maxBuildsToDelete,
+  );
+  if (!expiredBuilds.length) return [];
+
+  const expired = new Set(expiredBuilds);
+  const prRoot = pathJoin(remoteDir, "pr");
+  const pullRequests = (await listMaintenanceNames(prRoot, config)).filter(
+    (name) => /^\d+$/.test(name),
+  );
+  const pullRequestReports: string[] = [];
+  await runWithConcurrency(
+    pullRequests,
+    config.concurrency,
+    async (pullRequest) => {
+      const directory = pathJoin(prRoot, pullRequest);
+      const reportBuilds = await listMaintenanceNames(directory, config);
+      for (const build of reportBuilds) {
+        if (expired.has(build)) {
+          pullRequestReports.push(pathJoin(directory, build));
+        }
+      }
+    },
+  );
+
+  return [
+    ...expiredBuilds.map((build) => pathJoin(buildRoot, build)),
+    ...pullRequestReports.sort(),
+  ];
+}
+
+async function listMaintenanceNames(
+  directory: string,
+  config: FtpConnectionConfig,
+) {
+  try {
+    const listing = await listRemoteDirectory(directory, config, {
+      fallbackToDefaultListing: false,
+    });
+    return parseMaintenanceListingNames(listing);
+  } catch {
+    return [];
+  }
+}
+
+export function selectExpiredBuildBatch(
+  names: string[],
+  keepBuilds: number,
+  maxBuildsToDelete: number,
+) {
+  return Array.from(new Set(names))
+    .filter((name) => /^\d+$/.test(name))
+    .sort((a, b) => Number(b) - Number(a))
+    .slice(keepBuilds, keepBuilds + maxBuildsToDelete);
 }
 
 export function parseMaintenanceListingNames(listing: string) {
@@ -375,15 +470,29 @@ async function deletePaths(
   inventory: FtpInventoryEntry[],
   config: FtpConnectionConfig,
 ) {
-  for (const target of paths) {
-    const descendants = inventory
-      .filter(
-        (entry) => entry.path === target || entry.path.startsWith(`${target}/`),
+  const selected = new Map<string, FtpInventoryEntry>();
+  for (const entry of inventory) {
+    if (
+      paths.some(
+        (target) =>
+          entry.path === target || entry.path.startsWith(`${target}/`),
       )
-      .sort((a, b) => b.path.length - a.path.length);
-    for (const entry of descendants) {
-      await deleteRemote(entry.path, entry.kind, config);
+    ) {
+      selected.set(entry.path, entry);
     }
+  }
+  const depths = Array.from(
+    new Set(
+      Array.from(selected.values(), (entry) => entry.path.split("/").length),
+    ),
+  ).sort((a, b) => b - a);
+  for (const depth of depths) {
+    const entries = Array.from(selected.values()).filter(
+      (entry) => entry.path.split("/").length === depth,
+    );
+    await runWithConcurrency(entries, config.concurrency, async (entry) => {
+      await deleteRemote(entry.path, entry.kind, config);
+    });
   }
 }
 
@@ -414,6 +523,7 @@ function formatSummary(input: {
   config: FtpConnectionConfig;
   mode: FtpMaintenanceMode;
   keepBuilds: number;
+  maxBuildsToDelete: number;
   maxBuildsToScan?: number;
   requestedPaths: string[];
   inventoryRoots?: string[];
@@ -429,6 +539,7 @@ function formatSummary(input: {
     `- Root: \`${input.config.remoteDir || "/"}\``,
     `- Scan scope: **${input.inventoryRoots?.map((item) => `\`${item}\``).join(", ") ?? "all top-level paths"}**`,
     `- Build scan: **${input.maxBuildsToScan === undefined ? "all numbered builds" : `newest ${input.maxBuildsToScan} numbered build${input.maxBuildsToScan === 1 ? "" : "s"}`}**`,
+    `- Cleanup batch: **at most ${input.maxBuildsToDelete} expired builds**`,
     `- Files: **${input.inventory.filter((entry) => entry.kind === "file").length}**`,
     `- Used: **${formatBytes(totalBytes(input.inventory))}**`,
     `- Available: **${input.freeBytes === undefined ? "not reported by server" : formatBytes(input.freeBytes)}**`,
@@ -521,6 +632,16 @@ function safeChildPath(root: string, value: string) {
     throw new Error(`Cleanup path must be relative to the FTP root: ${value}`);
   }
   return pathJoin(root, value);
+}
+
+function relativeChildPath(root: string, value: string) {
+  const normalizedRoot = pathJoin(root);
+  const normalizedValue = pathJoin(value);
+  if (!normalizedRoot) return normalizedValue;
+  if (!normalizedValue.startsWith(`${normalizedRoot}/`)) {
+    throw new Error(`FTP path is outside the configured root: ${value}`);
+  }
+  return normalizedValue.slice(normalizedRoot.length + 1);
 }
 
 function maintenanceMode(value: string | undefined): FtpMaintenanceMode {

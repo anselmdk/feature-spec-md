@@ -9,6 +9,7 @@ import {
   parseFtpSizeResponse,
   parseMaintenanceListingNames,
   selectMaintenanceNames,
+  selectExpiredBuildBatch,
 } from "../src/githubActionFtpMaintenance.js";
 
 describe("FTP maintenance helpers", () => {
@@ -57,6 +58,17 @@ describe("FTP maintenance helpers", () => {
         [],
       ),
       ["reports/build/99", "reports/pr/7/99", "reports/pr/8/99"],
+    );
+  });
+
+  it("limits retention cleanup to the next batch of expired build directories", () => {
+    assert.deepEqual(
+      selectExpiredBuildBatch(
+        ["109", "103", "108", "102", "107", "106", "105", "104", "101"],
+        3,
+        4,
+      ),
+      ["106", "105", "104", "103"],
     );
   });
 
@@ -127,7 +139,12 @@ describe("FTP maintenance helpers", () => {
     assert.match(workflow, /smoke-test, report, dry-run, or cleanup/);
     assert.match(workflow, /--ftp-maintenance-max-time "10"/);
     assert.match(workflow, /max-builds-to-scan:/);
-    assert.match(workflow, /cleanup additionally requires explicit paths/);
+    assert.match(workflow, /max-builds-to-delete:/);
+    assert.match(workflow, /default: "10"/);
+    assert.match(
+      workflow,
+      /Maximum expired build directories removed by one retention cleanup run/,
+    );
     assert.match(workflow, /timeout-minutes: 15/);
   });
 
@@ -145,6 +162,9 @@ describe("FTP maintenance helpers", () => {
     assert.match(workflow, /const alreadyStruck =/);
     assert.match(workflow, /~~~~/);
     assert.match(workflow, /deletedPullRequests\.size/);
+    assert.match(workflow, /deletedPullRequestReports/);
+    assert.match(workflow, /const affectedPullRequests =/);
+    assert.doesNotMatch(workflow, /github\.rest\.pulls\.list/);
   });
 
   it("uses the consuming project's supported Node.js version", async () => {
