@@ -214,15 +214,18 @@ async function inventoryRemoteDirectory(
   restrictToRequestedPaths = false,
 ): Promise<FtpInventoryEntry[]> {
   const entries: FtpInventoryEntry[] = [];
+  const runLimited = concurrencyLimiter(config.concurrency);
   await visit(remoteDir);
   return entries.sort((a, b) => a.path.localeCompare(b.path));
 
   async function visit(directory: string, knownListing?: string) {
     const listing =
       knownListing ??
-      (await listRemoteDirectory(directory, config, {
-        fallbackToDefaultListing: false,
-      }));
+      (await runLimited(() =>
+        listRemoteDirectory(directory, config, {
+          fallbackToDefaultListing: false,
+        }),
+      ));
     const names = parseMaintenanceListingNames(listing);
     const buildRoot = pathJoin(remoteDir, "build");
     const scopedNames =
@@ -242,23 +245,49 @@ async function inventoryRemoteDirectory(
       config.concurrency,
       async (name) => {
         const child = pathJoin(directory, name);
+        let childListing: string;
         try {
-          const childListing = await listRemoteDirectory(child, config, {
-            fallbackToDefaultListing: false,
-          });
-          entries.push({ path: child, kind: "directory", sizeBytes: 0 });
-          await visit(child, childListing);
+          childListing = await runLimited(() =>
+            listRemoteDirectory(child, config, {
+              fallbackToDefaultListing: false,
+            }),
+          );
         } catch {
-          const sizeBytes = await remoteFileSize(child, config);
+          const sizeBytes = await runLimited(() =>
+            remoteFileSize(child, config),
+          );
           entries.push({
             path: child,
             kind: "file",
             sizeBytes: sizeBytes ?? 0,
           });
+          return;
         }
+        entries.push({ path: child, kind: "directory", sizeBytes: 0 });
+        await visit(child, childListing);
       },
     );
   }
+}
+
+export function concurrencyLimiter(limit: number) {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error(`Concurrency limit must be a positive integer: ${limit}`);
+  }
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return async function runLimited<T>(operation: () => Promise<T>) {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    active += 1;
+    try {
+      return await operation();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
+  };
 }
 
 async function discoverRetentionCleanupPaths(

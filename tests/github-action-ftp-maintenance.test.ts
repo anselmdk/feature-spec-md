@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   batches,
   cleanupCandidates,
+  concurrencyLimiter,
   ftpDeleteCommand,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
@@ -86,6 +87,23 @@ describe("FTP maintenance helpers", () => {
 
   it("groups FTP deletion commands into bounded sessions", () => {
     assert.deepEqual(batches([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  });
+
+  it("shares one concurrency limit across recursive FTP work", async () => {
+    const runLimited = concurrencyLimiter(2);
+    let active = 0;
+    let maximum = 0;
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        runLimited(async () => {
+          active += 1;
+          maximum = Math.max(maximum, active);
+          await new Promise((resolve) => setTimeout(resolve, 2));
+          active -= 1;
+        }),
+      ),
+    );
+    assert.equal(maximum, 2);
   });
 
   it("includes explicitly requested builds outside a bounded newest-build scan", () => {
