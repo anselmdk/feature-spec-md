@@ -124,6 +124,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
             keepBuilds,
             requestedPaths,
           );
+  let completedCleanupPaths = cleanupPaths;
 
   if (mode === "cleanup" && !requestedPaths.length && keepBuilds < 1) {
     throw new Error("Cleanup requires --keep-builds of at least 1 or --paths.");
@@ -138,9 +139,14 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       cleanupPaths,
       config,
     );
+    completedCleanupPaths = cleanupPaths.filter(
+      (path) => !remainingPaths.includes(path),
+    );
     if (remainingPaths.length) {
-      throw new Error(
-        `FTP cleanup did not remove: ${remainingPaths.join(", ")}`,
+      const message = `FTP cleanup did not remove: ${remainingPaths.join(", ")}`;
+      if (requestedPaths.length) throw new Error(message);
+      console.warn(
+        `${message}. They will be retried by a later retention run.`,
       );
     }
   }
@@ -153,13 +159,18 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     requestedPaths,
     inventoryRoots,
     inventory,
-    cleanupPaths,
+    cleanupPaths: completedCleanupPaths,
     freeBytes,
     afterInventory,
   });
-  await writeSummary(summary, options, cleanupPaths);
+  await writeSummary(summary, options, completedCleanupPaths);
   console.log(summary);
-  return { summary, inventory, cleanupPaths, freeBytes };
+  return {
+    summary,
+    inventory,
+    cleanupPaths: completedCleanupPaths,
+    freeBytes,
+  };
 }
 
 export function parseFtpSizeResponse(response: string) {
