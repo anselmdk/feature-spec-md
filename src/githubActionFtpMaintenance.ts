@@ -476,22 +476,36 @@ async function deletePaths(
   const targets = presentCleanupTargets(paths, inventory);
   if (!targets.length) return;
   for (const group of groupCleanupTargetsByBuild(targets)) {
-    const client = new Client(config.maxTimeSeconds * 1000);
-    await client.access({
-      host: config.host,
-      port: config.port ? Number(config.port) : undefined,
-      user: config.user,
-      password: config.password,
-      secure: config.secure ? "implicit" : false,
-    });
-    try {
-      for (const target of group) {
-        await client.removeDir(`/${pathJoin(target)}`);
+    let remaining = group;
+    for (let attempt = 1; attempt <= 3 && remaining.length; attempt += 1) {
+      const client = new Client(config.maxTimeSeconds * 1000);
+      await client.access({
+        host: config.host,
+        port: config.port ? Number(config.port) : undefined,
+        user: config.user,
+        password: config.password,
+        secure: config.secure ? "implicit" : false,
+      });
+      try {
+        for (const target of remaining) {
+          await client.removeDir(`/${pathJoin(target)}`);
+        }
+      } finally {
+        client.close();
       }
-    } finally {
-      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      remaining = await existingRemotePaths(group, config);
+      if (remaining.length && attempt < 3) {
+        console.warn(
+          `FTP cleanup is still settling; retrying ${remaining.join(", ")} (attempt ${attempt + 1}/3).`,
+        );
+      }
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (remaining.length) {
+      throw new Error(
+        `FTP cleanup did not remove after 3 attempts: ${remaining.join(", ")}`,
+      );
+    }
   }
 }
 
