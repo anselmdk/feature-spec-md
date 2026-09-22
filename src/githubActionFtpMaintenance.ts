@@ -139,11 +139,23 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       cleanupPaths,
       config,
     );
-    completedCleanupPaths = cleanupPaths.filter(
-      (path) => !remainingPaths.includes(path),
+    const pathsWithFiles = await remotePathsContainingFiles(
+      remainingPaths,
+      config,
     );
-    if (remainingPaths.length) {
-      const message = `FTP cleanup did not remove: ${remainingPaths.join(", ")}`;
+    completedCleanupPaths = cleanupPaths.filter(
+      (path) => !pathsWithFiles.includes(path),
+    );
+    const emptyRoots = remainingPaths.filter(
+      (path) => !pathsWithFiles.includes(path),
+    );
+    if (emptyRoots.length) {
+      console.warn(
+        `FTP retained empty directory names after removing their report files: ${emptyRoots.join(", ")}`,
+      );
+    }
+    if (pathsWithFiles.length) {
+      const message = `FTP cleanup did not remove report files from: ${pathsWithFiles.join(", ")}`;
       if (requestedPaths.length) throw new Error(message);
       console.warn(
         `${message}. They will be retried by a later retention run.`,
@@ -294,6 +306,7 @@ async function discoverRetentionCleanupPaths(
     buildNames,
     keepBuilds,
     maxBuildsToDelete,
+    Number(process.env.GITHUB_RUN_NUMBER ?? 0),
   );
   if (!expiredBuilds.length) return [];
 
@@ -343,21 +356,19 @@ export function selectExpiredBuildBatch(
   names: string[],
   keepBuilds: number,
   maxBuildsToDelete: number,
+  batchIndex = 0,
 ) {
   const expired = Array.from(new Set(names))
     .filter((name) => /^\d+$/.test(name))
     .sort((a, b) => Number(b) - Number(a))
-    .slice(keepBuilds);
-  const oldestCount = Math.min(
-    Math.ceil(maxBuildsToDelete / 2),
-    expired.length,
-  );
-  const oldest = expired.slice(-oldestCount).reverse();
-  const newest = expired.slice(
-    0,
-    Math.min(maxBuildsToDelete - oldest.length, expired.length - oldest.length),
-  );
-  return [...oldest, ...newest];
+    .slice(keepBuilds)
+    .sort((a, b) => Number(a) - Number(b));
+  if (!expired.length) return [];
+  const batchCount = Math.ceil(expired.length / maxBuildsToDelete);
+  const normalizedBatch =
+    ((Math.trunc(batchIndex) % batchCount) + batchCount) % batchCount;
+  const start = normalizedBatch * maxBuildsToDelete;
+  return expired.slice(start, start + maxBuildsToDelete);
 }
 
 export function parseMaintenanceListingNames(listing: string) {
@@ -540,6 +551,29 @@ async function waitForRemotePathsToDisappear(
     remaining = await existingRemotePaths(paths, config);
   }
   return remaining;
+}
+
+async function remotePathsContainingFiles(
+  paths: string[],
+  config: FtpConnectionConfig,
+) {
+  if (!paths.length) return [];
+  const relativePaths = paths.map((path) =>
+    relativeChildPath(config.remoteDir, path),
+  );
+  const inventory = await inventoryRemoteDirectory(
+    config.remoteDir,
+    config,
+    undefined,
+    maintenanceInventoryRoots("cleanup", relativePaths),
+    relativePaths,
+    true,
+  );
+  return paths.filter((target) =>
+    inventory.some(
+      (entry) => entry.kind === "file" && entry.path.startsWith(`${target}/`),
+    ),
+  );
 }
 
 export function presentCleanupTargets(
