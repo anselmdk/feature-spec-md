@@ -473,18 +473,8 @@ async function deletePaths(
   inventory: FtpInventoryEntry[],
   config: FtpConnectionConfig,
 ) {
-  const selected = new Map<string, FtpInventoryEntry>();
-  for (const entry of inventory) {
-    if (
-      paths.some(
-        (target) =>
-          entry.path === target || entry.path.startsWith(`${target}/`),
-      )
-    ) {
-      selected.set(entry.path, entry);
-    }
-  }
-  if (!selected.size) return;
+  const targets = presentCleanupTargets(paths, inventory);
+  if (!targets.length) return;
   const client = new Client(config.maxTimeSeconds * 1000);
   await client.access({
     host: config.host,
@@ -494,55 +484,23 @@ async function deletePaths(
     secure: config.secure ? "implicit" : false,
   });
   try {
-    await deleteSelectedPaths(selected, client);
+    for (const target of targets) {
+      await client.removeDir(`/${pathJoin(target)}`);
+    }
   } finally {
     client.close();
   }
 }
 
-async function deleteSelectedPaths(
-  selected: Map<string, FtpInventoryEntry>,
-  client: Client,
+export function presentCleanupTargets(
+  paths: string[],
+  inventory: FtpInventoryEntry[],
 ) {
-  const depths = Array.from(
-    new Set(
-      Array.from(selected.values(), (entry) => entry.path.split("/").length),
+  return paths.filter((target) =>
+    inventory.some(
+      (entry) => entry.path === target || entry.path.startsWith(`${target}/`),
     ),
-  ).sort((a, b) => b - a);
-  for (const depth of depths) {
-    const entries = Array.from(selected.values()).filter(
-      (entry) => entry.path.split("/").length === depth,
-    );
-    const files = entries.filter((entry) => entry.kind === "file");
-    const directories = entries.filter((entry) => entry.kind === "directory");
-    const filesByParent = new Map<string, FtpInventoryEntry[]>();
-    for (const entry of files) {
-      const parent = ftpParentPath(entry.path);
-      filesByParent.set(parent, [...(filesByParent.get(parent) ?? []), entry]);
-    }
-    const directoriesByParent = new Map<string, FtpInventoryEntry[]>();
-    for (const entry of directories) {
-      const parent = ftpParentPath(entry.path);
-      directoriesByParent.set(parent, [
-        ...(directoriesByParent.get(parent) ?? []),
-        entry,
-      ]);
-    }
-    for (const batch of Array.from(filesByParent.values()).flatMap((siblings) =>
-      batches(siblings, 100),
-    )) {
-      await deleteRemoteBatch(batch, client);
-    }
-    // Keep directory mutations on one authenticated control connection. The
-    // target host acknowledges only the first mutation when curl opens
-    // multiple short-lived custom-command transfers.
-    const directoryBatches = Array.from(directoriesByParent.values()).flatMap(
-      (siblings) => batches(siblings, 100),
-    );
-    for (const batch of directoryBatches) {
-      await deleteRemoteBatch(batch, client);
-    }
-  }
+  );
 }
 
 async function existingRemotePaths(
@@ -570,44 +528,6 @@ export function groupFtpPathsByParent(paths: string[]) {
     groups.set(parent, [...(groups.get(parent) ?? []), { name, path }]);
   }
   return Array.from(groups, ([parent, items]) => ({ parent, items }));
-}
-
-async function deleteRemoteBatch(entries: FtpInventoryEntry[], client: Client) {
-  const parent = ftpParentPath(entries[0]?.path ?? "");
-  if (entries.some((entry) => ftpParentPath(entry.path) !== parent)) {
-    throw new Error("FTP deletion batches must contain sibling paths.");
-  }
-  try {
-    await client.cd(`/${parent}`);
-    for (const entry of entries) {
-      await client.send(ftpDeleteCommand(entry.path, entry.kind));
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to delete FTP batch (${entries.map((entry) => entry.path).join(", ")}): ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-export function batches<T>(items: T[], size: number) {
-  if (!Number.isInteger(size) || size < 1) {
-    throw new Error(`Batch size must be a positive integer: ${size}`);
-  }
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
-}
-
-export function ftpDeleteCommand(
-  remotePath: string,
-  kind: FtpInventoryEntry["kind"],
-) {
-  const command = kind === "directory" ? "RMD" : "DELE";
-  const name = pathJoin(remotePath).split("/").at(-1);
-  if (!name) throw new Error(`Cannot delete an empty FTP path: ${remotePath}`);
-  return `${command} ${name}`;
 }
 
 function ftpParentPath(remotePath: string) {

@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
-  batches,
   cleanupCandidates,
   concurrencyLimiter,
-  ftpDeleteCommand,
   groupFtpPathsByParent,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
   parseMaintenanceListingNames,
+  presentCleanupTargets,
   selectMaintenanceNames,
   selectExpiredBuildBatch,
 } from "../src/githubActionFtpMaintenance.js";
@@ -75,19 +74,21 @@ describe("FTP maintenance helpers", () => {
     );
   });
 
-  it("deletes basenames after the FTP client changes into their parent", () => {
-    assert.equal(
-      ftpDeleteCommand("/booking.specs.title.dk/build/532/index.html", "file"),
-      "DELE index.html",
+  it("selects whole present directory roots for recursive removal", () => {
+    assert.deepEqual(
+      presentCleanupTargets(
+        ["reports/build/100", "reports/build/99"],
+        [
+          { path: "reports/build/100", kind: "directory", sizeBytes: 0 },
+          {
+            path: "reports/build/100/index.html",
+            kind: "file",
+            sizeBytes: 42,
+          },
+        ],
+      ),
+      ["reports/build/100"],
     );
-    assert.equal(
-      ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
-      "RMD 532",
-    );
-  });
-
-  it("groups FTP deletion commands into bounded sessions", () => {
-    assert.deepEqual(batches([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   });
 
   it("groups exact cleanup verification by shallow parent listing", () => {
