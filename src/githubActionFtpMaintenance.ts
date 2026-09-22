@@ -344,12 +344,20 @@ export function selectExpiredBuildBatch(
   keepBuilds: number,
   maxBuildsToDelete: number,
 ) {
-  return Array.from(new Set(names))
+  const expired = Array.from(new Set(names))
     .filter((name) => /^\d+$/.test(name))
     .sort((a, b) => Number(b) - Number(a))
-    .slice(keepBuilds)
-    .sort((a, b) => Number(a) - Number(b))
-    .slice(0, maxBuildsToDelete);
+    .slice(keepBuilds);
+  const oldestCount = Math.min(
+    Math.ceil(maxBuildsToDelete / 2),
+    expired.length,
+  );
+  const oldest = expired.slice(-oldestCount).reverse();
+  const newest = expired.slice(
+    0,
+    Math.min(maxBuildsToDelete - oldest.length, expired.length - oldest.length),
+  );
+  return [...oldest, ...newest];
 }
 
 export function parseMaintenanceListingNames(listing: string) {
