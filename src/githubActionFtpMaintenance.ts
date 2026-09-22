@@ -497,7 +497,10 @@ async function deletePaths(
     });
     try {
       for (const target of group) {
-        await client.removeDir(`/${pathJoin(target)}`);
+        const normalizedTarget = `/${pathJoin(target)}`;
+        const tombstone = `${normalizedTarget}.feature-spec-cleanup-${Date.now()}`;
+        await client.rename(normalizedTarget, tombstone);
+        await client.removeDir(tombstone);
       }
     } finally {
       client.close();
