@@ -1,4 +1,5 @@
 import { appendFile } from "node:fs/promises";
+import { Client } from "basic-ftp";
 import {
   ftpConnectionConfig,
   listRemoteDirectory,
@@ -483,6 +484,26 @@ async function deletePaths(
       selected.set(entry.path, entry);
     }
   }
+  if (!selected.size) return;
+  const client = new Client(config.maxTimeSeconds * 1000);
+  await client.access({
+    host: config.host,
+    port: config.port ? Number(config.port) : undefined,
+    user: config.user,
+    password: config.password,
+    secure: config.secure ? "implicit" : false,
+  });
+  try {
+    await deleteSelectedPaths(selected, client);
+  } finally {
+    client.close();
+  }
+}
+
+async function deleteSelectedPaths(
+  selected: Map<string, FtpInventoryEntry>,
+  client: Client,
+) {
   const depths = Array.from(
     new Set(
       Array.from(selected.values(), (entry) => entry.path.split("/").length),
@@ -507,30 +528,21 @@ async function deletePaths(
         entry,
       ]);
     }
-    await runWithConcurrency(
-      Array.from(filesByParent.values()).flatMap((siblings) =>
-        batches(siblings, 100),
-      ),
-      config.concurrency,
-      async (batch) => {
-        await deleteRemoteBatch(batch, config);
-      },
-    );
-    // Some FTP servers serialize directory mutations per account while still
-    // accepting rapidly opened sessions. Keep sibling removals on one control
-    // connection and pace transitions between parent directories.
+    for (const batch of Array.from(filesByParent.values()).flatMap((siblings) =>
+      batches(siblings, 100),
+    )) {
+      await deleteRemoteBatch(batch, client);
+    }
+    // Keep directory mutations on one authenticated control connection. The
+    // target host acknowledges only the first mutation when curl opens
+    // multiple short-lived custom-command transfers.
     const directoryBatches = Array.from(directoriesByParent.values()).flatMap(
       (siblings) => batches(siblings, 100),
     );
     for (const batch of directoryBatches) {
-      await deleteRemoteBatch(batch, config);
-      await delay(250);
+      await deleteRemoteBatch(batch, client);
     }
   }
-}
-
-function delay(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function existingRemotePaths(
@@ -560,20 +572,16 @@ export function groupFtpPathsByParent(paths: string[]) {
   return Array.from(groups, ([parent, items]) => ({ parent, items }));
 }
 
-async function deleteRemoteBatch(
-  entries: FtpInventoryEntry[],
-  config: FtpConnectionConfig,
-) {
+async function deleteRemoteBatch(entries: FtpInventoryEntry[], client: Client) {
   const parent = ftpParentPath(entries[0]?.path ?? "");
   if (entries.some((entry) => ftpParentPath(entry.path) !== parent)) {
     throw new Error("FTP deletion batches must contain sibling paths.");
   }
-  const args = entries.flatMap((entry) => [
-    "--quote",
-    ftpDeleteCommand(entry.path, entry.kind),
-  ]);
   try {
-    await runCurl(ftpArgs(config, [...args, "--list-only"], `${parent}/`));
+    await client.cd(`/${parent}`);
+    for (const entry of entries) {
+      await client.send(ftpDeleteCommand(entry.path, entry.kind));
+    }
   } catch (error) {
     throw new Error(
       `Failed to delete FTP batch (${entries.map((entry) => entry.path).join(", ")}): ${error instanceof Error ? error.message : String(error)}`,
@@ -599,9 +607,7 @@ export function ftpDeleteCommand(
   const command = kind === "directory" ? "RMD" : "DELE";
   const name = pathJoin(remotePath).split("/").at(-1);
   if (!name) throw new Error(`Cannot delete an empty FTP path: ${remotePath}`);
-  // Curl's + prefix sends the command after it has changed into the parent
-  // directory encoded by the transfer URL.
-  return `+${command} ${name}`;
+  return `${command} ${name}`;
 }
 
 function ftpParentPath(remotePath: string) {

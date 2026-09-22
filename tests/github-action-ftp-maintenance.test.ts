@@ -75,14 +75,14 @@ describe("FTP maintenance helpers", () => {
     );
   });
 
-  it("deletes basenames after curl changes into their parent directory", () => {
+  it("deletes basenames after the FTP client changes into their parent", () => {
     assert.equal(
       ftpDeleteCommand("/booking.specs.title.dk/build/532/index.html", "file"),
-      "+DELE index.html",
+      "DELE index.html",
     );
     assert.equal(
       ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
-      "+RMD 532",
+      "RMD 532",
     );
   });
 
