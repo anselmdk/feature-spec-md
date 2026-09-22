@@ -102,7 +102,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     : requestedPaths;
   const inventoryRoots = maintenanceInventoryRoots(mode, effectivePaths);
   const inventory =
-    retentionCleanup && !effectivePaths.length
+    mode === "cleanup" || (retentionCleanup && !effectivePaths.length)
       ? []
       : await inventoryRemoteDirectory(
           config.remoteDir,
@@ -130,7 +130,7 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
     throw new Error("Cleanup requires --keep-builds of at least 1 or --paths.");
   }
   if (mode === "cleanup") {
-    await deletePaths(cleanupPaths, inventory, config);
+    await deletePaths(cleanupPaths, config);
   }
 
   const afterInventory = mode === "cleanup" ? [] : inventory;
@@ -139,23 +139,11 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
       cleanupPaths,
       config,
     );
-    const pathsWithFiles = await remotePathsContainingFiles(
-      remainingPaths,
-      config,
-    );
     completedCleanupPaths = cleanupPaths.filter(
-      (path) => !pathsWithFiles.includes(path),
+      (path) => !remainingPaths.includes(path),
     );
-    const emptyRoots = remainingPaths.filter(
-      (path) => !pathsWithFiles.includes(path),
-    );
-    if (emptyRoots.length) {
-      console.warn(
-        `FTP retained empty directory names after removing their report files: ${emptyRoots.join(", ")}`,
-      );
-    }
-    if (pathsWithFiles.length) {
-      const message = `FTP cleanup did not remove report files from: ${pathsWithFiles.join(", ")}`;
+    if (remainingPaths.length) {
+      const message = `FTP cleanup did not remove: ${remainingPaths.join(", ")}`;
       if (requestedPaths.length) throw new Error(message);
       console.warn(
         `${message}. They will be retried by a later retention run.`,
@@ -390,6 +378,8 @@ export function selectMaintenanceNames(
   restrictToRequestedPaths = false,
 ) {
   const availableNames = Array.from(new Set(names));
+  const normalizedDirectory = pathJoin(directory);
+  const normalizedRemoteDir = pathJoin(remoteDir);
   const boundedNames =
     maximumNumberedEntries === undefined
       ? availableNames
@@ -398,11 +388,11 @@ export function selectMaintenanceNames(
           .sort((a, b) => Number(b) - Number(a))
           .slice(0, maximumNumberedEntries);
   const relativeDirectory =
-    directory === remoteDir
+    normalizedDirectory === normalizedRemoteDir
       ? ""
-      : directory.startsWith(`${remoteDir}/`)
-        ? directory.slice(remoteDir.length + 1)
-        : directory;
+      : normalizedDirectory.startsWith(`${normalizedRemoteDir}/`)
+        ? normalizedDirectory.slice(normalizedRemoteDir.length + 1)
+        : normalizedDirectory;
   const prefix = relativeDirectory ? `${relativeDirectory}/` : "";
   const requestedNames = requestedPaths.flatMap((requestedPath) => {
     if (!requestedPath.startsWith(prefix)) return [];
@@ -509,12 +499,8 @@ export function cleanupCandidates(
   );
 }
 
-async function deletePaths(
-  paths: string[],
-  inventory: FtpInventoryEntry[],
-  config: FtpConnectionConfig,
-) {
-  const targets = presentCleanupTargets(paths, inventory);
+async function deletePaths(paths: string[], config: FtpConnectionConfig) {
+  const targets = await existingRemotePaths(paths, config);
   if (!targets.length) return;
   for (const group of groupCleanupTargetsByBuild(targets)) {
     const client = new Client(config.maxTimeSeconds * 1000);
@@ -528,11 +514,7 @@ async function deletePaths(
     try {
       for (const target of group) {
         const normalizedTarget = `/${pathJoin(target)}`;
-        const tombstone = `${normalizedTarget}.feature-spec-cleanup-${Date.now()}`;
-        await client.cd(normalizedTarget);
-        await client.clearWorkingDir();
-        await client.cd("/");
-        await client.rename(normalizedTarget, tombstone);
+        await client.removeDir(normalizedTarget);
       }
     } finally {
       client.close();
@@ -551,29 +533,6 @@ async function waitForRemotePathsToDisappear(
     remaining = await existingRemotePaths(paths, config);
   }
   return remaining;
-}
-
-async function remotePathsContainingFiles(
-  paths: string[],
-  config: FtpConnectionConfig,
-) {
-  if (!paths.length) return [];
-  const relativePaths = paths.map((path) =>
-    relativeChildPath(config.remoteDir, path),
-  );
-  const inventory = await inventoryRemoteDirectory(
-    config.remoteDir,
-    config,
-    undefined,
-    maintenanceInventoryRoots("cleanup", relativePaths),
-    relativePaths,
-    true,
-  );
-  return paths.filter((target) =>
-    inventory.some(
-      (entry) => entry.kind === "file" && entry.path.startsWith(`${target}/`),
-    ),
-  );
 }
 
 export function presentCleanupTargets(
@@ -643,6 +602,13 @@ function formatSummary(input: {
   freeBytes?: number;
   afterInventory: FtpInventoryEntry[];
 }) {
+  const inventorySummary =
+    input.mode === "cleanup"
+      ? ["- File inventory: **skipped (whole-directory cleanup)**"]
+      : [
+          `- Files: **${input.inventory.filter((entry) => entry.kind === "file").length}**`,
+          `- Used: **${formatBytes(totalBytes(input.inventory))}**`,
+        ];
   const lines = [
     "## FTP storage diagnostic",
     "",
@@ -651,15 +617,8 @@ function formatSummary(input: {
     `- Scan scope: **${input.inventoryRoots?.map((item) => `\`${item}\``).join(", ") ?? "all top-level paths"}**`,
     `- Build scan: **${input.maxBuildsToScan === undefined ? "all numbered builds" : `newest ${input.maxBuildsToScan} numbered build${input.maxBuildsToScan === 1 ? "" : "s"}`}**`,
     `- Cleanup batch: **at most ${input.maxBuildsToDelete} expired builds**`,
-    `- Files: **${input.inventory.filter((entry) => entry.kind === "file").length}**`,
-    `- Used: **${formatBytes(totalBytes(input.inventory))}**`,
+    ...inventorySummary,
     `- Available: **${input.freeBytes === undefined ? "not reported by server" : formatBytes(input.freeBytes)}**`,
-    "",
-    "### Directory usage",
-    "",
-    "| Directory | Files | Size |",
-    "| --- | ---: | ---: |",
-    ...directoryRows(input.inventory, input.config.remoteDir),
     "",
     "### Cleanup",
     "",
@@ -671,9 +630,19 @@ function formatSummary(input: {
   if (input.mode === "cleanup") {
     lines.push(
       "",
-      `After cleanup: **${formatBytes(totalBytes(input.afterInventory))}** used across **${input.afterInventory.filter((entry) => entry.kind === "file").length}** files.`,
+      "After cleanup: selected paths were verified absent by parent directory listing.",
     );
   } else {
+    lines.splice(
+      lines.indexOf("### Cleanup"),
+      0,
+      "### Directory usage",
+      "",
+      "| Directory | Files | Size |",
+      "| --- | ---: | ---: |",
+      ...directoryRows(input.inventory, input.config.remoteDir),
+      "",
+    );
     lines.push(
       "",
       `Build retention: keep the newest **${input.keepBuilds}** numbered builds.`,

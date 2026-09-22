@@ -204,6 +204,20 @@ describe("FTP maintenance helpers", () => {
     );
   });
 
+  it("matches requested paths when the configured FTP root is absolute", () => {
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["245", "246", "247"],
+        "booking.specs.title.dk/build",
+        "/booking.specs.title.dk",
+        undefined,
+        ["build/246"],
+        true,
+      ),
+      ["246"],
+    );
+  });
+
   it("defines the bounded smoke-test workflow mode", async () => {
     const workflow = await readFile(
       ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",
