@@ -475,20 +475,23 @@ async function deletePaths(
 ) {
   const targets = presentCleanupTargets(paths, inventory);
   if (!targets.length) return;
-  const client = new Client(config.maxTimeSeconds * 1000);
-  await client.access({
-    host: config.host,
-    port: config.port ? Number(config.port) : undefined,
-    user: config.user,
-    password: config.password,
-    secure: config.secure ? "implicit" : false,
-  });
-  try {
-    for (const target of targets) {
-      await client.removeDir(`/${pathJoin(target)}`);
+  for (const group of groupCleanupTargetsByBuild(targets)) {
+    const client = new Client(config.maxTimeSeconds * 1000);
+    await client.access({
+      host: config.host,
+      port: config.port ? Number(config.port) : undefined,
+      user: config.user,
+      password: config.password,
+      secure: config.secure ? "implicit" : false,
+    });
+    try {
+      for (const target of group) {
+        await client.removeDir(`/${pathJoin(target)}`);
+      }
+    } finally {
+      client.close();
     }
-  } finally {
-    client.close();
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
 
@@ -501,6 +504,16 @@ export function presentCleanupTargets(
       (entry) => entry.path === target || entry.path.startsWith(`${target}/`),
     ),
   );
+}
+
+export function groupCleanupTargetsByBuild(paths: string[]) {
+  const groups = new Map<string, string[]>();
+  for (const path of paths) {
+    const key = pathJoin(path).split("/").at(-1);
+    if (!key) throw new Error(`Cannot group an empty FTP path: ${path}`);
+    groups.set(key, [...(groups.get(key) ?? []), path]);
+  }
+  return Array.from(groups.values());
 }
 
 async function existingRemotePaths(

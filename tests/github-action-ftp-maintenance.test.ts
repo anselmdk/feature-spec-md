@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   cleanupCandidates,
   concurrencyLimiter,
+  groupCleanupTargetsByBuild,
   groupFtpPathsByParent,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
@@ -88,6 +89,21 @@ describe("FTP maintenance helpers", () => {
         ],
       ),
       ["reports/build/100"],
+    );
+  });
+
+  it("keeps full and pull-request trees for one build in one session", () => {
+    assert.deepEqual(
+      groupCleanupTargetsByBuild([
+        "reports/build/100",
+        "reports/build/99",
+        "reports/pr/7/100",
+        "reports/pr/8/99",
+      ]),
+      [
+        ["reports/build/100", "reports/pr/7/100"],
+        ["reports/build/99", "reports/pr/8/99"],
+      ],
     );
   });
 
