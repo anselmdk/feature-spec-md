@@ -356,7 +356,8 @@ FTP maintenance:
   --mode report                 Inventory only (default is not destructive; mode is required).
   --mode dry-run                Show cleanup candidates without deleting them.
   --mode cleanup                Delete old numbered builds and/or exact --paths.
-  --keep-builds                 Numbered builds to retain (default: 10).
+  --keep-builds                 Numbered builds to retain (default: 30; reusable workflow default: 100).
+  --max-builds-to-delete        Maximum expired builds removed per run (default: 10).
   --paths                       Comma-separated paths relative to the FTP root.
 `);
 }

@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
-  ftpDeleteCommand,
+  cleanupCandidates,
+  concurrencyLimiter,
+  groupCleanupTargetsByBuild,
+  groupFtpPathsByParent,
   maintenanceInventoryRoots,
   parseFtpHeadSize,
   parseFtpSizeResponse,
   parseMaintenanceListingNames,
+  presentCleanupTargets,
   selectMaintenanceNames,
+  selectExpiredBuildBatch,
 } from "../src/githubActionFtpMaintenance.js";
 
 describe("FTP maintenance helpers", () => {
@@ -37,18 +42,118 @@ describe("FTP maintenance helpers", () => {
       maintenanceInventoryRoots("dry-run", ["pr/145", "build/532"]),
       ["build", "pr"],
     );
-    assert.deepEqual(maintenanceInventoryRoots("cleanup", []), ["build"]);
+    assert.deepEqual(maintenanceInventoryRoots("cleanup", []), ["build", "pr"]);
   });
 
-  it("deletes normalized absolute paths from the FTP login root", () => {
-    assert.equal(
-      ftpDeleteCommand("/booking.specs.title.dk/build/532/index.html", "file"),
-      "DELE /booking.specs.title.dk/build/532/index.html",
+  it("removes full and pull-request report directories for expired builds", () => {
+    assert.deepEqual(
+      cleanupCandidates(
+        [
+          { path: "reports/build/101", kind: "directory", sizeBytes: 0 },
+          { path: "reports/build/100", kind: "directory", sizeBytes: 0 },
+          { path: "reports/build/99", kind: "directory", sizeBytes: 0 },
+          { path: "reports/pr/7/101", kind: "directory", sizeBytes: 0 },
+          { path: "reports/pr/7/99", kind: "directory", sizeBytes: 0 },
+          { path: "reports/pr/8/99", kind: "directory", sizeBytes: 0 },
+        ],
+        "/reports",
+        2,
+        [],
+      ),
+      ["reports/build/99", "reports/pr/7/99", "reports/pr/8/99"],
     );
-    assert.equal(
-      ftpDeleteCommand("booking.specs.title.dk/build/532", "directory"),
-      "RMD /booking.specs.title.dk/build/532",
+  });
+
+  it("limits retention cleanup to the next batch of expired build directories", () => {
+    assert.deepEqual(
+      selectExpiredBuildBatch(
+        ["109", "103", "108", "102", "107", "106", "105", "104", "101"],
+        3,
+        4,
+      ),
+      ["101", "102", "103", "104"],
     );
+    assert.deepEqual(
+      selectExpiredBuildBatch(
+        ["109", "103", "108", "102", "107", "106", "105", "104", "101"],
+        3,
+        4,
+        1,
+      ),
+      ["105", "106"],
+    );
+  });
+
+  it("selects whole present directory roots for recursive removal", () => {
+    assert.deepEqual(
+      presentCleanupTargets(
+        ["reports/build/100", "reports/build/99"],
+        [
+          { path: "reports/build/100", kind: "directory", sizeBytes: 0 },
+          {
+            path: "reports/build/100/index.html",
+            kind: "file",
+            sizeBytes: 42,
+          },
+        ],
+      ),
+      ["reports/build/100"],
+    );
+  });
+
+  it("keeps full and pull-request trees for one build in one session", () => {
+    assert.deepEqual(
+      groupCleanupTargetsByBuild([
+        "reports/build/100",
+        "reports/build/99",
+        "reports/pr/7/100",
+        "reports/pr/8/99",
+      ]),
+      [
+        ["reports/build/100", "reports/pr/7/100"],
+        ["reports/build/99", "reports/pr/8/99"],
+      ],
+    );
+  });
+
+  it("groups exact cleanup verification by shallow parent listing", () => {
+    assert.deepEqual(
+      groupFtpPathsByParent([
+        "reports/build/101",
+        "reports/build/100",
+        "reports/pr/7/101",
+      ]),
+      [
+        {
+          parent: "reports/build",
+          items: [
+            { name: "101", path: "reports/build/101" },
+            { name: "100", path: "reports/build/100" },
+          ],
+        },
+        {
+          parent: "reports/pr/7",
+          items: [{ name: "101", path: "reports/pr/7/101" }],
+        },
+      ],
+    );
+  });
+
+  it("shares one concurrency limit across recursive FTP work", async () => {
+    const runLimited = concurrencyLimiter(2);
+    let active = 0;
+    let maximum = 0;
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        runLimited(async () => {
+          active += 1;
+          maximum = Math.max(maximum, active);
+          await new Promise((resolve) => setTimeout(resolve, 2));
+          active -= 1;
+        }),
+      ),
+    );
+    assert.equal(maximum, 2);
   });
 
   it("includes explicitly requested builds outside a bounded newest-build scan", () => {
@@ -74,6 +179,45 @@ describe("FTP maintenance helpers", () => {
     );
   });
 
+  it("limits bounded explicit cleanup to the requested pull-request tree", () => {
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["144", "145", "146"],
+        "booking.specs.title.dk/pr",
+        "booking.specs.title.dk",
+        undefined,
+        ["build/532", "pr/145"],
+        true,
+      ),
+      ["145"],
+    );
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["531", "532", "533"],
+        "booking.specs.title.dk/pr/145",
+        "booking.specs.title.dk",
+        undefined,
+        ["build/532", "pr/145"],
+        true,
+      ),
+      ["531", "532", "533"],
+    );
+  });
+
+  it("matches requested paths when the configured FTP root is absolute", () => {
+    assert.deepEqual(
+      selectMaintenanceNames(
+        ["245", "246", "247"],
+        "booking.specs.title.dk/build",
+        "/booking.specs.title.dk",
+        undefined,
+        ["build/246"],
+        true,
+      ),
+      ["246"],
+    );
+  });
+
   it("defines the bounded smoke-test workflow mode", async () => {
     const workflow = await readFile(
       ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",
@@ -82,7 +226,12 @@ describe("FTP maintenance helpers", () => {
     assert.match(workflow, /smoke-test, report, dry-run, or cleanup/);
     assert.match(workflow, /--ftp-maintenance-max-time "10"/);
     assert.match(workflow, /max-builds-to-scan:/);
-    assert.match(workflow, /cleanup additionally requires explicit paths/);
+    assert.match(workflow, /max-builds-to-delete:/);
+    assert.match(workflow, /default: "10"/);
+    assert.match(
+      workflow,
+      /Maximum expired build directories removed by one retention cleanup run/,
+    );
     assert.match(workflow, /timeout-minutes: 15/);
   });
 
@@ -91,9 +240,18 @@ describe("FTP maintenance helpers", () => {
       ".github/workflows/consuming-project-feature-spec-ftp-maintenance.yml",
       "utf8",
     );
-    assert.match(workflow, /default: "30"/);
+    assert.match(workflow, /default: "100"/);
     assert.match(workflow, /ftp-cleanup-paths/);
     assert.match(workflow, /deleted by cleanup job/);
+    assert.match(workflow, /pr-number:/);
+    assert.match(workflow, /paths\.add\(`pr\/\$\{prNumber\}`\)/);
+    assert.match(workflow, /const prReport = url\.match/);
+    assert.match(workflow, /const alreadyStruck =/);
+    assert.match(workflow, /~~~~/);
+    assert.match(workflow, /deletedPullRequests\.size/);
+    assert.match(workflow, /deletedPullRequestReports/);
+    assert.match(workflow, /const affectedPullRequests =/);
+    assert.doesNotMatch(workflow, /github\.rest\.pulls\.list/);
   });
 
   it("uses the consuming project's supported Node.js version", async () => {
