@@ -134,7 +134,10 @@ export async function runFtpMaintenance(options: FtpMaintenanceOptions) {
 
   const afterInventory = mode === "cleanup" ? [] : inventory;
   if (mode === "cleanup") {
-    const remainingPaths = await existingRemotePaths(cleanupPaths, config);
+    const remainingPaths = await waitForRemotePathsToDisappear(
+      cleanupPaths,
+      config,
+    );
     if (remainingPaths.length) {
       throw new Error(
         `FTP cleanup did not remove: ${remainingPaths.join(", ")}`,
@@ -303,10 +306,16 @@ async function discoverRetentionCleanupPaths(
     },
   );
 
-  return [
-    ...expiredBuilds.map((build) => pathJoin(buildRoot, build)),
-    ...pullRequestReports.sort(),
-  ];
+  const reportsByBuild = new Map<string, string[]>();
+  for (const report of pullRequestReports.sort()) {
+    const build = pathJoin(report).split("/").at(-1);
+    if (build) {
+      reportsByBuild.set(build, [...(reportsByBuild.get(build) ?? []), report]);
+    }
+  }
+  return expiredBuilds.map(
+    (build) => reportsByBuild.get(build)?.[0] ?? pathJoin(buildRoot, build),
+  );
 }
 
 async function listMaintenanceNames(
@@ -327,7 +336,9 @@ export function selectExpiredBuildBatch(
   return Array.from(new Set(names))
     .filter((name) => /^\d+$/.test(name))
     .sort((a, b) => Number(b) - Number(a))
-    .slice(keepBuilds, keepBuilds + maxBuildsToDelete);
+    .slice(keepBuilds)
+    .sort((a, b) => Number(a) - Number(b))
+    .slice(0, maxBuildsToDelete);
 }
 
 export function parseMaintenanceListingNames(listing: string) {
@@ -476,37 +487,35 @@ async function deletePaths(
   const targets = presentCleanupTargets(paths, inventory);
   if (!targets.length) return;
   for (const group of groupCleanupTargetsByBuild(targets)) {
-    let remaining = group;
-    for (let attempt = 1; attempt <= 3 && remaining.length; attempt += 1) {
-      const client = new Client(config.maxTimeSeconds * 1000);
-      await client.access({
-        host: config.host,
-        port: config.port ? Number(config.port) : undefined,
-        user: config.user,
-        password: config.password,
-        secure: config.secure ? "implicit" : false,
-      });
-      try {
-        for (const target of remaining) {
-          await client.removeDir(`/${pathJoin(target)}`);
-        }
-      } finally {
-        client.close();
+    const client = new Client(config.maxTimeSeconds * 1000);
+    await client.access({
+      host: config.host,
+      port: config.port ? Number(config.port) : undefined,
+      user: config.user,
+      password: config.password,
+      secure: config.secure ? "implicit" : false,
+    });
+    try {
+      for (const target of group) {
+        await client.removeDir(`/${pathJoin(target)}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-      remaining = await existingRemotePaths(group, config);
-      if (remaining.length && attempt < 3) {
-        console.warn(
-          `FTP cleanup is still settling; retrying ${remaining.join(", ")} (attempt ${attempt + 1}/3).`,
-        );
-      }
-    }
-    if (remaining.length) {
-      throw new Error(
-        `FTP cleanup did not remove after 3 attempts: ${remaining.join(", ")}`,
-      );
+    } finally {
+      client.close();
     }
   }
+}
+
+async function waitForRemotePathsToDisappear(
+  paths: string[],
+  config: FtpConnectionConfig,
+) {
+  const deadline = Date.now() + 120_000;
+  let remaining = await existingRemotePaths(paths, config);
+  while (remaining.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    remaining = await existingRemotePaths(paths, config);
+  }
+  return remaining;
 }
 
 export function presentCleanupTargets(

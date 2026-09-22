@@ -219,6 +219,12 @@ jobs:
               ...deletedPullRequests,
               ...[...deletedPullRequestReports].map((report) => report.split('/')[0]),
             ]);
+            for (const build of deletedBuilds) {
+              const matches = await github.paginate(github.rest.search.issuesAndPullRequests, {
+                q: `repo:${context.repo.owner}/${context.repo.repo} is:pr in:comments "/build/${build}/"`,
+              });
+              for (const match of matches) affectedPullRequests.add(String(match.number));
+            }
             const pulls = [...affectedPullRequests].map((number) => ({ number: Number(number) }));
             for (const pull of pulls) {
               const comments = await github.paginate(github.rest.issues.listComments, {
